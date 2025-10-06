@@ -1,7 +1,6 @@
 #pragma once
 
-#include "StorageEngine.h"
-#include <unordered_map>
+#include "../storage/StorageEngine.h"
 #include <string>
 #include <vector>
 
@@ -11,9 +10,6 @@
  */
 template<typename StorageEngineType>
 class RepartitionTable {
-private:
-    std::unordered_map<std::string, StorageEngineType> __key_to_storage;
-
 public:
     /**
      * @brief Default constructor

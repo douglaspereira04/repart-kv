@@ -3,10 +3,10 @@
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
-#include "StorageEngine.h"
-#include "RepartitionTable.h"
-#include "PartitionManager.h"
-#include "HashPartitionManager.h"
+#include "storage/StorageEngine.h"
+#include "table/RepartitionTable.h"
+#include "partition/PartitionManager.h"
+#include "partition/HashPartitionManager.h"
 
 /**
  * @brief Example implementation of StorageEngine using std::unordered_map

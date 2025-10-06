@@ -13,7 +13,13 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Create executable
-add_executable(repart-kv main.cpp StorageEngine.h RepartitionTable.h PartitionManager.h HashPartitionManager.h)
+add_executable(repart-kv 
+    main.cpp 
+    storage/StorageEngine.h 
+    table/RepartitionTable.h 
+    partition/PartitionManager.h 
+    partition/HashPartitionManager.h
+)
 
 # Set compiler flags
 target_compile_features(repart-kv PRIVATE cxx_std_20)

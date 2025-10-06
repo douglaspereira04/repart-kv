@@ -30,6 +30,10 @@ public:
         // Use fast hash function (not cryptographically secure)
         size_t hash_value = std::hash<std::string>{}(key);
         size_t index = hash_value % this->_size;
+        
+        // Add key to storage mapping
+        this->__key_to_storage[key] = this->_storage_engines[index];
+        
         return this->_storage_engines[index];
     }
 };

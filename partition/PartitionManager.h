@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 /**
  * @brief Abstract base class for partition management
@@ -12,6 +13,7 @@ class PartitionManager {
 protected:
     size_t _size;
     std::vector<StorageEngineType> _storage_engines;
+    std::unordered_map<std::string, StorageEngineType> __key_to_storage;
 
 public:
     /**
