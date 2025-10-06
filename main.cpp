@@ -4,6 +4,7 @@
 #include <vector>
 #include <algorithm>
 #include "StorageEngine.h"
+#include "RepartitionTable.h"
 
 /**
  * @brief Example implementation of StorageEngine using std::unordered_map
@@ -13,21 +14,21 @@ public:
     MapStorageEngine() : StorageEngine<std::unordered_map<std::string, std::string>>(new std::unordered_map<std::string, std::string>()) {}
     
     ~MapStorageEngine() override {
-        delete storage_engine;
+        delete _storage_engine;
     }
     
     std::string read(const std::string& key) override {
-        auto it = storage_engine->find(key);
-        return (it != storage_engine->end()) ? it->second : "";
+        auto it = _storage_engine->find(key);
+        return (it != _storage_engine->end()) ? it->second : "";
     }
     
     void write(const std::string& key, const std::string& value) override {
-        (*storage_engine)[key] = value;
+        (*_storage_engine)[key] = value;
     }
     
     std::vector<std::string> scan(const std::string& key_prefix, size_t limit) override {
         std::vector<std::string> results;
-        for (const auto& pair : *storage_engine) {
+        for (const auto& pair : *_storage_engine) {
             if (pair.first.starts_with(key_prefix)) {
                 results.push_back(pair.first);
                 if (results.size() >= limit) {
@@ -68,6 +69,14 @@ int main() {
     for (const auto& key : config_keys) {
         std::cout << "Found key: " << key << " = " << engine.read(key) << std::endl;
     }
+    
+    std::cout << "\n=== RepartitionTable Demo ===" << std::endl;
+    
+    // Create a RepartitionTable using MapStorageEngine
+    RepartitionTable<MapStorageEngine> repartition_table;
+    
+    std::cout << "\nRepartitionTable created successfully!" << std::endl;
+    std::cout << "Note: read(), write(), and scan() methods are empty and ready for implementation." << std::endl;
     
     std::cout << "\nStorage engine demo completed successfully!" << std::endl;
     
