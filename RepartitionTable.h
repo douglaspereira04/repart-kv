@@ -12,7 +12,7 @@
 template<typename StorageEngineType>
 class RepartitionTable {
 private:
-    std::unordered_map<std::string, StorageEngineType> key_to_storage;
+    std::unordered_map<std::string, StorageEngineType> __key_to_storage;
 
 public:
     /**

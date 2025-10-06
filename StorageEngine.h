@@ -3,6 +3,7 @@
 #include <string>
 #include <string_view>
 #include <shared_mutex>
+#include <vector>
 
 /**
  * @brief Abstract base class for storage engines

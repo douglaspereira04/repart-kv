@@ -5,6 +5,8 @@
 #include <algorithm>
 #include "StorageEngine.h"
 #include "RepartitionTable.h"
+#include "PartitionManager.h"
+#include "HashPartitionManager.h"
 
 /**
  * @brief Example implementation of StorageEngine using std::unordered_map
@@ -77,6 +79,20 @@ int main() {
     
     std::cout << "\nRepartitionTable created successfully!" << std::endl;
     std::cout << "Note: read(), write(), and scan() methods are empty and ready for implementation." << std::endl;
+    
+    std::cout << "\n=== HashPartitionManager Demo ===" << std::endl;
+    
+    // Create a HashPartitionManager with 3 storage engines
+    HashPartitionManager<MapStorageEngine> hash_manager(3);
+    
+    // Test key distribution across storage engines
+    std::vector<std::string> test_keys = {"user:1", "user:2", "user:3", "config:debug", "config:port"};
+    
+    std::cout << "\n--- Key Distribution Test ---" << std::endl;
+    for (const auto& key : test_keys) {
+        hash_manager.getStorage(key);
+        std::cout << "Key '" << key << "' -> Storage Engine reference obtained" << std::endl;
+    }
     
     std::cout << "\nStorage engine demo completed successfully!" << std::endl;
     
