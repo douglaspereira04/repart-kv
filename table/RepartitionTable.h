@@ -17,9 +17,9 @@ public:
     RepartitionTable() = default;
 
     /**
-     * @brief Virtual destructor
+     * @brief Default destructor
      */
-    virtual ~RepartitionTable() = default;
+    ~RepartitionTable() = default;
 
     /**
      * @brief Read a value by key

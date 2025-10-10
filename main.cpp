@@ -1,51 +1,15 @@
 #include <iostream>
-#include <string_view>
-#include <unordered_map>
-#include <vector>
-#include <algorithm>
-#include "storage/StorageEngine.h"
-#include "table/RepartitionTable.h"
-#include "partition/PartitionManager.h"
-#include "partition/HashPartitionManager.h"
-
-/**
- * @brief Example implementation of StorageEngine using std::unordered_map
- */
-class MapStorageEngine : public StorageEngine<std::unordered_map<std::string, std::string>> {
-public:
-    MapStorageEngine() : StorageEngine<std::unordered_map<std::string, std::string>>(new std::unordered_map<std::string, std::string>()) {}
-    
-    ~MapStorageEngine() override {
-        delete _storage_engine;
-    }
-    
-    std::string read(const std::string& key) override {
-        auto it = _storage_engine->find(key);
-        return (it != _storage_engine->end()) ? it->second : "";
-    }
-    
-    void write(const std::string& key, const std::string& value) override {
-        (*_storage_engine)[key] = value;
-    }
-    
-    std::vector<std::string> scan(const std::string& key_prefix, size_t limit) override {
-        std::vector<std::string> results;
-        for (const auto& pair : *_storage_engine) {
-            if (pair.first.starts_with(key_prefix)) {
-                results.push_back(pair.first);
-                if (results.size() >= limit) {
-                    break;
-                }
-            }
-        }
-        return results;
-    }
-};
+#include "storage/MapStorageEngine.h"
+#include "keystorage/MapKeyStorage.h"
 
 int main() {
-    std::cout << "=== Repart-KV Storage Engine Demo ===" << std::endl;
+    std::cout << "=== Repart-KV Demo ===" << std::endl;
     
-    // Create a storage engine instance
+    // ========================================
+    // MapStorageEngine Demo (CRTP-based)
+    // ========================================
+    std::cout << "\n--- MapStorageEngine Demo ---" << std::endl;
+    
     MapStorageEngine engine;
     
     // Write some test data
@@ -55,46 +19,50 @@ int main() {
     engine.write("config:debug", "true");
     engine.write("config:port", "8080");
     
-    std::cout << "\n--- Reading values ---" << std::endl;
-    std::cout << "user:1 = " << engine.read("user:1") << std::endl;
-    std::cout << "user:2 = " << engine.read("user:2") << std::endl;
-    std::cout << "config:debug = " << engine.read("config:debug") << std::endl;
+    std::cout << "\nReading values:" << std::endl;
+    std::cout << "  user:1 = " << engine.read("user:1") << std::endl;
+    std::cout << "  user:2 = " << engine.read("user:2") << std::endl;
+    std::cout << "  config:debug = " << engine.read("config:debug") << std::endl;
     
-    std::cout << "\n--- Scanning for 'user:' prefix ---" << std::endl;
+    std::cout << "\nScanning for 'user:' prefix:" << std::endl;
     auto user_keys = engine.scan("user:", 10);
     for (const auto& key : user_keys) {
-        std::cout << "Found key: " << key << " = " << engine.read(key) << std::endl;
+        std::cout << "  " << key << " = " << engine.read(key) << std::endl;
     }
     
-    std::cout << "\n--- Scanning for 'config:' prefix ---" << std::endl;
+    std::cout << "\nScanning for 'config:' prefix:" << std::endl;
     auto config_keys = engine.scan("config:", 10);
     for (const auto& key : config_keys) {
-        std::cout << "Found key: " << key << " = " << engine.read(key) << std::endl;
+        std::cout << "  " << key << " = " << engine.read(key) << std::endl;
     }
     
-    std::cout << "\n=== RepartitionTable Demo ===" << std::endl;
+    // ========================================
+    // MapKeyStorage Demo (CRTP-based with concepts)
+    // ========================================
+    std::cout << "\n--- MapKeyStorage Demo ---" << std::endl;
     
-    // Create a RepartitionTable using MapStorageEngine
-    RepartitionTable<MapStorageEngine> repartition_table;
+    MapKeyStorage<int> intStore;
     
-    std::cout << "\nRepartitionTable created successfully!" << std::endl;
-    std::cout << "Note: read(), write(), and scan() methods are empty and ready for implementation." << std::endl;
+    intStore.put("counter:visits", 100);
+    intStore.put("counter:clicks", 250);
+    intStore.put("counter:downloads", 75);
     
-    std::cout << "\n=== HashPartitionManager Demo ===" << std::endl;
-    
-    // Create a HashPartitionManager with 3 storage engines
-    HashPartitionManager<MapStorageEngine> hash_manager(3);
-    
-    // Test key distribution across storage engines
-    std::vector<std::string> test_keys = {"user:1", "user:2", "user:3", "config:debug", "config:port"};
-    
-    std::cout << "\n--- Key Distribution Test ---" << std::endl;
-    for (const auto& key : test_keys) {
-        hash_manager.getStorage(key);
-        std::cout << "Key '" << key << "' -> Storage Engine reference obtained" << std::endl;
+    int visits;
+    if (intStore.get("counter:visits", visits)) {
+        std::cout << "\nVisits: " << visits << std::endl;
     }
     
-    std::cout << "\nStorage engine demo completed successfully!" << std::endl;
+    std::cout << "\nAll counters:" << std::endl;
+    auto it = intStore.lower_bound("counter:");
+    while (!it.is_end()) {
+        std::cout << "  " << it.get_key() << " = " << it.get_value() << std::endl;
+        ++it;
+    }
+    
+    // ========================================
+    std::cout << "\n=== Demo completed successfully! ===" << std::endl;
+    std::cout << "\nProject uses C++20 with CRTP for zero-overhead abstractions." << std::endl;
+    std::cout << "No virtual functions = maximum performance!" << std::endl;
     
     return 0;
 }
