@@ -151,16 +151,16 @@ public:
     }
 
     /**
-     * @brief Implementation: Scan for keys from a starting point
+     * @brief Implementation: Scan for key-value pairs from a starting point
      * @param key_prefix The starting key (lower_bound)
-     * @param limit Maximum number of keys to return
-     * @return Vector of keys >= key_prefix (in sorted order)
+     * @param limit Maximum number of key-value pairs to return
+     * @return Vector of key-value pairs where keys >= key_prefix (in sorted order)
      * 
      * Note: TreeDBM maintains sorted order, making this very efficient.
      * We use Jump() to go directly to the first key >= key_prefix.
      */
-    std::vector<std::string> scan_impl(const std::string& key_prefix, size_t limit) const {
-        std::vector<std::string> results;
+    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit) const {
+        std::vector<std::pair<std::string, std::string>> results;
         
         if (!is_open_) {
             return results;
@@ -179,17 +179,17 @@ public:
             iter->Jump(key_prefix);
         }
         
-        // Collect keys (already in sorted order, no filtering)
+        // Collect key-value pairs (already in sorted order, no filtering)
         std::string key, value;
         while (results.size() < limit) {
             tkrzw::Status status = iter->Get(&key, &value);
             if (status != tkrzw::Status::SUCCESS) {
-                break;  // No more keys
+                break;  // No more entries
             }
             
-            results.push_back(key);
+            results.push_back({key, value});
             
-            // Move to next key
+            // Move to next entry
             if (iter->Next() != tkrzw::Status::SUCCESS) {
                 break;
             }

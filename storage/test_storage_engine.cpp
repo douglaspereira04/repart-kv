@@ -1,8 +1,12 @@
 #include "MapStorageEngine.h"
+#include "TkrzwHashStorageEngine.h"
+#include "TkrzwTreeStorageEngine.h"
 #include <iostream>
 #include <cassert>
 #include <thread>
 #include <vector>
+#include <string>
+#include <memory>
 
 // Test result tracking
 int tests_passed = 0;
@@ -45,9 +49,11 @@ int tests_failed = 0;
         throw std::runtime_error("Condition should be false: " #condition); \
     }
 
+// Generic test functions that work with any StorageEngine
+template<typename EngineType>
 void test_basic_write_read() {
     TEST("basic_write_read")
-        MapStorageEngine engine;
+        EngineType engine;
         
         // Write some values
         engine.write("key1", "value1");
@@ -61,18 +67,20 @@ void test_basic_write_read() {
     END_TEST("basic_write_read")
 }
 
+template<typename EngineType>
 void test_read_nonexistent_key() {
     TEST("read_nonexistent_key")
-        MapStorageEngine engine;
+        EngineType engine;
         
         // Reading a non-existent key should return empty string
         ASSERT_STR_EQ("", engine.read("nonexistent"));
     END_TEST("read_nonexistent_key")
 }
 
+template<typename EngineType>
 void test_overwrite_value() {
     TEST("overwrite_value")
-        MapStorageEngine engine;
+        EngineType engine;
         
         engine.write("key", "original");
         ASSERT_STR_EQ("original", engine.read("key"));
@@ -82,9 +90,10 @@ void test_overwrite_value() {
     END_TEST("overwrite_value")
 }
 
+template<typename EngineType>
 void test_empty_key_value() {
     TEST("empty_key_value")
-        MapStorageEngine engine;
+        EngineType engine;
         
         // Test empty key
         engine.write("", "empty_key_value");
@@ -96,9 +105,10 @@ void test_empty_key_value() {
     END_TEST("empty_key_value")
 }
 
+template<typename EngineType>
 void test_scan_basic() {
     TEST("scan_basic")
-        MapStorageEngine engine;
+        EngineType engine;
         
         engine.write("user:1001", "Alice");
         engine.write("user:1002", "Bob");
@@ -107,15 +117,19 @@ void test_scan_basic() {
         
         auto results = engine.scan("user:", 10);
         ASSERT_EQ(3, results.size());
-        ASSERT_STR_EQ("user:1001", results[0]);
-        ASSERT_STR_EQ("user:1002", results[1]);
-        ASSERT_STR_EQ("user:1003", results[2]);
+        ASSERT_STR_EQ("user:1001", results[0].first);
+        ASSERT_STR_EQ("Alice", results[0].second);
+        ASSERT_STR_EQ("user:1002", results[1].first);
+        ASSERT_STR_EQ("Bob", results[1].second);
+        ASSERT_STR_EQ("user:1003", results[2].first);
+        ASSERT_STR_EQ("Charlie", results[2].second);
     END_TEST("scan_basic")
 }
 
+template<typename EngineType>
 void test_scan_with_limit() {
     TEST("scan_with_limit")
-        MapStorageEngine engine;
+        EngineType engine;
         
         engine.write("item:001", "A");
         engine.write("item:002", "B");
@@ -125,15 +139,19 @@ void test_scan_with_limit() {
         
         auto results = engine.scan("item:", 3);
         ASSERT_EQ(3, results.size());
-        ASSERT_STR_EQ("item:001", results[0]);
-        ASSERT_STR_EQ("item:002", results[1]);
-        ASSERT_STR_EQ("item:003", results[2]);
+        ASSERT_STR_EQ("item:001", results[0].first);
+        ASSERT_STR_EQ("A", results[0].second);
+        ASSERT_STR_EQ("item:002", results[1].first);
+        ASSERT_STR_EQ("B", results[1].second);
+        ASSERT_STR_EQ("item:003", results[2].first);
+        ASSERT_STR_EQ("C", results[2].second);
     END_TEST("scan_with_limit")
 }
 
+template<typename EngineType>
 void test_scan_no_matches() {
     TEST("scan_no_matches")
-        MapStorageEngine engine;
+        EngineType engine;
         
         engine.write("apple", "fruit");
         engine.write("banana", "fruit");
@@ -143,9 +161,10 @@ void test_scan_no_matches() {
     END_TEST("scan_no_matches")
 }
 
+template<typename EngineType>
 void test_scan_empty_prefix() {
     TEST("scan_empty_prefix")
-        MapStorageEngine engine;
+        EngineType engine;
         
         engine.write("a", "1");
         engine.write("b", "2");
@@ -157,9 +176,10 @@ void test_scan_empty_prefix() {
     END_TEST("scan_empty_prefix")
 }
 
+template<typename EngineType>
 void test_scan_exact_match() {
     TEST("scan_exact_match")
-        MapStorageEngine engine;
+        EngineType engine;
         
         engine.write("exact", "value");
         engine.write("exactly", "value2");
@@ -167,13 +187,15 @@ void test_scan_exact_match() {
         
         auto results = engine.scan("exact", 10);
         ASSERT_EQ(3, results.size());
-        ASSERT_STR_EQ("exact", results[0]);
+        ASSERT_STR_EQ("exact", results[0].first);
+        ASSERT_STR_EQ("value", results[0].second);
     END_TEST("scan_exact_match")
 }
 
+template<typename EngineType>
 void test_scan_sorted_order() {
     TEST("scan_sorted_order")
-        MapStorageEngine engine;
+        EngineType engine;
         
         // Insert in random order
         engine.write("z", "last");
@@ -182,15 +204,19 @@ void test_scan_sorted_order() {
         
         auto results = engine.scan("", 10);
         ASSERT_EQ(3, results.size());
-        ASSERT_STR_EQ("a", results[0]);
-        ASSERT_STR_EQ("m", results[1]);
-        ASSERT_STR_EQ("z", results[2]);
+        ASSERT_STR_EQ("a", results[0].first);
+        ASSERT_STR_EQ("first", results[0].second);
+        ASSERT_STR_EQ("m", results[1].first);
+        ASSERT_STR_EQ("middle", results[1].second);
+        ASSERT_STR_EQ("z", results[2].first);
+        ASSERT_STR_EQ("last", results[2].second);
     END_TEST("scan_sorted_order")
 }
 
+template<typename EngineType>
 void test_large_dataset() {
     TEST("large_dataset")
-        MapStorageEngine engine;
+        EngineType engine;
         
         // Write 1000 entries
         for (int i = 0; i < 1000; ++i) {
@@ -210,9 +236,10 @@ void test_large_dataset() {
     END_TEST("large_dataset")
 }
 
+template<typename EngineType>
 void test_special_characters() {
     TEST("special_characters")
-        MapStorageEngine engine;
+        EngineType engine;
         
         engine.write("key:with:colons", "value1");
         engine.write("key/with/slashes", "value2");
@@ -228,9 +255,10 @@ void test_special_characters() {
     END_TEST("special_characters")
 }
 
+template<typename EngineType>
 void test_manual_locking() {
     TEST("manual_locking")
-        MapStorageEngine engine;
+        EngineType engine;
         
         // Test exclusive lock
         engine.lock();
@@ -246,9 +274,10 @@ void test_manual_locking() {
     END_TEST("manual_locking")
 }
 
+template<typename EngineType>
 void test_concurrent_writes() {
     TEST("concurrent_writes")
-        MapStorageEngine engine;
+        EngineType engine;
         
         const int num_threads = 4;
         const int writes_per_thread = 100;
@@ -289,9 +318,10 @@ void test_concurrent_writes() {
     END_TEST("concurrent_writes")
 }
 
+template<typename EngineType>
 void test_concurrent_reads_writes() {
     TEST("concurrent_reads_writes")
-        MapStorageEngine engine;
+        EngineType engine;
         
         // Pre-populate with data
         for (int i = 0; i < 50; ++i) {
@@ -332,9 +362,10 @@ void test_concurrent_reads_writes() {
     END_TEST("concurrent_reads_writes")
 }
 
+template<typename EngineType>
 void test_scan_after_updates() {
     TEST("scan_after_updates")
-        MapStorageEngine engine;
+        EngineType engine;
         
         engine.write("prefix:a", "1");
         engine.write("prefix:b", "2");
@@ -360,39 +391,51 @@ void test_scan_after_updates() {
     END_TEST("scan_after_updates")
 }
 
-int main() {
-    std::cout << "========================================" << std::endl;
-    std::cout << "  MapStorageEngine Test Suite" << std::endl;
+// Helper function to run all tests for a given engine type
+template<typename EngineType>
+void run_test_suite(const std::string& engine_name) {
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "  Testing: " << engine_name << std::endl;
     std::cout << "========================================" << std::endl;
     std::cout << std::endl;
     
     // Basic functionality tests
-    test_basic_write_read();
-    test_read_nonexistent_key();
-    test_overwrite_value();
-    test_empty_key_value();
+    test_basic_write_read<EngineType>();
+    test_read_nonexistent_key<EngineType>();
+    test_overwrite_value<EngineType>();
+    test_empty_key_value<EngineType>();
     
     // Scan tests
-    test_scan_basic();
-    test_scan_with_limit();
-    test_scan_no_matches();
-    test_scan_empty_prefix();
-    test_scan_exact_match();
-    test_scan_sorted_order();
-    test_scan_after_updates();
+    test_scan_basic<EngineType>();
+    test_scan_with_limit<EngineType>();
+    test_scan_no_matches<EngineType>();
+    test_scan_empty_prefix<EngineType>();
+    test_scan_exact_match<EngineType>();
+    test_scan_sorted_order<EngineType>();
+    test_scan_after_updates<EngineType>();
     
     // Edge cases and special scenarios
-    test_large_dataset();
-    test_special_characters();
+    test_large_dataset<EngineType>();
+    test_special_characters<EngineType>();
     
     // Locking and concurrency tests
-    test_manual_locking();
-    test_concurrent_writes();
-    test_concurrent_reads_writes();
-    
-    std::cout << std::endl;
+    test_manual_locking<EngineType>();
+    test_concurrent_writes<EngineType>();
+    test_concurrent_reads_writes<EngineType>();
+}
+
+int main() {
     std::cout << "========================================" << std::endl;
-    std::cout << "  Test Results" << std::endl;
+    std::cout << "  Generic StorageEngine Test Suite" << std::endl;
+    std::cout << "========================================" << std::endl;
+    
+    // Test all storage engine implementations
+    run_test_suite<MapStorageEngine>("MapStorageEngine");
+    run_test_suite<TkrzwHashStorageEngine>("TkrzwHashStorageEngine");
+    run_test_suite<TkrzwTreeStorageEngine>("TkrzwTreeStorageEngine");
+    
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "  Overall Test Results" << std::endl;
     std::cout << "========================================" << std::endl;
     std::cout << "Tests passed: " << tests_passed << std::endl;
     std::cout << "Tests failed: " << tests_failed << std::endl;
@@ -400,7 +443,7 @@ int main() {
     std::cout << std::endl;
     
     if (tests_failed == 0) {
-        std::cout << "✓ All tests passed!" << std::endl;
+        std::cout << "✓ All tests passed for all storage engines!" << std::endl;
         return 0;
     } else {
         std::cout << "✗ Some tests failed!" << std::endl;

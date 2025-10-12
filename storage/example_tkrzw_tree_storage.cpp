@@ -39,8 +39,8 @@ int main() {
         // Scan with prefix
         std::cout << "\nScanning for 'user:' prefix:" << std::endl;
         auto users = engine.scan("user:", 10);
-        for (const auto& key : users) {
-            std::cout << "  " << key << " = " << engine.read(key) << std::endl;
+        for (const auto& [key, value] : users) {
+            std::cout << "  " << key << " = " << value << std::endl;
         }
     }
     
@@ -96,8 +96,8 @@ int main() {
         // Scan all sessions
         std::cout << "\nAll sessions:" << std::endl;
         auto sessions = engine.scan("session:", 10);
-        for (const auto& key : sessions) {
-            std::cout << "  " << key << " = " << engine.read(key) << std::endl;
+        for (const auto& [key, value] : sessions) {
+            std::cout << "  " << key << " = " << value << std::endl;
         }
     }
     

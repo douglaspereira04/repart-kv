@@ -27,14 +27,14 @@ int main() {
     std::cout << "\n2. Scan Operations:" << std::endl;
     std::cout << "Scan 'user:' (limit 10):" << std::endl;
     auto users = storage.scan("user:", 10);
-    for (const auto& key : users) {
-        std::cout << "  " << key << " -> " << storage.read(key) << std::endl;
+    for (const auto& [key, value] : users) {
+        std::cout << "  " << key << " -> " << value << std::endl;
     }
     
     std::cout << "\nScan 'product:' (limit 2):" << std::endl;
     auto products = storage.scan("product:", 2);
-    for (const auto& key : products) {
-        std::cout << "  " << key << " -> " << storage.read(key) << std::endl;
+    for (const auto& [key, value] : products) {
+        std::cout << "  " << key << " -> " << value << std::endl;
     }
     
     // Example 3: Update operation
@@ -85,7 +85,7 @@ int main() {
     std::cout << "\n5. Final scan of thread-written keys:" << std::endl;
     auto thread_keys = storage.scan("thread:", 20);
     std::cout << "Total keys with 'thread:' prefix: " << thread_keys.size() << std::endl;
-    for (const auto& key : thread_keys) {
+    for (const auto& [key, value] : thread_keys) {
         std::cout << "  " << key << std::endl;
     }
     

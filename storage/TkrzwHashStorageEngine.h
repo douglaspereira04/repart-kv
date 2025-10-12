@@ -138,42 +138,43 @@ public:
     }
 
     /**
-     * @brief Implementation: Scan for keys from a starting point
+     * @brief Implementation: Scan for key-value pairs from a starting point
      * @param key_prefix The starting key (lower_bound)
-     * @param limit Maximum number of keys to return
-     * @return Vector of keys >= key_prefix (in sorted order)
+     * @param limit Maximum number of key-value pairs to return
+     * @return Vector of key-value pairs where keys >= key_prefix (in sorted order)
      * 
-     * Note: HashDBM doesn't maintain sorted order, so this collects all keys,
-     * sorts them, and returns those >= key_prefix.
+     * Note: HashDBM doesn't maintain sorted order, so this collects all key-value pairs,
+     * sorts them by key, and returns those >= key_prefix.
      */
-    std::vector<std::string> scan_impl(const std::string& key_prefix, size_t limit) const {
-        std::vector<std::string> results;
+    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit) const {
+        std::vector<std::pair<std::string, std::string>> results;
         
         if (!is_open_) {
             return results;
         }
         
-        // Collect all keys first (HashDBM is unordered)
-        std::vector<std::string> all_keys;
+        // Collect all key-value pairs first (HashDBM is unordered)
+        std::vector<std::pair<std::string, std::string>> all_pairs;
         auto iter = db_->MakeIterator();
         iter->First();
         
         std::string key, value;
         while (iter->Get(&key, &value) == tkrzw::Status::SUCCESS) {
-            all_keys.push_back(key);
+            all_pairs.push_back({key, value});
             if (iter->Next() != tkrzw::Status::SUCCESS) {
                 break;
             }
         }
         
-        // Sort all keys
-        std::sort(all_keys.begin(), all_keys.end());
+        // Sort all pairs by key
+        std::sort(all_pairs.begin(), all_pairs.end(), 
+                  [](const auto& a, const auto& b) { return a.first < b.first; });
         
         // Find first key >= key_prefix and collect up to limit
-        results.reserve(std::min(limit, all_keys.size()));
-        for (const auto& k : all_keys) {
-            if (k >= key_prefix) {
-                results.push_back(k);
+        results.reserve(std::min(limit, all_pairs.size()));
+        for (const auto& pair : all_pairs) {
+            if (pair.first >= key_prefix) {
+                results.push_back(pair);
                 if (results.size() >= limit) {
                     break;
                 }

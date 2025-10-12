@@ -63,18 +63,18 @@ target_include_directories(repart-kv PRIVATE
     ${TKRZW_INCLUDE_DIRS}
 )
 
-# Optional: Build storage tests
-add_executable(test_map_storage_engine 
-    storage/test_map_storage_engine.cpp
+# Optional: Build generic storage engine tests (tests all engines)
+add_executable(test_storage_engine 
+    storage/test_storage_engine.cpp
 )
 
-target_link_libraries(test_map_storage_engine PRIVATE 
+target_link_libraries(test_storage_engine PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
 )
-target_compile_features(test_map_storage_engine PRIVATE cxx_std_20)
-target_compile_options(test_map_storage_engine PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(test_map_storage_engine PRIVATE 
+target_compile_features(test_storage_engine PRIVATE cxx_std_20)
+target_compile_options(test_storage_engine PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_storage_engine PRIVATE 
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
 )

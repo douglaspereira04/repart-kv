@@ -17,7 +17,7 @@ public:
     virtual ~StorageEngineWrapper() = default;
     virtual std::string read(const std::string& key) const = 0;
     virtual void write(const std::string& key, const std::string& value) = 0;
-    virtual std::vector<std::string> scan(const std::string& prefix, size_t limit) const = 0;
+    virtual std::vector<std::pair<std::string, std::string>> scan(const std::string& prefix, size_t limit) const = 0;
     virtual std::string get_name() const = 0;
 };
 
@@ -38,7 +38,7 @@ public:
         engine_.write(key, value);
     }
 
-    std::vector<std::string> scan(const std::string& prefix, size_t limit) const override {
+    std::vector<std::pair<std::string, std::string>> scan(const std::string& prefix, size_t limit) const override {
         return engine_.scan(prefix, limit);
     }
 
@@ -142,8 +142,8 @@ bool parse_command(const std::string& input, StorageEngineWrapper* engine) {
         if (results.empty()) {
             std::cout << "(no results)" << std::endl;
         } else {
-            for (const auto& key : results) {
-                std::cout << key << std::endl;
+            for (const auto& [key, value] : results) {
+                std::cout << key << " -> " << value << std::endl;
             }
         }
         return true;

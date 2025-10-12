@@ -26,14 +26,14 @@ int main() {
     
     std::cout << "\nScanning for 'user:' prefix:" << std::endl;
     auto user_keys = engine.scan("user:", 10);
-    for (const auto& key : user_keys) {
-        std::cout << "  " << key << " = " << engine.read(key) << std::endl;
+    for (const auto& [key, value] : user_keys) {
+        std::cout << "  " << key << " = " << value << std::endl;
     }
     
     std::cout << "\nScanning for 'config:' prefix:" << std::endl;
     auto config_keys = engine.scan("config:", 10);
-    for (const auto& key : config_keys) {
-        std::cout << "  " << key << " = " << engine.read(key) << std::endl;
+    for (const auto& [key, value] : config_keys) {
+        std::cout << "  " << key << " = " << value << std::endl;
     }
     
     // ========================================

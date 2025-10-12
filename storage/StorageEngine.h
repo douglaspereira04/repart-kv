@@ -20,7 +20,7 @@
  * Derived classes must implement:
  * - std::string read_impl(const std::string& key) const
  * - void write_impl(const std::string& key, const std::string& value)
- * - std::vector<std::string> scan_impl(const std::string& key_prefix, size_t limit) const
+ * - std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit) const
  */
 template<typename Derived>
 class StorageEngine {
@@ -57,12 +57,12 @@ public:
     }
 
     /**
-     * @brief Scan for keys from a starting point (lower_bound)
+     * @brief Scan for key-value pairs from a starting point (lower_bound)
      * @param key_start The starting key (returns keys >= key_start)
-     * @param limit Maximum number of keys to return
-     * @return Vector of keys >= key_start (sorted order)
+     * @param limit Maximum number of key-value pairs to return
+     * @return Vector of key-value pairs where keys >= key_start (sorted order)
      */
-    std::vector<std::string> scan(const std::string& key_start, size_t limit) const {
+    std::vector<std::pair<std::string, std::string>> scan(const std::string& key_start, size_t limit) const {
         return static_cast<const Derived*>(this)->scan_impl(key_start, limit);
     }
 

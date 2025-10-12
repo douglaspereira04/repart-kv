@@ -24,7 +24,7 @@ Repart-KV is a high-performance key-value storage system built with C++20, featu
 ```cpp
 std::string read(const std::string& key) const;
 void write(const std::string& key, const std::string& value);
-std::vector<std::string> scan(const std::string& prefix, size_t limit) const;
+std::vector<std::pair<std::string, std::string>> scan(const std::string& prefix, size_t limit) const;
 void lock() const;
 void unlock() const;
 void lock_shared() const;
@@ -214,7 +214,10 @@ keystorage/
 MapStorageEngine engine;
 engine.write("key", "value");
 std::string val = engine.read("key");
-auto results = engine.scan("prefix:", 10);
+auto results = engine.scan("prefix:", 10);  // Returns vector<pair<string, string>>
+for (const auto& [key, value] : results) {
+    // Process key-value pairs
+}
 ```
 
 ### Persistent Storage - TkrzwTreeStorageEngine
@@ -264,7 +267,7 @@ To add a new storage engine:
 2. Implement three methods:
    - `std::string read_impl(const std::string& key) const`
    - `void write_impl(const std::string& key, const std::string& value)`
-   - `std::vector<std::string> scan_impl(const std::string& prefix, size_t limit) const`
+   - `std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& prefix, size_t limit) const`
 
 3. The base class automatically provides the public interface and locking primitives
 
@@ -280,8 +283,8 @@ public:
         // Your implementation
     }
     
-    std::vector<std::string> scan_impl(const std::string& prefix, size_t limit) const {
-        // Your implementation
+    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& prefix, size_t limit) const {
+        // Your implementation - return key-value pairs
     }
 };
 ```
