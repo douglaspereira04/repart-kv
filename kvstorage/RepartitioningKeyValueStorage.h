@@ -118,16 +118,16 @@ public:
         if (!found) {
             size_t partition_idx = hash_func_(key) % partition_count_;
             storage = storages_[partition_idx];
-            storage_map_.write(key, storage);
-            partition_map_.write(key, partition_idx);
-        } else if(storage->get_level() != level_) {
+            storage_map_.put(key, storage);
+            partition_map_.put(key, partition_idx);
+        } else if(storage->level() != level_) {
             size_t partition_idx;
             bool found = partition_map_.get(key, partition_idx);
             if (!found) {
                 partition_idx = hash_func_(key) % partition_count_;
-                partition_map_.write(key, partition_idx);
+                partition_map_.put(key, partition_idx);
                 storage = storages_[partition_idx];
-                storage_map_.write(key, storage);
+                storage_map_.put(key, storage);
             } else {
                 storage = storages_[partition_idx];
             }

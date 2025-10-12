@@ -203,3 +203,19 @@ target_include_directories(test_keystorage PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
 )
+
+# Generic partitioned key-value storage tests
+add_executable(test_partitioned_kv_storage 
+    kvstorage/test_partitioned_kv_storage.cpp
+)
+
+target_link_libraries(test_partitioned_kv_storage PRIVATE 
+    Threads::Threads
+    ${TKRZW_ALL_LIBS}
+)
+target_compile_features(test_partitioned_kv_storage PRIVATE cxx_std_20)
+target_compile_options(test_partitioned_kv_storage PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_partitioned_kv_storage PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${TKRZW_INCLUDE_DIRS}
+)
