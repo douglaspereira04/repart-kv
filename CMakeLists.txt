@@ -171,3 +171,35 @@ target_include_directories(interactive_storage_test PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
 )
+
+# Interactive keystorage tester
+add_executable(interactive_keystorage_test 
+    keystorage/interactive_keystorage_test.cpp
+)
+
+target_link_libraries(interactive_keystorage_test PRIVATE 
+    Threads::Threads
+    ${TKRZW_ALL_LIBS}
+)
+target_compile_features(interactive_keystorage_test PRIVATE cxx_std_20)
+target_compile_options(interactive_keystorage_test PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(interactive_keystorage_test PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${TKRZW_INCLUDE_DIRS}
+)
+
+# Generic keystorage tests (tests all key storage implementations)
+add_executable(test_keystorage 
+    keystorage/test_keystorage.cpp
+)
+
+target_link_libraries(test_keystorage PRIVATE 
+    Threads::Threads
+    ${TKRZW_ALL_LIBS}
+)
+target_compile_features(test_keystorage PRIVATE cxx_std_20)
+target_compile_options(test_keystorage PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_keystorage PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${TKRZW_INCLUDE_DIRS}
+)

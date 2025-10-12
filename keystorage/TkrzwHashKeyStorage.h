@@ -9,6 +9,8 @@
 #include <iomanip>
 #include <type_traits>
 #include <ctime>
+#include <vector>
+#include <algorithm>
 
 // Forward declaration
 template<KeyStorageValueType ValueType>
@@ -153,39 +155,36 @@ public:
 /**
  * @brief Iterator implementation for TkrzwHashKeyStorage
  * @tparam ValueType The type of values stored
+ * 
+ * Note: HashDBM doesn't maintain sorted order, so this iterator:
+ * 1. Maintains a sorted list of all keys
+ * 2. Iterates through them in order
+ * 3. Fetches values from the database on demand
  */
 template<KeyStorageValueType ValueType>
 class TkrzwHashKeyStorageIterator : public KeyStorageIterator<TkrzwHashKeyStorageIterator<ValueType>, ValueType> {
 private:
-    std::unique_ptr<tkrzw::DBM::Iterator> iter_;
-    std::string current_key_;
-    std::string current_value_;
-    bool at_end_;
+    std::shared_ptr<std::vector<std::string>> sorted_keys_;  // Shared ownership of sorted keys
+    size_t current_index_;
     const TkrzwHashKeyStorage<ValueType>* storage_;
-
-    void load_current() {
-        if (!iter_) {
-            at_end_ = true;
-            return;
-        }
-        
-        tkrzw::Status status = iter_->Get(&current_key_, &current_value_);
-        if (status != tkrzw::Status::SUCCESS) {
-            at_end_ = true;
-        }
-    }
 
 public:
     /**
-     * @brief Constructor
+     * @brief Constructor with sorted keys
      */
-    TkrzwHashKeyStorageIterator(std::unique_ptr<tkrzw::DBM::Iterator> iter, 
+    TkrzwHashKeyStorageIterator(std::shared_ptr<std::vector<std::string>> sorted_keys,
+                                 size_t start_index,
+                                 const TkrzwHashKeyStorage<ValueType>* storage)
+        : sorted_keys_(sorted_keys), current_index_(start_index), storage_(storage) {
+    }
+
+    /**
+     * @brief Constructor for end iterator
+     */
+    TkrzwHashKeyStorageIterator(std::nullptr_t, 
                                  const TkrzwHashKeyStorage<ValueType>* storage,
-                                 bool at_end = false)
-        : iter_(std::move(iter)), at_end_(at_end), storage_(storage) {
-        if (!at_end_ && iter_) {
-            load_current();
-        }
+                                 bool)
+        : sorted_keys_(nullptr), current_index_(0), storage_(storage) {
     }
 
     /**
@@ -193,10 +192,10 @@ public:
      * @return The key as a string
      */
     std::string get_key_impl() const {
-        if (at_end_) {
+        if (!sorted_keys_ || current_index_ >= sorted_keys_->size()) {
             return "";
         }
-        return current_key_;
+        return (*sorted_keys_)[current_index_];
     }
 
     /**
@@ -204,24 +203,23 @@ public:
      * @return The value
      */
     ValueType get_value_impl() const {
-        if (at_end_ || !storage_) {
+        if (!sorted_keys_ || current_index_ >= sorted_keys_->size() || !storage_) {
             return ValueType();
         }
-        return storage_->string_to_value(current_value_);
+        
+        ValueType value;
+        if (storage_->get((*sorted_keys_)[current_index_], value)) {
+            return value;
+        }
+        return ValueType();
     }
 
     /**
      * @brief Implementation: Increment the iterator to the next element
      */
     void increment_impl() {
-        if (at_end_ || !iter_) {
-            return;
-        }
-        
-        if (iter_->Next() == tkrzw::Status::SUCCESS) {
-            load_current();
-        } else {
-            at_end_ = true;
+        if (sorted_keys_ && current_index_ < sorted_keys_->size()) {
+            current_index_++;
         }
     }
 
@@ -230,7 +228,7 @@ public:
      * @return true if at end, false otherwise
      */
     bool is_end_impl() const {
-        return at_end_;
+        return !sorted_keys_ || current_index_ >= sorted_keys_->size();
     }
 
 private:
@@ -245,17 +243,39 @@ TkrzwHashKeyStorageIterator<ValueType> TkrzwHashKeyStorage<ValueType>::lower_bou
         return TkrzwHashKeyStorageIterator<ValueType>(nullptr, this, true);
     }
     
-    auto iter = db_->MakeIterator();
+    // HashDBM doesn't maintain sorted order, so we need to:
+    // 1. Collect all keys
+    // 2. Sort them
+    // 3. Find the lower_bound position
+    // 4. Create an iterator with the sorted keys starting from that position
     
-    // HashDBM is unordered, so start from beginning
-    // In a real implementation, you might want to collect and sort keys
-    // TreeDBM is sorted, so we can jump directly to the key
-    if (key.empty()) {
-        iter->First();
-    } else {
-        iter->Jump(key);
+    auto sorted_keys = std::make_shared<std::vector<std::string>>();
+    auto temp_iter = db_->MakeIterator();
+    temp_iter->First();
+    
+    std::string temp_key, temp_value;
+    while (temp_iter->Get(&temp_key, &temp_value) == tkrzw::Status::SUCCESS) {
+        sorted_keys->push_back(temp_key);
+        if (temp_iter->Next() != tkrzw::Status::SUCCESS) {
+            break;
+        }
     }
     
-    return TkrzwHashKeyStorageIterator<ValueType>(std::move(iter), this);
+    // Sort all keys
+    std::sort(sorted_keys->begin(), sorted_keys->end());
+    
+    // Find lower_bound position
+    auto lb_pos = std::lower_bound(sorted_keys->begin(), sorted_keys->end(), key);
+    
+    if (lb_pos == sorted_keys->end()) {
+        // No key >= the given key, return end iterator
+        return TkrzwHashKeyStorageIterator<ValueType>(nullptr, this, true);
+    }
+    
+    // Calculate the index position
+    size_t index = std::distance(sorted_keys->begin(), lb_pos);
+    
+    // Return iterator starting at the lower_bound position
+    return TkrzwHashKeyStorageIterator<ValueType>(sorted_keys, index, this);
 }
 
