@@ -7,13 +7,14 @@
 #include <vector>
 #include <cstddef>
 #include <shared_mutex>
+#include <functional>
 
 /**
  * @brief Repartitioning key-value storage implementation
  * 
  * This class manages partitioned storage with dynamic repartitioning capabilities.
  * Uses two key-value maps:
- * - StorageMapType: Maps partition IDs to storage engine instances
+ * - StorageMapType: Maps keys to storage engine instances
  * - PartitionMapType: Maps key ranges to partition IDs
  * 
  * @tparam StorageEngineType The storage engine type (must derive from StorageEngine)
@@ -21,6 +22,7 @@
  *         (e.g., MapKeyStorage). Will be instantiated with StorageEngineType* as value type.
  * @tparam PartitionMapType Template for key storage type for key->partition mapping
  *         (e.g., MapKeyStorage). Will be instantiated with size_t as value type.
+ * @tparam HashFunc Hash function type for key hashing (defaults to std::hash<std::string>)
  * 
  * Usage example:
  *   RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage>
@@ -30,29 +32,32 @@
 template<
     typename StorageEngineType,
     template<typename> typename StorageMapType,
-    template<typename> typename PartitionMapType
+    template<typename> typename PartitionMapType,
+    typename HashFunc = std::hash<std::string>
 >
 class RepartitioningKeyValueStorage 
     : public PartitionedKeyValueStorage<
-        RepartitioningKeyValueStorage<StorageEngineType, StorageMapType, PartitionMapType>,
+        RepartitioningKeyValueStorage<StorageEngineType, StorageMapType, PartitionMapType, HashFunc>,
         StorageEngineType
       > {
 private:
     StorageMapType<StorageEngineType*> storage_map_;   // Maps partition IDs to storage engines
     PartitionMapType<size_t> partition_map_;           // Maps key ranges to partition IDs
-    std::shared_mutex storage_map_lock_;               // Mutex for thread-safe access to storage_map_
+    std::shared_mutex key_map_lock_;                   // Mutex for thread-safe access to key mappers
     bool enable_tracking_;                             // Enable/disable tracking of key access patterns
     size_t partition_count_;                           // Number of partitions
     std::vector<StorageEngineType*> storages_;         // Vector of storage engine instances
     size_t level_;                                     // Current level (tree depth or hierarchy level)
+    HashFunc hash_func_;                               // Hash function for key hashing
 
 public:
     /**
      * @brief Constructor
      * @param partition_count Number of partitions to manage
+     * @param hash_func Hash function instance (defaults to default-constructed HashFunc)
      */
-    RepartitioningKeyValueStorage(size_t partition_count)
-        : enable_tracking_(false), partition_count_(partition_count), level_(0) {
+    RepartitioningKeyValueStorage(size_t partition_count, const HashFunc& hash_func = HashFunc())
+        : enable_tracking_(false), partition_count_(partition_count), level_(0), hash_func_(hash_func) {
         // Create partition_count storage engine instances
         storages_.reserve(partition_count_);
         for (size_t i = 0; i < partition_count_; ++i) {
@@ -75,8 +80,25 @@ public:
      * @return The value associated with the key
      */
     std::string read_impl(const std::string& key) {
-        
-        return "";
+        key_map_lock_.lock_shared();
+
+        if (enable_tracking_) {
+            single_key_graph_update(key);
+        }
+
+        StorageEngineType* storage;
+        bool found = storage_map_.get(key, storage);
+        if (!found) {
+            key_map_lock_.unlock_shared();
+            return "";
+        }
+        storage->lock_shared();
+
+        key_map_lock_.unlock_shared();
+
+        std::string value = storage->read(key);
+        storage->unlock_shared();
+        return value;
     }
 
     /**
@@ -85,10 +107,38 @@ public:
      * @param value The value to associate with the key
      */
     void write_impl(const std::string& key, const std::string& value) {
-        // TODO: Implement write logic
-        // 1. Use partition_map_ to find which partition should own this key
-        // 2. Use storage_map_ to get the storage engine for that partition
-        // 3. Call write() on that storage engine
+        key_map_lock_.lock();
+
+        if (enable_tracking_) {
+            single_key_graph_update(key);
+        }
+
+        StorageEngineType* storage;
+        bool found = storage_map_.get(key, storage);
+        if (!found) {
+            size_t partition_idx = hash_func_(key) % partition_count_;
+            storage = storages_[partition_idx];
+            storage_map_.write(key, storage);
+            partition_map_.write(key, partition_idx);
+        } else if(storage->get_level() != level_) {
+            size_t partition_idx;
+            bool found = partition_map_.get(key, partition_idx);
+            if (!found) {
+                partition_idx = hash_func_(key) % partition_count_;
+                partition_map_.write(key, partition_idx);
+                storage = storages_[partition_idx];
+                storage_map_.write(key, storage);
+            } else {
+                storage = storages_[partition_idx];
+            }
+        }
+
+        storage->lock();
+
+        key_map_lock_.unlock();
+
+        storage->write(key, value);
+        storage->unlock();
     }
 
     /**
@@ -118,6 +168,35 @@ public:
         // 2. Determine optimal partition boundaries
         // 3. Move keys between partitions as needed
         // 4. Update partition_map_ with new partition assignments
+    }
+
+    /**
+     * @brief Update graph structure for a single key
+     * @param key The key whose graph relationships need to be updated
+     * 
+     * This method updates the graph structure (edges, relationships) associated
+     * with a single key, potentially affecting partition assignments.
+     */
+    void single_key_graph_update(const std::string& key) {
+        // TODO: Implement single key graph update logic
+        // 1. Analyze key relationships and access patterns
+        // 2. Update graph structure for this key
+        // 3. Potentially trigger repartitioning if needed
+    }
+
+    /**
+     * @brief Update graph structure for multiple keys
+     * @param keys Vector of keys whose graph relationships need to be updated
+     * 
+     * This method updates the graph structure (edges, relationships) for multiple
+     * keys in batch, which can be more efficient than individual updates.
+     */
+    void multi_key_graph_update(const std::vector<std::string>& keys) {
+        // TODO: Implement multi-key graph update logic
+        // 1. Analyze relationships between the provided keys
+        // 2. Update graph structure for all keys
+        // 3. Optimize partition assignments based on key relationships
+        // 4. Potentially trigger batch repartitioning
     }
 };
 
