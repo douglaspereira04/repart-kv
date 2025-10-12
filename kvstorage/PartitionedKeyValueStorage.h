@@ -5,10 +5,19 @@
 #include <vector>
 
 /**
- * @brief Template class for managing partitioned storage
+ * @brief CRTP base class for managing partitioned storage
+ * @tparam Derived The derived partitioned storage type
  * @tparam StorageEngineType Type that derives from StorageEngine
+ * 
+ * Uses Curiously Recurring Template Pattern for compile-time polymorphism
+ * without virtual functions. Requires C++20 for compile-time polymorphism.
+ * 
+ * Derived classes must implement:
+ * - std::string read_impl(const std::string& key)
+ * - void write_impl(const std::string& key, const std::string& value)
+ * - std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit)
  */
-template<typename StorageEngineType>
+template<typename Derived, typename StorageEngineType>
 class PartitionedKeyValueStorage {
 public:
     /**
@@ -17,18 +26,12 @@ public:
     PartitionedKeyValueStorage() = default;
 
     /**
-     * @brief Default destructor
-     */
-    ~PartitionedKeyValueStorage() = default;
-
-    /**
      * @brief Read a value by key
      * @param key The key to read
      * @return The value associated with the key
      */
     std::string read(const std::string& key) {
-        // TODO: Implement read logic
-        return "";
+        return static_cast<Derived*>(this)->read_impl(key);
     }
 
     /**
@@ -37,18 +40,23 @@ public:
      * @param value The value to associate with the key
      */
     void write(const std::string& key, const std::string& value) {
-        // TODO: Implement write logic
+        static_cast<Derived*>(this)->write_impl(key, value);
     }
 
     /**
-     * @brief Scan for keys starting with a given prefix
+     * @brief Scan for key-value pairs starting with a given prefix
      * @param key_prefix The prefix to search for
-     * @param limit Maximum number of keys to return
-     * @return Vector of keys matching the prefix
+     * @param limit Maximum number of key-value pairs to return
+     * @return Vector of key-value pairs matching the prefix
      */
-    std::vector<std::string> scan(const std::string& key_prefix, size_t limit) {
-        // TODO: Implement scan logic
-        return {};
+    std::vector<std::pair<std::string, std::string>> scan(const std::string& key_prefix, size_t limit) {
+        return static_cast<Derived*>(this)->scan_impl(key_prefix, limit);
     }
+
+protected:
+    /**
+     * @brief Protected destructor (CRTP pattern)
+     */
+    ~PartitionedKeyValueStorage() = default;
 };
 

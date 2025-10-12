@@ -28,12 +28,16 @@ private:
 public:
     /**
      * @brief Constructor - creates an in-memory database
+     * @param level The hierarchy level for this storage engine (default: 0)
      * 
      * Note: TKRZW HashDBM doesn't support true in-memory mode.
      * For in-memory storage, consider using tkrzw::BabyDBM or
      * a temporary file that gets deleted.
      */
-    TkrzwHashStorageEngine() : db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
+    explicit TkrzwHashStorageEngine(size_t level = 0) 
+        : StorageEngine<TkrzwHashStorageEngine>(level), 
+          db_(std::make_unique<tkrzw::HashDBM>()), 
+          is_open_(false) {
         // TKRZW HashDBM requires a file path, so we use /tmp for in-memory-like behavior
         // The file will be created but can be considered temporary
         std::string temp_path = "/tmp/tkrzw_temp_" + std::to_string(time(nullptr)) + ".tkh";
@@ -54,9 +58,14 @@ public:
      * @brief Constructor with file path - creates a persistent database
      * @param file_path Path to the database file
      * @param num_buckets Number of hash buckets (default: 1000000)
+     * @param level The hierarchy level for this storage engine (default: 0)
      */
-    explicit TkrzwHashStorageEngine(const std::string& file_path, int64_t num_buckets = 1000000) 
-        : db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
+    explicit TkrzwHashStorageEngine(const std::string& file_path, 
+                                     int64_t num_buckets = 1000000,
+                                     size_t level = 0) 
+        : StorageEngine<TkrzwHashStorageEngine>(level),
+          db_(std::make_unique<tkrzw::HashDBM>()), 
+          is_open_(false) {
         
         tkrzw::HashDBM::TuningParameters tuning_params;
         tuning_params.num_buckets = num_buckets;
@@ -89,7 +98,9 @@ public:
 
     // Enable move
     TkrzwHashStorageEngine(TkrzwHashStorageEngine&& other) noexcept 
-        : db_(std::move(other.db_)), is_open_(other.is_open_) {
+        : StorageEngine<TkrzwHashStorageEngine>(other.level_),
+          db_(std::move(other.db_)), 
+          is_open_(other.is_open_) {
         other.is_open_ = false;
     }
 

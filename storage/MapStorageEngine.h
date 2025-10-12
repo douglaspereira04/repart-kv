@@ -22,9 +22,10 @@ private:
 
 public:
     /**
-     * @brief Default constructor
+     * @brief Constructor
+     * @param level The hierarchy level for this storage engine (default: 0)
      */
-    MapStorageEngine() = default;
+    explicit MapStorageEngine(size_t level = 0) : StorageEngine<MapStorageEngine>(level) {}
 
     /**
      * @brief Destructor

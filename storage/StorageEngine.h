@@ -26,12 +26,14 @@ template<typename Derived>
 class StorageEngine {
 protected:
     mutable std::shared_mutex _lock;  // Mutex for thread-safe operations
+    size_t level_;                    // Hierarchy level of this storage engine
 
 public:
     /**
-     * @brief Default constructor
+     * @brief Constructor
+     * @param level The hierarchy level for this storage engine
      */
-    StorageEngine() = default;
+    explicit StorageEngine(size_t level) : level_(level) {}
 
     /**
      * @brief Default destructor
@@ -96,5 +98,21 @@ public:
      */
     void unlock() const {
         _lock.unlock();
+    }
+
+    /**
+     * @brief Get the hierarchy level of this storage engine
+     * @return The level value
+     */
+    size_t level() const {
+        return level_;
+    }
+
+    /**
+     * @brief Set the hierarchy level of this storage engine
+     * @param level The new level value
+     */
+    void level(size_t level) {
+        level_ = level;
     }
 };

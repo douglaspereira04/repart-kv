@@ -34,11 +34,15 @@ private:
 public:
     /**
      * @brief Constructor - creates an in-memory database
+     * @param level The hierarchy level for this storage engine (default: 0)
      * 
      * Note: TKRZW TreeDBM doesn't support true in-memory mode.
      * Uses a temporary file for in-memory-like behavior.
      */
-    TkrzwTreeStorageEngine() : db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
+    explicit TkrzwTreeStorageEngine(size_t level = 0) 
+        : StorageEngine<TkrzwTreeStorageEngine>(level),
+          db_(std::make_unique<tkrzw::TreeDBM>()), 
+          is_open_(false) {
         // TKRZW TreeDBM requires a file path, so we use /tmp for in-memory-like behavior
         // The file will be created but can be considered temporary
         std::string temp_path = "/tmp/tkrzw_tree_temp_" + std::to_string(time(nullptr)) + ".tkt";
@@ -64,11 +68,15 @@ public:
      * @param file_path Path to the database file
      * @param max_page_size Maximum page size in bytes (default: 8192)
      * @param max_branches Maximum number of branches per node (default: 256)
+     * @param level The hierarchy level for this storage engine (default: 0)
      */
     explicit TkrzwTreeStorageEngine(const std::string& file_path, 
                                      int32_t max_page_size = 8192,
-                                     int32_t max_branches = 256) 
-        : db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
+                                     int32_t max_branches = 256,
+                                     size_t level = 0) 
+        : StorageEngine<TkrzwTreeStorageEngine>(level),
+          db_(std::make_unique<tkrzw::TreeDBM>()), 
+          is_open_(false) {
         
         tkrzw::TreeDBM::TuningParameters tuning_params;
         tuning_params.max_page_size = max_page_size;
@@ -102,7 +110,9 @@ public:
 
     // Enable move
     TkrzwTreeStorageEngine(TkrzwTreeStorageEngine&& other) noexcept 
-        : db_(std::move(other.db_)), is_open_(other.is_open_) {
+        : StorageEngine<TkrzwTreeStorageEngine>(other.level_),
+          db_(std::move(other.db_)), 
+          is_open_(other.is_open_) {
         other.is_open_ = false;
     }
 
