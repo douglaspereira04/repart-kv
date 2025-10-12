@@ -95,7 +95,7 @@ target_include_directories(example_storage PRIVATE
     ${TKRZW_INCLUDE_DIRS}
 )
 
-# Optional: Build keystorage example
+# Optional: Build keystorage example (MapKeyStorage)
 add_executable(example_keystorage 
     keystorage/example_usage.cpp
 )
@@ -104,6 +104,22 @@ target_link_libraries(example_keystorage PRIVATE ${TKRZW_ALL_LIBS})
 target_compile_features(example_keystorage PRIVATE cxx_std_20)
 target_compile_options(example_keystorage PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(example_keystorage PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${TKRZW_INCLUDE_DIRS}
+)
+
+# Optional: Build TKRZW keystorage example
+add_executable(example_tkrzw_keystorage 
+    keystorage/example_tkrzw_keystorage.cpp
+)
+
+target_link_libraries(example_tkrzw_keystorage PRIVATE 
+    Threads::Threads
+    ${TKRZW_ALL_LIBS}
+)
+target_compile_features(example_tkrzw_keystorage PRIVATE cxx_std_20)
+target_compile_options(example_tkrzw_keystorage PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(example_tkrzw_keystorage PRIVATE 
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
 )
@@ -136,6 +152,22 @@ target_link_libraries(example_tkrzw_tree_storage PRIVATE
 target_compile_features(example_tkrzw_tree_storage PRIVATE cxx_std_20)
 target_compile_options(example_tkrzw_tree_storage PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(example_tkrzw_tree_storage PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${TKRZW_INCLUDE_DIRS}
+)
+
+# Interactive storage engine tester
+add_executable(interactive_storage_test 
+    storage/interactive_storage_test.cpp
+)
+
+target_link_libraries(interactive_storage_test PRIVATE 
+    Threads::Threads
+    ${TKRZW_ALL_LIBS}
+)
+target_compile_features(interactive_storage_test PRIVATE cxx_std_20)
+target_compile_options(interactive_storage_test PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(interactive_storage_test PRIVATE 
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
 )

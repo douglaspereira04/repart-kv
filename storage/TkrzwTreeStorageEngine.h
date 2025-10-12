@@ -151,14 +151,13 @@ public:
     }
 
     /**
-     * @brief Implementation: Scan for keys starting with a given prefix
-     * @param key_prefix The prefix to search for
+     * @brief Implementation: Scan for keys from a starting point
+     * @param key_prefix The starting key (lower_bound)
      * @param limit Maximum number of keys to return
-     * @return Vector of keys matching the prefix (in sorted order)
+     * @return Vector of keys >= key_prefix (in sorted order)
      * 
-     * Note: TreeDBM maintains sorted order, making prefix scans very efficient.
-     * We can use Jump() to go directly to the first matching key and stop
-     * as soon as we encounter a non-matching key.
+     * Note: TreeDBM maintains sorted order, making this very efficient.
+     * We use Jump() to go directly to the first key >= key_prefix.
      */
     std::vector<std::string> scan_impl(const std::string& key_prefix, size_t limit) const {
         std::vector<std::string> results;
@@ -176,11 +175,11 @@ public:
         if (key_prefix.empty()) {
             iter->First();
         } else {
-            // Jump to the first key >= prefix (TreeDBM is sorted)
+            // Jump to the first key >= key_prefix (TreeDBM is sorted)
             iter->Jump(key_prefix);
         }
         
-        // Iterate through matching keys (already in sorted order)
+        // Collect keys (already in sorted order, no filtering)
         std::string key, value;
         while (results.size() < limit) {
             tkrzw::Status status = iter->Get(&key, &value);
@@ -188,13 +187,7 @@ public:
                 break;  // No more keys
             }
             
-            // Check if key starts with prefix
-            if (key_prefix.empty() || key.compare(0, key_prefix.length(), key_prefix) == 0) {
-                results.push_back(key);
-            } else if (!key_prefix.empty()) {
-                // Since TreeDBM is sorted, stop once we don't match the prefix
-                break;
-            }
+            results.push_back(key);
             
             // Move to next key
             if (iter->Next() != tkrzw::Status::SUCCESS) {

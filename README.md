@@ -2,6 +2,8 @@
 
 A high-performance key-value storage system built with C++20, featuring multiple storage backends with CRTP (Curiously Recurring Template Pattern) for zero-overhead abstractions.
 
+**📖 Quick Navigation**: [Quick Start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) | [Installation](INSTALL_DEPENDENCIES.md) | [Complete Index](INDEX.md) | [Project Summary](PROJECT_SUMMARY.md)
+
 ## Features
 
 - 🚀 **Zero-overhead abstractions** using CRTP (no virtual functions!)
@@ -84,11 +86,48 @@ cd build
 ### Available Executables
 
 - `./repart-kv` - Main demo showcasing storage engines
+- `./interactive_storage_test` - **Interactive CLI for testing storage engines**
 - `./test_map_storage_engine` - Comprehensive test suite (16 tests)
 - `./example_storage` - MapStorageEngine examples
 - `./example_tkrzw_storage` - TkrzwHashStorageEngine examples (hash-based)
 - `./example_tkrzw_tree_storage` - TkrzwTreeStorageEngine examples (sorted tree-based)
-- `./example_keystorage` - KeyStorage examples with concepts
+- `./example_keystorage` - MapKeyStorage examples with concepts
+- `./example_tkrzw_keystorage` - TKRZW-based KeyStorage examples (hash & tree)
+
+### Interactive Testing
+
+Try the interactive storage engine tester for hands-on exploration:
+
+```bash
+cd build
+./interactive_storage_test
+```
+
+**Example session:**
+```
+Select a storage engine:
+  1. MapStorageEngine (in-memory, std::map)
+  2. TkrzwHashStorageEngine (hash-based, unordered)
+  3. TkrzwTreeStorageEngine (tree-based, sorted)
+
+Enter choice (1-3): 3
+
+> write("user:1001", "Alice")
+OK
+> write("user:1002", "Bob")
+OK
+> get("user:1001")
+Alice
+> scan("user:", 10)
+user:1001
+user:1002
+> exit
+Goodbye!
+```
+
+See [storage/INTERACTIVE_USAGE.md](storage/INTERACTIVE_USAGE.md) for detailed usage guide.
+
+For architectural details, see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Project Structure
 
@@ -104,17 +143,22 @@ repart-kv/
 │   ├── MapStorageEngine.h             # std::map implementation
 │   ├── TkrzwHashStorageEngine.h       # TKRZW HashDBM implementation
 │   ├── TkrzwTreeStorageEngine.h       # TKRZW TreeDBM implementation
+│   ├── interactive_storage_test.cpp   # Interactive CLI tester
+│   ├── INTERACTIVE_USAGE.md           # Interactive tester guide
 │   ├── test_map_storage_engine.cpp    # Test suite
 │   ├── example_storage.cpp            # MapStorageEngine examples
 │   ├── example_tkrzw_storage.cpp      # TkrzwHashStorageEngine examples
 │   └── example_tkrzw_tree_storage.cpp # TkrzwTreeStorageEngine examples
 ├── keystorage/             # Generic key-value storage
-│   ├── KeyStorage.h               # CRTP base class
-│   ├── KeyStorageIterator.h       # Iterator base class
-│   ├── KeyStorageConcepts.h       # C++20 concepts
-│   ├── MapKeyStorage.h            # std::map implementation
-│   ├── example_usage.cpp          # Examples
-│   └── README.md                  # KeyStorage documentation
+│   ├── KeyStorage.h                  # CRTP base class
+│   ├── KeyStorageIterator.h          # Iterator base class
+│   ├── KeyStorageConcepts.h          # C++20 concepts
+│   ├── MapKeyStorage.h               # std::map implementation
+│   ├── TkrzwHashKeyStorage.h         # TKRZW HashDBM implementation
+│   ├── TkrzwTreeKeyStorage.h         # TKRZW TreeDBM implementation
+│   ├── example_usage.cpp             # MapKeyStorage examples
+│   ├── example_tkrzw_keystorage.cpp  # TKRZW KeyStorage examples
+│   └── README.md                     # KeyStorage documentation
 ├── table/                  # Partitioned table layer
 │   └── RepartitionTable.h
 └── build/                  # Build directory (created after building)

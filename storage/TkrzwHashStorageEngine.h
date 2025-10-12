@@ -138,13 +138,13 @@ public:
     }
 
     /**
-     * @brief Implementation: Scan for keys starting with a given prefix
-     * @param key_prefix The prefix to search for
+     * @brief Implementation: Scan for keys from a starting point
+     * @param key_prefix The starting key (lower_bound)
      * @param limit Maximum number of keys to return
-     * @return Vector of keys matching the prefix
+     * @return Vector of keys >= key_prefix (in sorted order)
      * 
-     * Note: HashDBM doesn't maintain sorted order, so this iterates through
-     * all keys and filters by prefix. For sorted scans, consider using TreeDBM.
+     * Note: HashDBM doesn't maintain sorted order, so this collects all keys,
+     * sorts them, and returns those >= key_prefix.
      */
     std::vector<std::string> scan_impl(const std::string& key_prefix, size_t limit) const {
         std::vector<std::string> results;
@@ -153,33 +153,32 @@ public:
             return results;
         }
         
-        results.reserve(std::min(limit, static_cast<size_t>(1000)));
-        
-        // Create an iterator and start from first key
+        // Collect all keys first (HashDBM is unordered)
+        std::vector<std::string> all_keys;
         auto iter = db_->MakeIterator();
         iter->First();
         
-        // Iterate through all keys (HashDBM is unordered)
         std::string key, value;
-        while (results.size() < limit) {
-            tkrzw::Status status = iter->Get(&key, &value);
-            if (status != tkrzw::Status::SUCCESS) {
-                break;  // No more keys
-            }
-            
-            // Check if key starts with prefix
-            if (key_prefix.empty() || key.compare(0, key_prefix.length(), key_prefix) == 0) {
-                results.push_back(key);
-            }
-            
-            // Move to next key
+        while (iter->Get(&key, &value) == tkrzw::Status::SUCCESS) {
+            all_keys.push_back(key);
             if (iter->Next() != tkrzw::Status::SUCCESS) {
                 break;
             }
         }
         
-        // Sort results for consistency (since HashDBM is unordered)
-        std::sort(results.begin(), results.end());
+        // Sort all keys
+        std::sort(all_keys.begin(), all_keys.end());
+        
+        // Find first key >= key_prefix and collect up to limit
+        results.reserve(std::min(limit, all_keys.size()));
+        for (const auto& k : all_keys) {
+            if (k >= key_prefix) {
+                results.push_back(k);
+                if (results.size() >= limit) {
+                    break;
+                }
+            }
+        }
         
         return results;
     }

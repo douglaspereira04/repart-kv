@@ -54,10 +54,10 @@ public:
     }
 
     /**
-     * @brief Implementation: Scan for keys starting with a given prefix
-     * @param key_prefix The prefix to search for
+     * @brief Implementation: Scan for keys from a starting point
+     * @param key_prefix The starting key (lower_bound)
      * @param limit Maximum number of keys to return
-     * @return Vector of keys matching the prefix
+     * @return Vector of keys >= key_prefix
      */
     std::vector<std::string> scan_impl(const std::string& key_prefix, size_t limit) const {
         std::vector<std::string> results;
@@ -66,16 +66,10 @@ public:
         // Use lower_bound to find the first key >= key_prefix
         auto it = storage_.lower_bound(key_prefix);
         
-        // Iterate while we have matches and haven't hit the limit
+        // Iterate and collect keys
         while (it != storage_.end() && results.size() < limit) {
-            // Check if the key starts with the prefix
-            if (it->first.compare(0, key_prefix.length(), key_prefix) == 0) {
-                results.push_back(it->first);
-                ++it;
-            } else {
-                // Since map is sorted, once we don't match the prefix, we're done
-                break;
-            }
+            results.push_back(it->first);
+            ++it;
         }
 
         return results;

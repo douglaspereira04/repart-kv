@@ -57,13 +57,13 @@ public:
     }
 
     /**
-     * @brief Scan for keys starting with a given prefix
-     * @param key_prefix The prefix to search for
+     * @brief Scan for keys from a starting point (lower_bound)
+     * @param key_start The starting key (returns keys >= key_start)
      * @param limit Maximum number of keys to return
-     * @return Vector of keys matching the prefix
+     * @return Vector of keys >= key_start (sorted order)
      */
-    std::vector<std::string> scan(const std::string& key_prefix, size_t limit) const {
-        return static_cast<const Derived*>(this)->scan_impl(key_prefix, limit);
+    std::vector<std::string> scan(const std::string& key_start, size_t limit) const {
+        return static_cast<const Derived*>(this)->scan_impl(key_start, limit);
     }
 
     /**
