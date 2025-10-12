@@ -9,17 +9,17 @@
  * @tparam StorageEngineType Type that derives from StorageEngine
  */
 template<typename StorageEngineType>
-class RepartitionTable {
+class PartitionedKeyValueStorage {
 public:
     /**
      * @brief Default constructor
      */
-    RepartitionTable() = default;
+    PartitionedKeyValueStorage() = default;
 
     /**
      * @brief Default destructor
      */
-    ~RepartitionTable() = default;
+    ~PartitionedKeyValueStorage() = default;
 
     /**
      * @brief Read a value by key
@@ -51,3 +51,4 @@ public:
         return {};
     }
 };
+

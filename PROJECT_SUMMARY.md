@@ -151,7 +151,7 @@ All targets compile cleanly with C++20 and `-Wall -Wextra -Wpedantic`.
 ## Next Steps for Development
 
 1. Add more storage backends (RocksDB, LevelDB)
-2. Implement RepartitionTable for distributed storage
+2. Implement PartitionedKeyValueStorage for distributed storage
 3. Add async/await support
 4. Create Python/C bindings
 5. Add compression support
@@ -163,7 +163,7 @@ All targets compile cleanly with C++20 and `-Wall -Wextra -Wpedantic`.
 repart-kv/
 ├── 📁 storage/          # 3 Storage engines + tests + examples
 ├── 📁 keystorage/       # 3 Key storage implementations  
-├── 📁 table/            # Repartition table (placeholder)
+├── 📁 kvstorage/        # Partitioned key-value storage (placeholder)
 ├── 📁 build/            # Build artifacts (generated)
 ├── 📄 CMakeLists.txt    # Build configuration
 ├── 📄 main.cpp          # Main demo

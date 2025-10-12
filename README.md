@@ -159,8 +159,8 @@ repart-kv/
 │   ├── example_usage.cpp             # MapKeyStorage examples
 │   ├── example_tkrzw_keystorage.cpp  # TKRZW KeyStorage examples
 │   └── README.md                     # KeyStorage documentation
-├── table/                  # Partitioned table layer
-│   └── RepartitionTable.h
+├── kvstorage/             # Partitioned key-value storage layer
+│   └── PartitionedKeyValueStorage.h
 └── build/                  # Build directory (created after building)
 ```
 

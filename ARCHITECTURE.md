@@ -70,11 +70,11 @@ bool is_end() const;
 | `TkrzwHashKeyStorage<T>` | TKRZW HashDBM | Unordered | Integral, pointers |
 | `TkrzwTreeKeyStorage<T>` | TKRZW TreeDBM | Sorted | Integral, pointers |
 
-### 3. Repartition Table Layer (Future)
+### 3. Partitioned Key-Value Storage Layer (Future)
 
 **Purpose**: Distributed partitioned storage across multiple engines.
 
-**Status**: Planned (currently placeholder in `table/RepartitionTable.h`)
+**Status**: Planned (currently placeholder in `kvstorage/PartitionedKeyValueStorage.h`)
 
 ## CRTP Pattern Explained
 
