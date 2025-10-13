@@ -220,6 +220,22 @@ target_include_directories(test_partitioned_kv_storage PRIVATE
     ${TKRZW_INCLUDE_DIRS}
 )
 
+# Graph tracking tests for repartitioning storage
+add_executable(test_graph_tracking 
+    kvstorage/test_graph_tracking.cpp
+)
+
+target_link_libraries(test_graph_tracking PRIVATE 
+    Threads::Threads
+    ${TKRZW_ALL_LIBS}
+)
+target_compile_features(test_graph_tracking PRIVATE cxx_std_20)
+target_compile_options(test_graph_tracking PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_graph_tracking PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${TKRZW_INCLUDE_DIRS}
+)
+
 # Graph tests
 add_executable(test_graph 
     graph/test_graph.cpp

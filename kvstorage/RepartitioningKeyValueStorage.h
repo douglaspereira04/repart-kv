@@ -3,6 +3,7 @@
 #include "PartitionedKeyValueStorage.h"
 #include "../keystorage/KeyStorage.h"
 #include "../storage/StorageEngine.h"
+#include "../graph/Graph.h"
 #include <string>
 #include <vector>
 #include <cstddef>
@@ -51,6 +52,7 @@ private:
     std::vector<StorageEngineType*> storages_;         // Vector of storage engine instances
     size_t level_;                                     // Current level (tree depth or hierarchy level)
     HashFunc hash_func_;                               // Hash function for key hashing
+    Graph graph_;                                      // Graph for tracking key access patterns and relationships
 
 public:
     /**
@@ -245,17 +247,47 @@ public:
     }
 
     /**
+     * @brief Enable or disable tracking of key access patterns
+     * @param enable If true, enables tracking; if false, disables it
+     */
+    void set_tracking_enabled(bool enable) {
+        enable_tracking_ = enable;
+    }
+
+    /**
+     * @brief Check if tracking is currently enabled
+     * @return true if tracking is enabled, false otherwise
+     */
+    bool is_tracking_enabled() const {
+        return enable_tracking_;
+    }
+
+    /**
+     * @brief Get a const reference to the access pattern graph
+     * @return Const reference to the graph tracking key access patterns
+     */
+    const Graph& get_graph() const {
+        return graph_;
+    }
+
+    /**
+     * @brief Clear all tracking data from the graph
+     */
+    void clear_graph() {
+        graph_.clear();
+    }
+
+private:
+    /**
      * @brief Update graph structure for a single key
      * @param key The key whose graph relationships need to be updated
      * 
-     * This method updates the graph structure (edges, relationships) associated
-     * with a single key, potentially affecting partition assignments.
+     * This method increments the vertex weight for the given key in the graph,
+     * tracking its access frequency. If the vertex doesn't exist, it's created
+     * with weight 1.
      */
     void single_key_graph_update(const std::string& key) {
-        // TODO: Implement single key graph update logic
-        // 1. Analyze key relationships and access patterns
-        // 2. Update graph structure for this key
-        // 3. Potentially trigger repartitioning if needed
+        graph_.increment_vertex_weight(key);
     }
 
     /**
