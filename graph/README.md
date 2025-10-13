@@ -1,10 +1,14 @@
 # Graph
 
-A high-performance weighted directed graph implementation in C++.
+A high-performance weighted directed graph implementation in C++ with METIS integration for graph partitioning.
 
 ## Overview
 
-The `Graph` class provides an efficient implementation of a weighted directed graph using adjacency list representation with `std::unordered_map`. Both vertices and edges have associated integer weights that can be incremented.
+This module provides two main classes:
+
+1. **`Graph`** - An efficient implementation of a weighted directed graph using adjacency list representation with `std::unordered_map`. Both vertices and edges have associated integer weights that can be incremented.
+
+2. **`MetisGraph`** - A wrapper class that converts `Graph` instances into METIS-compatible format and provides graph partitioning functionality using the METIS library.
 
 ## Features
 
@@ -101,7 +105,94 @@ Performance test results (on typical hardware):
 - 100,000 vertex operations: ~10-30ms
 - 100,000 edge operations: ~20-50ms
 
+## MetisGraph Class
+
+The `MetisGraph` class provides integration with the METIS library for high-quality graph partitioning.
+
+### Features
+
+- **CSR Format Conversion**: Automatically converts `Graph` to Compressed Sparse Row (CSR) format required by METIS
+- **Vertex and Edge Weights**: Preserves vertex and edge weights during conversion
+- **Multiple Partitioning Algorithms**: Uses METIS recursive bisection (for ≤8 partitions) or k-way partitioning
+- **String-to-Index Mapping**: Maintains bidirectional mapping between string vertex names and integer indices
+
+### API Reference
+
+#### Preparation
+
+- `void prepare_from_graph(const Graph& graph)` - Converts a Graph instance to METIS-compatible format and stores all necessary data structures
+
+#### Partitioning
+
+- `std::unordered_map<std::string, int> partition(int num_partitions)` - Partitions the graph and returns vertex-to-partition assignments
+
+#### Query Operations
+
+- `bool is_prepared() const` - Checks if graph has been prepared
+- `idx_t get_num_vertices() const` - Returns number of vertices
+- `size_t get_num_edges() const` - Returns number of edges
+- `const std::unordered_map<std::string, idx_t>& get_vertex_to_idx() const` - Gets vertex name to index mapping
+- `const std::vector<std::string>& get_idx_to_vertex() const` - Gets index to vertex name mapping
+- `const std::vector<idx_t>& get_xadj() const` - Gets CSR adjacency structure
+- `const std::vector<idx_t>& get_adjncy() const` - Gets CSR adjacency list
+- `const std::vector<idx_t>& get_vertex_weights() const` - Gets vertex weights array
+- `const std::vector<idx_t>& get_edge_weights() const` - Gets edge weights array
+
+### Usage Example
+
+```cpp
+#include "Graph.h"
+#include "MetisGraph.h"
+#include <iostream>
+
+int main() {
+    // Create and populate a graph
+    Graph graph;
+    graph.increment_vertex_weight("A");
+    graph.increment_vertex_weight("B");
+    graph.increment_vertex_weight("C");
+    graph.increment_vertex_weight("D");
+    
+    graph.increment_edge_weight("A", "B");
+    graph.increment_edge_weight("B", "C");
+    graph.increment_edge_weight("C", "D");
+    graph.increment_edge_weight("D", "A");
+    
+    // Prepare for METIS
+    MetisGraph metis_graph;
+    metis_graph.prepare_from_graph(graph);
+    
+    // Partition into 2 parts
+    auto partitions = metis_graph.partition(2);
+    
+    // Print results
+    for (const auto& [vertex, partition_id] : partitions) {
+        std::cout << "Vertex " << vertex << " -> Partition " << partition_id << std::endl;
+    }
+    
+    return 0;
+}
+```
+
+### Building with METIS
+
+To compile with METIS support:
+
+```bash
+g++ -std=c++17 -O3 -o example_metis_graph example_metis_graph.cpp -lmetis
+./example_metis_graph
+```
+
+To compile and run the tests:
+
+```bash
+g++ -std=c++17 -O3 -o test_metis_graph test_metis_graph.cpp -lmetis
+./test_metis_graph
+```
+
 ## Design Decisions
+
+### Graph Class
 
 1. **Directed Graph**: The graph is directed by default. If an undirected graph is needed, simply add both directions when adding an edge.
 
@@ -112,4 +203,16 @@ Performance test results (on typical hardware):
 4. **Automatic Creation**: Vertices and edges are automatically created when incremented, simplifying the API and reducing boilerplate code.
 
 5. **Header-Only**: The entire implementation is in the header file for easy integration and potential inlining optimizations.
+
+### MetisGraph Class
+
+1. **CSR Format**: Uses Compressed Sparse Row format, which is the standard format for METIS and provides efficient memory usage.
+
+2. **Separate Preparation Step**: Separates graph preparation from partitioning to allow multiple partitioning operations on the same prepared graph.
+
+3. **Automatic Algorithm Selection**: Chooses between recursive bisection and k-way partitioning based on the number of requested partitions.
+
+4. **Weight Preservation**: All vertex and edge weights are preserved and passed to METIS for balanced partitioning.
+
+5. **String Mapping**: Maintains bidirectional mapping to support string-based vertex identifiers while using METIS's integer-based API.
 

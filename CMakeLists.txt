@@ -219,3 +219,58 @@ target_include_directories(test_partitioned_kv_storage PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
 )
+
+# Graph tests
+add_executable(test_graph 
+    graph/test_graph.cpp
+)
+
+target_compile_features(test_graph PRIVATE cxx_std_20)
+target_compile_options(test_graph PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_graph PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+)
+
+# Graph example
+add_executable(example_graph 
+    graph/example_graph.cpp
+)
+
+target_compile_features(example_graph PRIVATE cxx_std_20)
+target_compile_options(example_graph PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(example_graph PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+)
+
+# Find METIS library for graph partitioning
+find_library(METIS_LIB NAMES metis)
+
+if(METIS_LIB)
+    message(STATUS "METIS library found: ${METIS_LIB}")
+    
+    # METIS graph tests
+    add_executable(test_metis_graph 
+        graph/test_metis_graph.cpp
+    )
+    
+    target_link_libraries(test_metis_graph PRIVATE ${METIS_LIB})
+    target_compile_features(test_metis_graph PRIVATE cxx_std_20)
+    target_compile_options(test_metis_graph PRIVATE -Wall -Wextra -Wpedantic)
+    target_include_directories(test_metis_graph PRIVATE 
+        ${CMAKE_SOURCE_DIR}
+    )
+    
+    # METIS graph example
+    add_executable(example_metis_graph 
+        graph/example_metis_graph.cpp
+    )
+    
+    target_link_libraries(example_metis_graph PRIVATE ${METIS_LIB})
+    target_compile_features(example_metis_graph PRIVATE cxx_std_20)
+    target_compile_options(example_metis_graph PRIVATE -Wall -Wextra -Wpedantic)
+    target_include_directories(example_metis_graph PRIVATE 
+        ${CMAKE_SOURCE_DIR}
+    )
+else()
+    message(WARNING "METIS library not found. Skipping METIS graph examples and tests. Install METIS to enable graph partitioning features.")
+endif()
