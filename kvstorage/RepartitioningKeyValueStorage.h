@@ -8,6 +8,8 @@
 #include <cstddef>
 #include <shared_mutex>
 #include <functional>
+#include <set>
+#include <algorithm>
 
 /**
  * @brief Repartitioning key-value storage implementation
@@ -80,23 +82,33 @@ public:
      * @return The value associated with the key
      */
     std::string read_impl(const std::string& key) {
+        // Lock key map for reading
         key_map_lock_.lock_shared();
 
+        // Track key access if enabled
         if (enable_tracking_) {
             single_key_graph_update(key);
         }
 
+        // Look up which storage owns this key
         StorageEngineType* storage;
         bool found = storage_map_.get(key, storage);
         if (!found) {
+            // Key not found in any partition
             key_map_lock_.unlock_shared();
             return "";
         }
+        
+        // Lock the storage for reading
         storage->lock_shared();
 
+        // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock_shared();
 
+        // Read value from storage
         std::string value = storage->read(key);
+        
+        // Unlock storage
         storage->unlock_shared();
         return value;
     }
@@ -107,37 +119,49 @@ public:
      * @param value The value to associate with the key
      */
     void write_impl(const std::string& key, const std::string& value) {
+        // Lock key map for writing
         key_map_lock_.lock();
 
+        // Track key access if enabled
         if (enable_tracking_) {
             single_key_graph_update(key);
         }
 
+        // Look up or assign storage for this key
         StorageEngineType* storage;
         bool found = storage_map_.get(key, storage);
         if (!found) {
+            // Key not mapped yet - assign to a partition using hash function
             size_t partition_idx = hash_func_(key) % partition_count_;
             storage = storages_[partition_idx];
             storage_map_.put(key, storage);
             partition_map_.put(key, partition_idx);
         } else if(storage->level() != level_) {
+            // Storage is from a different level - reassign to current level
             size_t partition_idx;
             bool found = partition_map_.get(key, partition_idx);
             if (!found) {
+                // No partition mapping - assign using hash function
                 partition_idx = hash_func_(key) % partition_count_;
                 partition_map_.put(key, partition_idx);
                 storage = storages_[partition_idx];
                 storage_map_.put(key, storage);
             } else {
+                // Use existing partition mapping
                 storage = storages_[partition_idx];
             }
         }
 
+        // Lock the storage for writing
         storage->lock();
 
+        // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock();
 
+        // Write value to storage
         storage->write(key, value);
+        
+        // Unlock storage
         storage->unlock();
     }
 
@@ -148,12 +172,62 @@ public:
      * @return Vector of key-value pairs matching the prefix
      */
     std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit) {
-        // TODO: Implement scan logic
-        // 1. Use partition_map_ to find all partitions that might contain keys with this prefix
-        // 2. Collect results from all relevant partitions using storage_map_
-        // 3. Merge and sort results across partitions
-        // 4. Return up to 'limit' results
-        return {};
+        std::set<StorageEngineType*> storage_set;
+        std::vector<StorageEngineType*> storage_array;
+        std::vector<std::string> key_array;
+
+        // Lock key map for reading
+        key_map_lock_.lock_shared();
+
+        // Get iterator starting from initial_key
+        auto it = storage_map_.lower_bound(key_prefix);
+        
+        // Collect storage pointers and keys up to limit
+        while (limit > 0) {
+            if (it.is_end()) {
+                break;
+            }
+            
+            StorageEngineType* storage = it.get_value();
+            storage_set.insert(storage);
+            storage_array.push_back(storage);
+            key_array.push_back(it.get_key());
+            
+            ++it;
+            limit--;
+        }
+
+        // Track key access patterns if enabled
+        if (enable_tracking_) {
+            multi_key_graph_update(key_array);
+        }
+
+        // Lock all unique storages in sorted order (by pointer address)
+        std::vector<StorageEngineType*> sorted_storages(storage_set.begin(), storage_set.end());
+        std::sort(sorted_storages.begin(), sorted_storages.end());
+        
+        for (auto* storage : sorted_storages) {
+            storage->lock_shared();
+        }
+
+        // Unlock key map
+        key_map_lock_.unlock_shared();
+
+        // Read values from storages
+        std::vector<std::pair<std::string, std::string>> value_array;
+        value_array.reserve(key_array.size());
+        
+        for (size_t i = 0; i < storage_array.size(); ++i) {
+            std::string value = storage_array[i]->read(key_array[i]);
+            value_array.push_back({key_array[i], value});
+        }
+
+        // Unlock all storages
+        for (auto* storage : sorted_storages) {
+            storage->unlock_shared();
+        }
+
+        return value_array;
     }
 
     /**
