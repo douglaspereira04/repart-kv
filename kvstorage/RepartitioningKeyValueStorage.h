@@ -294,15 +294,26 @@ private:
      * @brief Update graph structure for multiple keys
      * @param keys Vector of keys whose graph relationships need to be updated
      * 
-     * This method updates the graph structure (edges, relationships) for multiple
-     * keys in batch, which can be more efficient than individual updates.
+     * This method updates the graph structure for multiple keys accessed together
+     * (e.g., during a scan operation). It:
+     * 1. Increments vertex weight for each key (tracking access frequency)
+     * 2. Creates edges between all pairs of keys (tracking co-access patterns)
+     * 
+     * This helps identify keys that are frequently accessed together, which
+     * should ideally be placed in the same partition for optimal performance.
      */
     void multi_key_graph_update(const std::vector<std::string>& keys) {
-        // TODO: Implement multi-key graph update logic
-        // 1. Analyze relationships between the provided keys
-        // 2. Update graph structure for all keys
-        // 3. Optimize partition assignments based on key relationships
-        // 4. Potentially trigger batch repartitioning
+        // Add or increment vertex for each key
+        for (const auto& key : keys) {
+            graph_.increment_vertex_weight(key);
+        }
+        
+        // Add or increment edges between all pairs of keys
+        for (size_t i = 0; i < keys.size(); ++i) {
+            for (size_t j = i + 1; j < keys.size(); ++j) {
+                graph_.increment_edge_weight(keys[i], keys[j]);
+            }
+        }
     }
 };
 

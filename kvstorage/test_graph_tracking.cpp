@@ -173,6 +173,169 @@ void test_toggle_tracking() {
     std::cout << "  ✓ Test 5 PASSED" << std::endl << std::endl;
 }
 
+void test_scan_with_graph_tracking() {
+    std::cout << "Test 6: Scan with Graph Tracking" << std::endl;
+    std::cout << "---------------------------------" << std::endl;
+    
+    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    storage.set_tracking_enabled(true);
+    
+    // Write some keys with a common prefix
+    storage.write("user:001", "alice");
+    storage.write("user:002", "bob");
+    storage.write("user:003", "charlie");
+    storage.write("user:004", "diana");
+    
+    const Graph& graph = storage.get_graph();
+    
+    // After writes, each vertex should have weight 1
+    assert(graph.get_vertex_weight("user:001") == 1);
+    assert(graph.get_vertex_weight("user:002") == 1);
+    assert(graph.get_vertex_weight("user:003") == 1);
+    assert(graph.get_vertex_weight("user:004") == 1);
+    std::cout << "  ✓ Four vertices created with weight 1 each" << std::endl;
+    
+    // No edges should exist yet
+    assert(graph.get_edge_count() == 0);
+    std::cout << "  ✓ No edges exist before scan" << std::endl;
+    
+    // Perform a scan (which calls multi_key_graph_update)
+    auto results = storage.scan("user:", 3);
+    
+    // Scan should return 3 results
+    assert(results.size() == 3);
+    std::cout << "  ✓ Scan returned 3 results" << std::endl;
+    
+    // After scan, the 3 scanned keys should have weight 2 (1 write + 1 scan)
+    // We need to check which keys were returned by the scan
+    std::vector<std::string> scanned_keys;
+    for (const auto& [key, value] : results) {
+        scanned_keys.push_back(key);
+        assert(graph.get_vertex_weight(key) == 2);
+    }
+    std::cout << "  ✓ Scanned keys have weight 2 (1 write + 1 scan)" << std::endl;
+    
+    // Edges should now exist between all pairs of scanned keys
+    // For 3 keys, we should have 3 edges: (0,1), (0,2), (1,2)
+    assert(graph.get_edge_count() == 3);
+    std::cout << "  ✓ Three edges created between scanned keys" << std::endl;
+    
+    // Verify edges exist between all pairs
+    for (size_t i = 0; i < scanned_keys.size(); ++i) {
+        for (size_t j = i + 1; j < scanned_keys.size(); ++j) {
+            assert(graph.has_edge(scanned_keys[i], scanned_keys[j]));
+            assert(graph.get_edge_weight(scanned_keys[i], scanned_keys[j]) == 1);
+        }
+    }
+    std::cout << "  ✓ All edge pairs verified with weight 1" << std::endl;
+    std::cout << "  ✓ Test 6 PASSED" << std::endl << std::endl;
+}
+
+void test_repeated_scans() {
+    std::cout << "Test 7: Repeated Scans Build Edge Weights" << std::endl;
+    std::cout << "------------------------------------------" << std::endl;
+    
+    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    storage.set_tracking_enabled(true);
+    
+    // Write keys
+    storage.write("item:a", "value_a");
+    storage.write("item:b", "value_b");
+    storage.write("item:c", "value_c");
+    
+    const Graph& graph = storage.get_graph();
+    
+    // Perform the same scan 5 times
+    for (int i = 0; i < 5; ++i) {
+        storage.scan("item:", 2);
+    }
+    
+    // Get the first two keys (sorted by the storage) - this is the 6th scan
+    auto first_scan = storage.scan("item:", 2);
+    assert(first_scan.size() == 2);
+    
+    std::string key1 = first_scan[0].first;
+    std::string key2 = first_scan[1].first;
+    
+    // Each key should have weight 7 (1 write + 6 scans)
+    assert(graph.get_vertex_weight(key1) == 7);
+    assert(graph.get_vertex_weight(key2) == 7);
+    std::cout << "  ✓ Keys accessed 7 times (1 write + 6 scans)" << std::endl;
+    
+    // The edge between them should have weight 6 (one for each scan)
+    assert(graph.has_edge(key1, key2));
+    assert(graph.get_edge_weight(key1, key2) == 6);
+    std::cout << "  ✓ Edge weight is 6 (incremented on each scan)" << std::endl;
+    
+    std::cout << "  ✓ Repeated scans correctly build edge weights" << std::endl;
+    std::cout << "  ✓ Test 7 PASSED" << std::endl << std::endl;
+}
+
+void test_co_access_patterns() {
+    std::cout << "Test 8: Co-Access Pattern Detection" << std::endl;
+    std::cout << "------------------------------------" << std::endl;
+    
+    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    storage.set_tracking_enabled(true);
+    
+    // Write keys in different groups
+    storage.write("group1:a", "value");
+    storage.write("group1:b", "value");
+    storage.write("group1:c", "value");
+    storage.write("group2:x", "value");
+    storage.write("group2:y", "value");
+    storage.write("group2:z", "value");
+    
+    const Graph& graph = storage.get_graph();
+    
+    // Scan group1 keys together multiple times
+    for (int i = 0; i < 10; ++i) {
+        storage.scan("group1:", 3);
+    }
+    
+    // Scan group2 keys together multiple times
+    for (int i = 0; i < 10; ++i) {
+        storage.scan("group2:", 3);
+    }
+    
+    // Get the actual keys from scans
+    auto group1_keys = storage.scan("group1:", 3);
+    auto group2_keys = storage.scan("group2:", 3);
+    
+    // Check that keys within the same group have strong edges
+    if (group1_keys.size() >= 2) {
+        std::string g1_key1 = group1_keys[0].first;
+        std::string g1_key2 = group1_keys[1].first;
+        
+        // Edge weight should be 10 (scanned together 10 times) + 1 (final scan)
+        int edge_weight = graph.get_edge_weight(g1_key1, g1_key2);
+        assert(edge_weight == 11);
+        std::cout << "  ✓ group1 keys have strong co-access edge (weight: " << edge_weight << ")" << std::endl;
+    }
+    
+    if (group2_keys.size() >= 2) {
+        std::string g2_key1 = group2_keys[0].first;
+        std::string g2_key2 = group2_keys[1].first;
+        
+        // Edge weight should be 10 + 1
+        int edge_weight = graph.get_edge_weight(g2_key1, g2_key2);
+        assert(edge_weight == 11);
+        std::cout << "  ✓ group2 keys have strong co-access edge (weight: " << edge_weight << ")" << std::endl;
+    }
+    
+    // Check that keys from different groups have no edges
+    if (group1_keys.size() >= 1 && group2_keys.size() >= 1) {
+        std::string g1_key = group1_keys[0].first;
+        std::string g2_key = group2_keys[0].first;
+        
+        assert(!graph.has_edge(g1_key, g2_key));
+        std::cout << "  ✓ Keys from different groups have no edges" << std::endl;
+    }
+    
+    std::cout << "  ✓ Co-access patterns correctly detected" << std::endl;
+    std::cout << "  ✓ Test 8 PASSED" << std::endl << std::endl;
+}
+
 int main() {
     std::cout << "=== Testing Graph Tracking in RepartitioningKeyValueStorage ===" << std::endl << std::endl;
     
@@ -182,6 +345,9 @@ int main() {
         test_access_frequency_tracking();
         test_clear_graph();
         test_toggle_tracking();
+        test_scan_with_graph_tracking();
+        test_repeated_scans();
+        test_co_access_patterns();
         
         std::cout << "========================================" << std::endl;
         std::cout << "  All Graph Tracking Tests PASSED!" << std::endl;
@@ -192,6 +358,9 @@ int main() {
         std::cout << "  ✓ Graph correctly tracks key access frequencies" << std::endl;
         std::cout << "  ✓ Hot keys can be identified by vertex weights" << std::endl;
         std::cout << "  ✓ Graph can be cleared for fresh tracking periods" << std::endl;
+        std::cout << "  ✓ Scan operations track co-access patterns with edges" << std::endl;
+        std::cout << "  ✓ Edge weights reflect frequency of co-access" << std::endl;
+        std::cout << "  ✓ Keys accessed together can be identified for co-location" << std::endl;
         std::cout << "  ✓ Ready for intelligent repartitioning decisions" << std::endl;
         
         return 0;
