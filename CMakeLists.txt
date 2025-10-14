@@ -236,6 +236,25 @@ target_include_directories(test_graph_tracking PRIVATE
     ${TKRZW_INCLUDE_DIRS}
 )
 
+# Repartitioning tests (requires METIS)
+if(METIS_LIB)
+    add_executable(test_repartitioning 
+        kvstorage/test_repartitioning.cpp
+    )
+    
+    target_link_libraries(test_repartitioning PRIVATE 
+        Threads::Threads
+        ${TKRZW_ALL_LIBS}
+        ${METIS_LIB}
+    )
+    target_compile_features(test_repartitioning PRIVATE cxx_std_20)
+    target_compile_options(test_repartitioning PRIVATE -Wall -Wextra -Wpedantic)
+    target_include_directories(test_repartitioning PRIVATE 
+        ${CMAKE_SOURCE_DIR}
+        ${TKRZW_INCLUDE_DIRS}
+    )
+endif()
+
 # Graph tests
 add_executable(test_graph 
     graph/test_graph.cpp

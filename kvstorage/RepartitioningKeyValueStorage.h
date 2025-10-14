@@ -4,6 +4,7 @@
 #include "../keystorage/KeyStorage.h"
 #include "../storage/StorageEngine.h"
 #include "../graph/Graph.h"
+#include "../graph/MetisGraph.h"
 #include <string>
 #include <vector>
 #include <cstddef>
@@ -53,6 +54,7 @@ private:
     size_t level_;                                     // Current level (tree depth or hierarchy level)
     HashFunc hash_func_;                               // Hash function for key hashing
     Graph graph_;                                      // Graph for tracking key access patterns and relationships
+    MetisGraph metis_graph_;                           // METIS graph for partitioning
 
 public:
     /**
@@ -235,22 +237,93 @@ public:
     /**
      * @brief Repartition data across available partitions
      * 
-     * This method redistributes data across partitions, potentially
-     * moving keys from one storage engine to another for better load balancing.
+     * This method uses METIS graph partitioning to redistribute keys across
+     * partitions based on their access patterns. Keys that are frequently
+     * accessed together will be placed in the same partition to optimize
+     * scan performance and minimize cross-partition operations.
+     * 
+     * Algorithm:
+     * 1. Disable tracking
+     * 2. Use METIS to partition the access pattern graph
+     * 3. Clear the graph for fresh tracking
+     * 4. Create new storage engines
+     * 5. Update partition_map with new assignments
+     * 
+     * Note: This implementation does not migrate existing data. Data migration
+     * will occur lazily as keys are accessed and reassigned to new partitions.
      */
     void repartition() {
-        // TODO: Implement repartitioning logic
-        // 1. Analyze current key distribution
-        // 2. Determine optimal partition boundaries
-        // 3. Move keys between partitions as needed
-        // 4. Update partition_map_ with new partition assignments
+        // Step 1: Disable tracking temporarily
+        key_map_lock_.lock();
+        enable_tracking_ = false;
+        key_map_lock_.unlock();
+        
+        // Step 2: Partition the graph using METIS
+        std::unordered_map<std::string, size_t> new_partition_map;
+        
+        if (graph_.get_vertex_count() > 0) {
+            try {
+                metis_graph_.prepare_from_graph(graph_);
+                auto metis_partitions = metis_graph_.partition(partition_count_);
+                
+                // Convert partition IDs to size_t
+                for (const auto& [key, partition_id] : metis_partitions) {
+                    new_partition_map[key] = static_cast<size_t>(partition_id);
+                }
+            } catch (const std::exception& e) {
+                // If METIS fails, keep the old partition map
+                // This can happen if the graph is too small or has other issues
+            }
+        }
+        
+        // Step 3: Clear the graph for fresh tracking
+        graph_.clear();
+        
+        // Step 4: Lock and update partition assignments
+        key_map_lock_.lock();
+        
+        // Save old storages
+        auto old_storages = storages_;
+        
+        // Lock all old storages in sorted order (by pointer address) to avoid deadlocks
+        std::vector<StorageEngineType*> sorted_storages = old_storages;
+        std::sort(sorted_storages.begin(), sorted_storages.end());
+        
+        for (auto* storage : sorted_storages) {
+            storage->lock_shared();
+        }
+        
+        // Update partition_map with new assignments
+        if (!new_partition_map.empty()) {
+            // Update partition_map_ for keys that were in the graph
+            for (const auto& [key, new_partition_id] : new_partition_map) {
+                partition_map_.put(key, new_partition_id);
+            }
+        }
+        
+        // Create new storage engines
+        storages_.clear();
+        storages_.reserve(partition_count_);
+        // Increment level for new storage engines
+        level_++;
+        for (size_t i = 0; i < partition_count_; ++i) {
+            storages_.push_back(new StorageEngineType(level_));
+        }
+        
+        // Unlock all old storages
+        for (auto* storage : sorted_storages) {
+            storage->unlock_shared();
+        }
+        
+        // Unlock key map
+        key_map_lock_.unlock();
     }
 
     /**
      * @brief Enable or disable tracking of key access patterns
      * @param enable If true, enables tracking; if false, disables it
      */
-    void set_tracking_enabled(bool enable) {
+    void enable_tracking(bool enable) {
         enable_tracking_ = enable;
     }
 
@@ -258,7 +331,7 @@ public:
      * @brief Check if tracking is currently enabled
      * @return true if tracking is enabled, false otherwise
      */
-    bool is_tracking_enabled() const {
+    bool enable_tracking() const {
         return enable_tracking_;
     }
 
@@ -266,7 +339,7 @@ public:
      * @brief Get a const reference to the access pattern graph
      * @return Const reference to the graph tracking key access patterns
      */
-    const Graph& get_graph() const {
+    const Graph& graph() const {
         return graph_;
     }
 

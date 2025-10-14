@@ -11,7 +11,7 @@ void test_tracking_disabled() {
     RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     
     // Verify tracking is disabled by default
-    assert(!storage.is_tracking_enabled());
+    assert(!storage.enable_tracking());
     std::cout << "  ✓ Tracking is disabled by default" << std::endl;
     
     // Write and read keys without tracking
@@ -21,7 +21,7 @@ void test_tracking_disabled() {
     storage.read("key2");
     
     // Verify graph is still empty (no tracking occurred)
-    const Graph& graph = storage.get_graph();
+    const Graph& graph = storage.graph();
     assert(graph.get_vertex_count() == 0);
     std::cout << "  ✓ Graph remains empty when tracking is disabled" << std::endl;
     std::cout << "  ✓ Test 1 PASSED" << std::endl << std::endl;
@@ -34,8 +34,8 @@ void test_tracking_enabled() {
     RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     
     // Enable tracking
-    storage.set_tracking_enabled(true);
-    assert(storage.is_tracking_enabled());
+    storage.enable_tracking(true);
+    assert(storage.enable_tracking());
     std::cout << "  ✓ Tracking enabled" << std::endl;
     
     // Write some keys (each write increments vertex weight by 1)
@@ -43,7 +43,7 @@ void test_tracking_enabled() {
     storage.write("key2", "value2");
     storage.write("key3", "value3");
     
-    const Graph& graph = storage.get_graph();
+    const Graph& graph = storage.graph();
     
     // Each write should create a vertex with weight 1
     assert(graph.get_vertex_count() == 3);
@@ -73,7 +73,7 @@ void test_access_frequency_tracking() {
     std::cout << "----------------------------------" << std::endl;
     
     RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
-    storage.set_tracking_enabled(true);
+    storage.enable_tracking(true);
     
     // Simulate different access patterns
     storage.write("hot_key", "value");
@@ -92,7 +92,7 @@ void test_access_frequency_tracking() {
     
     // Don't access cold_key at all after writing
     
-    const Graph& graph = storage.get_graph();
+    const Graph& graph = storage.graph();
     
     // Check weights reflect access patterns
     int hot_weight = graph.get_vertex_weight("hot_key");
@@ -115,14 +115,14 @@ void test_clear_graph() {
     std::cout << "-------------------" << std::endl;
     
     RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
-    storage.set_tracking_enabled(true);
+    storage.enable_tracking(true);
     
     // Add some tracked data
     storage.write("key1", "value1");
     storage.write("key2", "value2");
     storage.read("key1");
     
-    const Graph& graph = storage.get_graph();
+    const Graph& graph = storage.graph();
     assert(graph.get_vertex_count() == 2);
     std::cout << "  ✓ Graph has 2 vertices" << std::endl;
     
@@ -146,16 +146,16 @@ void test_toggle_tracking() {
     RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     
     // Enable tracking and do some operations
-    storage.set_tracking_enabled(true);
+    storage.enable_tracking(true);
     storage.write("key1", "value1");
     storage.read("key1");
     
-    const Graph& graph = storage.get_graph();
+    const Graph& graph = storage.graph();
     assert(graph.get_vertex_weight("key1") == 2);
     std::cout << "  ✓ key1 tracked with weight 2" << std::endl;
     
     // Disable tracking
-    storage.set_tracking_enabled(false);
+    storage.enable_tracking(false);
     storage.read("key1");
     storage.read("key1");
     
@@ -164,7 +164,7 @@ void test_toggle_tracking() {
     std::cout << "  ✓ Weight unchanged while tracking disabled" << std::endl;
     
     // Re-enable tracking
-    storage.set_tracking_enabled(true);
+    storage.enable_tracking(true);
     storage.read("key1");
     
     // Weight should now increase
@@ -178,7 +178,7 @@ void test_scan_with_graph_tracking() {
     std::cout << "---------------------------------" << std::endl;
     
     RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
-    storage.set_tracking_enabled(true);
+    storage.enable_tracking(true);
     
     // Write some keys with a common prefix
     storage.write("user:001", "alice");
@@ -186,7 +186,7 @@ void test_scan_with_graph_tracking() {
     storage.write("user:003", "charlie");
     storage.write("user:004", "diana");
     
-    const Graph& graph = storage.get_graph();
+    const Graph& graph = storage.graph();
     
     // After writes, each vertex should have weight 1
     assert(graph.get_vertex_weight("user:001") == 1);
@@ -236,14 +236,14 @@ void test_repeated_scans() {
     std::cout << "------------------------------------------" << std::endl;
     
     RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
-    storage.set_tracking_enabled(true);
+    storage.enable_tracking(true);
     
     // Write keys
     storage.write("item:a", "value_a");
     storage.write("item:b", "value_b");
     storage.write("item:c", "value_c");
     
-    const Graph& graph = storage.get_graph();
+    const Graph& graph = storage.graph();
     
     // Perform the same scan 5 times
     for (int i = 0; i < 5; ++i) {
@@ -276,7 +276,7 @@ void test_co_access_patterns() {
     std::cout << "------------------------------------" << std::endl;
     
     RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
-    storage.set_tracking_enabled(true);
+    storage.enable_tracking(true);
     
     // Write keys in different groups
     storage.write("group1:a", "value");
@@ -286,7 +286,7 @@ void test_co_access_patterns() {
     storage.write("group2:y", "value");
     storage.write("group2:z", "value");
     
-    const Graph& graph = storage.get_graph();
+    const Graph& graph = storage.graph();
     
     // Scan group1 keys together multiple times
     for (int i = 0; i < 10; ++i) {
