@@ -1,7 +1,7 @@
 #ifndef GRAPH_H
 #define GRAPH_H
 
-#include <unordered_map>
+#include <ankerl/unordered_dense.h>
 #include <string>
 
 /**
@@ -13,11 +13,11 @@
 class Graph {
 private:
     // Map of vertex name to vertex weight
-    std::unordered_map<std::string, int> vertices_;
+    ankerl::unordered_dense::map<std::string, int> vertices_;
     
     // Map of source vertex to map of destination vertex to edge weight
     // edges[source][destination] = weight
-    std::unordered_map<std::string, std::unordered_map<std::string, int>> edges_;
+    ankerl::unordered_dense::map<std::string, ankerl::unordered_dense::map<std::string, int>> edges_;
 
 public:
     /**
@@ -133,7 +133,7 @@ public:
      * 
      * @return Const reference to the vertices map
      */
-    const std::unordered_map<std::string, int>& get_vertices() const {
+    const ankerl::unordered_dense::map<std::string, int>& get_vertices() const {
         return vertices_;
     }
 
@@ -142,7 +142,7 @@ public:
      * 
      * @return Const reference to the edges map
      */
-    const std::unordered_map<std::string, std::unordered_map<std::string, int>>& get_edges() const {
+    const ankerl::unordered_dense::map<std::string, ankerl::unordered_dense::map<std::string, int>>& get_edges() const {
         return edges_;
     }
 

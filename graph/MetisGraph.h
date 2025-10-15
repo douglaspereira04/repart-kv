@@ -4,7 +4,7 @@
 #include "Graph.h"
 #include <metis.h>
 #include <vector>
-#include <unordered_map>
+#include <ankerl/unordered_dense.h>
 #include <string>
 #include <stdexcept>
 #include <algorithm>
@@ -37,7 +37,7 @@ private:
     std::vector<idx_t> adjwgt_;
     
     // Mapping from vertex string to integer index
-    std::unordered_map<std::string, idx_t> vertex_to_idx_;
+    ankerl::unordered_dense::map<std::string, idx_t> vertex_to_idx_;
     
     // Mapping from integer index to vertex string
     std::vector<std::string> idx_to_vertex_;
@@ -134,7 +134,7 @@ public:
      * @return Map from vertex name to partition ID (0 to num_partitions-1)
      * @throws std::runtime_error if graph not prepared or METIS fails
      */
-    std::unordered_map<std::string, int> partition(int num_partitions) {
+    ankerl::unordered_dense::map<std::string, int> partition(int num_partitions) {
         if (!prepared_) {
             throw std::runtime_error("Graph must be prepared before partitioning");
         }
@@ -201,7 +201,7 @@ public:
         }
         
         // Convert partition assignments back to string-based map
-        std::unordered_map<std::string, int> result;
+        ankerl::unordered_dense::map<std::string, int> result;
         for (idx_t i = 0; i < nvtxs_; ++i) {
             result[idx_to_vertex_[i]] = static_cast<int>(part[i]);
         }
@@ -241,7 +241,7 @@ public:
      * 
      * @return Const reference to the vertex-to-index map
      */
-    const std::unordered_map<std::string, idx_t>& get_vertex_to_idx() const {
+    const ankerl::unordered_dense::map<std::string, idx_t>& get_vertex_to_idx() const {
         return vertex_to_idx_;
     }
     
