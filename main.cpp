@@ -11,8 +11,9 @@
 #include "storage/MapStorageEngine.h"
 #include "keystorage/MapKeyStorage.h"
 
-// Global partition count
+// Global parameters
 size_t PARTITION_COUNT = 4;
+size_t TEST_WORKERS = 1;
 
 /**
  * @brief Get current memory usage in KB
@@ -53,12 +54,12 @@ size_t get_disk_usage_kb() {
 
 /**
  * @brief Metrics logging loop that runs in a separate thread
- * @param executed_count Atomic counter for executed operations
+ * @param executed_counts Array of counters (one per worker)
  * @param running Atomic flag to control the loop
  * @param output_file Path to the output CSV file
  * @param start_time Start time of the execution for calculating elapsed time
  */
-void metrics_loop(const std::atomic<size_t>& executed_count, 
+void metrics_loop(const std::vector<size_t>& executed_counts, 
                   const std::atomic<bool>& running,
                   const std::string& output_file,
                   std::chrono::high_resolution_clock::time_point start_time) {
@@ -74,7 +75,13 @@ void metrics_loop(const std::atomic<size_t>& executed_count,
     while (running) {
         auto current_time = std::chrono::high_resolution_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(current_time - start_time);
-        size_t count = executed_count.load();
+        
+        // Sum all worker counts (no synchronization needed - approximate values are fine)
+        size_t count = 0;
+        for (size_t worker_count : executed_counts) {
+            count += worker_count;
+        }
+        
         size_t memory_kb = get_memory_usage_kb();
         size_t disk_kb = get_disk_usage_kb();
         
@@ -95,13 +102,54 @@ void metrics_loop(const std::atomic<size_t>& executed_count,
 }
 
 /**
+ * @brief Worker function that executes a subset of operations
+ * @param worker_id ID of this worker (0-indexed)
+ * @param operations Reference to the full operations vector
+ * @param storage Reference to the storage instance
+ * @param executed_counts Array of counters (one per worker, no synchronization needed)
+ */
+void worker_function(
+    size_t worker_id,
+    const std::vector<Operation>& operations,
+    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage>& storage,
+    std::vector<size_t>& executed_counts) {
+    
+    // Execute operations in a strided pattern
+    // Worker 0: operations[0], operations[0 + TEST_WORKERS], operations[0 + 2*TEST_WORKERS], ...
+    // Worker 1: operations[1], operations[1 + TEST_WORKERS], operations[1 + 2*TEST_WORKERS], ...
+    // etc.
+    for (size_t i = worker_id; i < operations.size(); i += TEST_WORKERS) {
+        const auto& op = operations[i];
+        
+        switch (op.type) {
+            case OperationType::READ: {
+                std::string value = storage.read(op.key);
+                executed_counts[worker_id]++;
+                break;
+            }
+            case OperationType::WRITE: {
+                storage.write(op.key, op.value);
+                executed_counts[worker_id]++;
+                break;
+            }
+            case OperationType::SCAN: {
+                auto results = storage.scan(op.key, op.limit);
+                executed_counts[worker_id]++;
+                break;
+            }
+        }
+    }
+}
+
+/**
  * @brief Print usage information
  */
 void print_usage(const char* program_name) {
-    std::cout << "Usage: " << program_name << " <workload_file> [partition_count]" << std::endl;
+    std::cout << "Usage: " << program_name << " <workload_file> [partition_count] [test_workers]" << std::endl;
     std::cout << "\nArguments:" << std::endl;
     std::cout << "  workload_file    Path to the workload file" << std::endl;
     std::cout << "  partition_count  Number of partitions (default: 4)" << std::endl;
+    std::cout << "  test_workers     Number of worker threads (default: 1)" << std::endl;
     std::cout << "\nWorkload file format:" << std::endl;
     std::cout << "  0,<key>         : READ operation" << std::endl;
     std::cout << "  1,<key>         : WRITE operation (uses 1KB default value)" << std::endl;
@@ -130,9 +178,23 @@ int main(int argc, char* argv[]) {
         }
     }
     
+    if (argc >= 4) {
+        try {
+            TEST_WORKERS = std::stoull(argv[3]);
+            if (TEST_WORKERS == 0) {
+                std::cerr << "Error: test_workers must be greater than 0" << std::endl;
+                return 1;
+            }
+        } catch (const std::exception& e) {
+            std::cerr << "Error: Invalid test_workers: " << argv[3] << std::endl;
+            return 1;
+        }
+    }
+    
     std::cout << "=== Repart-KV Workload Executor ===" << std::endl;
     std::cout << "Workload file: " << workload_file << std::endl;
     std::cout << "Partition count: " << PARTITION_COUNT << std::endl;
+    std::cout << "Test workers: " << TEST_WORKERS << std::endl;
     std::cout << std::endl;
     
     // Read workload
@@ -173,7 +235,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Created RepartitioningKeyValueStorage with " << PARTITION_COUNT << " partitions" << std::endl;
     
     // Setup metrics tracking
-    std::atomic<size_t> executed_count(0);
+    std::vector<size_t> executed_counts(TEST_WORKERS, 0);  // One counter per worker
     std::atomic<bool> metrics_running(true);
     std::string metrics_file = "metrics.csv";
     
@@ -182,31 +244,23 @@ int main(int argc, char* argv[]) {
     auto start_time = std::chrono::high_resolution_clock::now();
     
     // Start metrics logging thread
-    std::thread metrics_thread(metrics_loop, std::ref(executed_count), std::ref(metrics_running), 
+    std::thread metrics_thread(metrics_loop, std::ref(executed_counts), std::ref(metrics_running), 
                                metrics_file, start_time);
     
-    // Execute workload operations
-    for (const auto& op : operations) {
-        switch (op.type) {
-            case OperationType::READ: {
-                std::string value = storage.read(op.key);
-                executed_count++;
-                break;
-            }
-            case OperationType::WRITE: {
-                storage.write(op.key, op.value);
-                executed_count++;
-                break;
-            }
-            case OperationType::SCAN: {
-                auto results = storage.scan(op.key, op.limit);
-                executed_count++;
-                break;
-            }
+    // Create and start worker threads
+    std::vector<std::thread> worker_threads;
+    worker_threads.reserve(TEST_WORKERS);
+    
+    for (size_t worker_id = 0; worker_id < TEST_WORKERS; ++worker_id) {
+        worker_threads.emplace_back(worker_function, worker_id, std::ref(operations), 
+                                    std::ref(storage), std::ref(executed_counts));
+    }
+    
+    // Wait for all worker threads to complete
+    for (auto& thread : worker_threads) {
+        if (thread.joinable()) {
+            thread.join();
         }
-        
-        // Optional: Add a small delay for testing metrics (comment out for production)
-        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
     
     auto end_time = std::chrono::high_resolution_clock::now();
@@ -218,12 +272,18 @@ int main(int argc, char* argv[]) {
         metrics_thread.join();
     }
     
+    // Calculate total executed operations
+    size_t total_executed = 0;
+    for (size_t count : executed_counts) {
+        total_executed += count;
+    }
+    
     // Print execution statistics
     std::cout << "\n=== Execution Complete ===" << std::endl;
-    std::cout << "Operations executed: " << executed_count.load() << std::endl;
+    std::cout << "Operations executed: " << total_executed << std::endl;
     std::cout << "Execution time: " << duration.count() << " microseconds" << std::endl;
     std::cout << "Average time per operation: " 
-              << (executed_count == 0 ? 0.0 : static_cast<double>(duration.count()) / executed_count.load()) 
+              << (total_executed == 0 ? 0.0 : static_cast<double>(duration.count()) / total_executed) 
               << " microseconds" << std::endl;
     std::cout << "Metrics saved to: " << metrics_file << std::endl;
     
