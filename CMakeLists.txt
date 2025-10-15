@@ -36,15 +36,24 @@ if(ZSTD_LIB)
     list(APPEND TKRZW_ALL_LIBS ${ZSTD_LIB})
 endif()
 
+# Find METIS library for graph partitioning (needed for main executable)
+find_library(METIS_LIB NAMES metis)
+if(METIS_LIB)
+    message(STATUS "METIS library found: ${METIS_LIB}")
+else()
+    message(WARNING "METIS library not found. Install METIS to enable repartitioning features.")
+endif()
+
 # Create main executable
 add_executable(repart-kv 
     main.cpp
 )
 
-# Link pthread and TKRZW
+# Link pthread, TKRZW, and METIS
 target_link_libraries(repart-kv PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
+    ${METIS_LIB}
 )
 
 # Set compiler flags
@@ -277,12 +286,7 @@ target_include_directories(example_graph PRIVATE
     ${CMAKE_SOURCE_DIR}
 )
 
-# Find METIS library for graph partitioning
-find_library(METIS_LIB NAMES metis)
-
 if(METIS_LIB)
-    message(STATUS "METIS library found: ${METIS_LIB}")
-    
     # METIS graph tests
     add_executable(test_metis_graph 
         graph/test_metis_graph.cpp
