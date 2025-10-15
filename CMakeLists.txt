@@ -221,6 +221,7 @@ add_executable(test_partitioned_kv_storage
 target_link_libraries(test_partitioned_kv_storage PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
+    ${METIS_LIB}
 )
 target_compile_features(test_partitioned_kv_storage PRIVATE cxx_std_20)
 target_compile_options(test_partitioned_kv_storage PRIVATE -Wall -Wextra -Wpedantic)
@@ -237,6 +238,7 @@ add_executable(test_graph_tracking
 target_link_libraries(test_graph_tracking PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
+    ${METIS_LIB}
 )
 target_compile_features(test_graph_tracking PRIVATE cxx_std_20)
 target_compile_options(test_graph_tracking PRIVATE -Wall -Wextra -Wpedantic)
