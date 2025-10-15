@@ -8,8 +8,8 @@
 #include <filesystem>
 #include "workload/Workload.h"
 #include "kvstorage/RepartitioningKeyValueStorage.h"
-#include "storage/MapStorageEngine.h"
-#include "keystorage/MapKeyStorage.h"
+#include "storage/TkrzwHashStorageEngine.h"
+#include "keystorage/TkrzwHashKeyStorage.h"
 
 // Global parameters
 size_t PARTITION_COUNT = 4;
@@ -111,7 +111,7 @@ void metrics_loop(const std::vector<size_t>& executed_counts,
 void worker_function(
     size_t worker_id,
     const std::vector<Operation>& operations,
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage>& storage,
+    RepartitioningKeyValueStorage<TkrzwHashStorageEngine, TkrzwHashKeyStorage, TkrzwHashKeyStorage>& storage,
     std::vector<size_t>& executed_counts) {
     
     // Execute operations in a strided pattern
@@ -231,8 +231,8 @@ int main(int argc, char* argv[]) {
     
     // Create RepartitioningKeyValueStorage instance
     std::cout << "\n=== Initializing Storage ===" << std::endl;
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(PARTITION_COUNT);
-    std::cout << "Created RepartitioningKeyValueStorage with " << PARTITION_COUNT << " partitions" << std::endl;
+    RepartitioningKeyValueStorage<TkrzwHashStorageEngine, TkrzwHashKeyStorage, TkrzwHashKeyStorage> storage(PARTITION_COUNT);
+    std::cout << "Created RepartitioningKeyValueStorage with " << PARTITION_COUNT << " partitions (Tkrzw)" << std::endl;
     
     // Setup metrics tracking
     std::vector<size_t> executed_counts(TEST_WORKERS, 0);  // One counter per worker
