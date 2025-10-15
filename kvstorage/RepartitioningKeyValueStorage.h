@@ -61,6 +61,8 @@ private:
     HashFunc hash_func_;                               // Hash function for key hashing
     Graph graph_;                                      // Graph for tracking key access patterns and relationships
     MetisGraph metis_graph_;                           // METIS graph for partitioning
+
+    std::mutex graph_lock_;                            // Mutex for thread-safe access to graph
     
     // Threading attributes for automatic repartitioning
     std::thread repartitioning_thread_;                // Background thread for automatic repartitioning
@@ -304,6 +306,9 @@ public:
         // Step 2: Partition the graph using METIS
         std::unordered_map<std::string, size_t> new_partition_map;
         
+        // Lock graph for reading and processing
+        graph_lock_.lock();
+        
         if (graph_.get_vertex_count() > 0) {
             try {
                 metis_graph_.prepare_from_graph(graph_);
@@ -321,6 +326,9 @@ public:
         
         // Step 3: Clear the graph for fresh tracking
         graph_.clear();
+        
+        // Unlock graph after processing
+        graph_lock_.unlock();
         
         // Step 4: Lock and update partition assignments
         key_map_lock_.lock();
@@ -390,7 +398,9 @@ public:
      * @brief Clear all tracking data from the graph
      */
     void clear_graph() {
+        graph_lock_.lock();
         graph_.clear();
+        graph_lock_.unlock();
     }
 
 private:
@@ -403,7 +413,9 @@ private:
      * with weight 1.
      */
     void single_key_graph_update(const std::string& key) {
+        graph_lock_.lock();
         graph_.increment_vertex_weight(key);
+        graph_lock_.unlock();
     }
 
     /**
@@ -419,6 +431,8 @@ private:
      * should ideally be placed in the same partition for optimal performance.
      */
     void multi_key_graph_update(const std::vector<std::string>& keys) {
+        graph_lock_.lock();
+        
         // Add or increment vertex for each key
         for (const auto& key : keys) {
             graph_.increment_vertex_weight(key);
@@ -430,6 +444,8 @@ private:
                 graph_.increment_edge_weight(keys[i], keys[j]);
             }
         }
+        
+        graph_lock_.unlock();
     }
 
     /**
