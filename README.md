@@ -7,6 +7,7 @@ A high-performance partitioned key-value storage system with automatic repartiti
 ## Features
 
 - 🔄 **Dynamic Repartitioning** - Automatic graph-based repartitioning using METIS
+- 🔀 **Soft Repartitioning** - Non-disruptive repartitioning that preserves existing data access
 - 🧵 **Multi-threaded Workload Execution** - Parallel operation processing with configurable worker threads
 - 📊 **Real-time Metrics** - CSV-based metrics logging (operations/sec, memory, disk usage)
 - 🚀 **Zero-overhead abstractions** using CRTP (no virtual functions!)
@@ -121,10 +122,11 @@ elapsed_time_ms,executed_count,memory_kb,disk_kb
 
 ### Available Executables
 
-- `./repart-kv` - **Main workload executor with dynamic repartitioning**
+- `./repart-kv` - **Main workload executor with soft repartitioning**
 - `./interactive_storage_test` - Interactive CLI for testing storage engines
 - `./test_graph_tracking` - Graph tracking tests (8 tests)
 - `./test_repartitioning` - Repartitioning tests (5 tests)
+- `./test_soft_repartitioning` - Soft repartitioning tests (7 tests)
 - `./test_partitioned_kv_storage` - Partitioned storage tests (15 tests)
 - `./test_storage_engine` - Storage engine tests
 - `./example_storage` - MapStorageEngine examples
@@ -152,8 +154,10 @@ repart-kv/
 ├── kvstorage/             # Partitioned key-value storage layer
 │   ├── PartitionedKeyValueStorage.h        # CRTP base for partitioned storage
 │   ├── RepartitioningKeyValueStorage.h     # Dynamic repartitioning storage
+│   ├── SoftRepartitioningKeyValueStorage.h # Non-disruptive repartitioning storage
 │   ├── test_graph_tracking.cpp             # Graph tracking tests
 │   ├── test_repartitioning.cpp             # Repartitioning tests
+│   ├── test_soft_repartitioning.cpp        # Soft repartitioning tests
 │   └── test_partitioned_kv_storage.cpp     # Partitioned storage tests
 ├── graph/                  # Graph structures for partitioning
 │   ├── Graph.h                     # Access pattern graph
@@ -168,7 +172,11 @@ repart-kv/
 
 ### Dynamic Repartitioning
 
-The `RepartitioningKeyValueStorage` class provides automatic repartitioning based on access patterns:
+The system provides two repartitioning strategies:
+
+**RepartitioningKeyValueStorage**: Traditional repartitioning that creates new storage engines and migrates data.
+
+**SoftRepartitioningKeyValueStorage**: Non-disruptive repartitioning that preserves existing data access while optimizing partition assignments:
 
 1. **Access Pattern Tracking** - Tracks which keys are accessed together
 2. **Graph Construction** - Builds a graph where vertices are keys and edges represent co-access
@@ -238,6 +246,7 @@ Run the comprehensive test suite:
 cd build
 ./test_graph_tracking        # Graph tracking tests
 ./test_repartitioning        # Repartitioning tests
+./test_soft_repartitioning   # Soft repartitioning tests
 ./test_partitioned_kv_storage # Partitioned storage tests
 ./test_storage_engine        # Storage engine tests
 ```

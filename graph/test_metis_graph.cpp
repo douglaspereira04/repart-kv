@@ -83,17 +83,11 @@ void test_partition_simple() {
     
     assert(partitions.size() == 4);
     
-    // Check all vertices are assigned
-    assert(partitions.count("A") == 1);
-    assert(partitions.count("B") == 1);
-    assert(partitions.count("C") == 1);
-    assert(partitions.count("D") == 1);
-    
     // Check partition IDs are valid (0 or 1)
     std::set<int> unique_partitions;
-    for (const auto& [vertex, part_id] : partitions) {
-        assert(part_id >= 0 && part_id < 2);
-        unique_partitions.insert(part_id);
+    for (size_t i = 0; i < partitions.size(); ++i) {
+        assert(partitions[i] >= 0 && partitions[i] < 2);
+        unique_partitions.insert(partitions[i]);
     }
     
     // Should use both partitions
@@ -133,10 +127,11 @@ void test_partition_with_weights() {
     // Calculate partition weights
     int weight_part_0 = 0;
     int weight_part_1 = 0;
+    const auto& idx_to_vertex = metis_graph.get_idx_to_vertex();
     
-    for (const auto& [vertex, part_id] : partitions) {
-        int vertex_weight = graph.get_vertex_weight(vertex);
-        if (part_id == 0) {
+    for (size_t i = 0; i < partitions.size(); ++i) {
+        int vertex_weight = graph.get_vertex_weight(idx_to_vertex[i]);
+        if (partitions[i] == 0) {
             weight_part_0 += vertex_weight;
         } else {
             weight_part_1 += vertex_weight;
@@ -178,9 +173,9 @@ void test_multiple_partitions() {
         
         // Check partition IDs are valid
         std::set<int> unique_partitions;
-        for (const auto& [vertex, part_id] : partitions) {
-            assert(part_id >= 0 && part_id < nparts);
-            unique_partitions.insert(part_id);
+        for (size_t i = 0; i < partitions.size(); ++i) {
+            assert(partitions[i] >= 0 && partitions[i] < nparts);
+            unique_partitions.insert(partitions[i]);
         }
         
         // Should use at most nparts partitions

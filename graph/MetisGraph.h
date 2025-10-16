@@ -131,10 +131,10 @@ public:
      * @brief Partitions the graph using METIS and returns partition assignments.
      * 
      * @param num_partitions Number of partitions to create
-     * @return Map from vertex name to partition ID (0 to num_partitions-1)
+     * @return Vector of partition IDs (0 to num_partitions-1) for each vertex in idx_to_vertex_ order
      * @throws std::runtime_error if graph not prepared or METIS fails
      */
-    ankerl::unordered_dense::map<std::string, int> partition(int num_partitions) {
+    std::vector<idx_t> partition(int num_partitions) {
         if (!prepared_) {
             throw std::runtime_error("Graph must be prepared before partitioning");
         }
@@ -200,13 +200,8 @@ public:
             throw std::runtime_error("METIS partitioning failed with error code: " + std::to_string(ret));
         }
         
-        // Convert partition assignments back to string-based map
-        ankerl::unordered_dense::map<std::string, int> result;
-        for (idx_t i = 0; i < nvtxs_; ++i) {
-            result[idx_to_vertex_[i]] = static_cast<int>(part[i]);
-        }
-        
-        return result;
+        // Return the partition assignments directly
+        return part;
     }
     
     /**

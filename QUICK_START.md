@@ -214,7 +214,6 @@ engine.unlock_shared();
 - Range queries are common
 - You need sorted key iteration
 - Scan operations are frequent (15x faster!)
-- Prefix-based queries are important
 
 ### Use MapStorageEngine when:
 - You need simple in-memory storage

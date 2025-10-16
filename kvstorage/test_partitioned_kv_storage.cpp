@@ -1,4 +1,5 @@
-#include "RepartitioningKeyValueStorage.h"
+#include "HardRepartitioningKeyValueStorage.h"
+#include "SoftRepartitioningKeyValueStorage.h"
 #include "../storage/MapStorageEngine.h"
 #include "../keystorage/MapKeyStorage.h"
 #include <iostream>
@@ -346,7 +347,7 @@ int main() {
     std::cout << "========================================" << std::endl;
     
     // Test RepartitioningKeyValueStorage with MapStorageEngine
-    using TestStorage = RepartitioningKeyValueStorage<
+    using TestStorage = SoftRepartitioningKeyValueStorage<
         MapStorageEngine,
         MapKeyStorage,
         MapKeyStorage

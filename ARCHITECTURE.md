@@ -25,7 +25,7 @@ Repart-KV is a high-performance partitioned key-value storage system with automa
 ```cpp
 std::string read(const std::string& key) const;
 void write(const std::string& key, const std::string& value);
-std::vector<std::pair<std::string, string>> scan(const std::string& prefix, size_t limit) const;
+std::vector<std::pair<std::string, string>> scan(const std::string& initial_key_prefix, size_t limit) const;
 void lock() const;
 void unlock() const;
 void lock_shared() const;
@@ -96,7 +96,7 @@ IteratorType lower_bound(const std::string& key);
 - Template-based polymorphism
 - Zero-overhead abstraction
 
-#### RepartitioningKeyValueStorage<StorageEngineType, StorageMapType, PartitionMapType, HashFunc>
+#### HardRepartitioningKeyValueStorage<StorageEngineType, StorageMapType, PartitionMapType, HashFunc>
 
 **Core class** featuring:
 
@@ -421,7 +421,7 @@ for (auto& w : workers) w.join();
    ```cpp
    std::string read_impl(const std::string& key);
    void write_impl(const std::string& key, const std::string& value);
-   std::vector<std::pair<...>> scan_impl(const std::string& prefix, size_t limit);
+   std::vector<std::pair<...>> scan_impl(const std::string& initial_key_prefix, size_t limit);
    ```
 
 3. Add custom partitioning logic

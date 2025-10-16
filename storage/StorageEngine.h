@@ -20,7 +20,7 @@
  * Derived classes must implement:
  * - std::string read_impl(const std::string& key) const
  * - void write_impl(const std::string& key, const std::string& value)
- * - std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit) const
+ * - std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& initial_key_prefix, size_t limit) const
  */
 template<typename Derived>
 class StorageEngine {

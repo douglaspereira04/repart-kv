@@ -270,21 +270,21 @@ target_include_directories(test_graph_tracking PRIVATE
     ${TKRZW_INCLUDE_DIRS}
 )
 
-# Repartitioning tests (requires METIS)
+# Unified repartitioning tests (requires METIS)
 if(METIS_LIB)
-    add_executable(test_repartitioning 
-        kvstorage/test_repartitioning.cpp
+    add_executable(test_repartitioning_storage 
+        kvstorage/test_repartitioning_storage.cpp
     )
     
-    target_link_libraries(test_repartitioning PRIVATE 
+    target_link_libraries(test_repartitioning_storage PRIVATE 
         Threads::Threads
         ${TKRZW_ALL_LIBS}
         ${METIS_LIB}
         unordered_dense::unordered_dense
     )
-    target_compile_features(test_repartitioning PRIVATE cxx_std_20)
-    target_compile_options(test_repartitioning PRIVATE -Wall -Wextra -Wpedantic)
-    target_include_directories(test_repartitioning PRIVATE 
+    target_compile_features(test_repartitioning_storage PRIVATE cxx_std_20)
+    target_compile_options(test_repartitioning_storage PRIVATE -Wall -Wextra -Wpedantic)
+    target_include_directories(test_repartitioning_storage PRIVATE 
         ${CMAKE_SOURCE_DIR}
         ${TKRZW_INCLUDE_DIRS}
     )
@@ -347,5 +347,4 @@ if(METIS_LIB)
 else()
     message(WARNING "METIS library not found. Skipping METIS graph examples and tests. Install METIS to enable graph partitioning features.")
 endif()
-
 

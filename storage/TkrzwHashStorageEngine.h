@@ -142,14 +142,14 @@ public:
 
     /**
      * @brief Implementation: Scan for key-value pairs from a starting point
-     * @param key_prefix The starting key (lower_bound)
+     * @param initial_key_prefix The starting key (lower_bound)
      * @param limit Maximum number of key-value pairs to return
-     * @return Vector of key-value pairs where keys >= key_prefix (in sorted order)
+     * @return Vector of key-value pairs where keys >= initial_key_prefix (in sorted order)
      * 
      * Note: HashDBM doesn't maintain sorted order, so this collects all key-value pairs,
-     * sorts them by key, and returns those >= key_prefix.
+     * sorts them by key, and returns those >= initial_key_prefix.
      */
-    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit) const {
+    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& initial_key_prefix, size_t limit) const {
         std::vector<std::pair<std::string, std::string>> results;
         // Collect all key-value pairs first (HashDBM is unordered)
         std::vector<std::pair<std::string, std::string>> all_pairs;
@@ -168,10 +168,10 @@ public:
         std::sort(all_pairs.begin(), all_pairs.end(), 
                   [](const auto& a, const auto& b) { return a.first < b.first; });
         
-        // Find first key >= key_prefix and collect up to limit
+        // Find first key >= initial_key_prefix and collect up to limit
         results.reserve(std::min(limit, all_pairs.size()));
         for (const auto& pair : all_pairs) {
-            if (pair.first >= key_prefix) {
+            if (pair.first >= initial_key_prefix) {
                 results.push_back(pair);
                 if (results.size() >= limit) {
                     break;

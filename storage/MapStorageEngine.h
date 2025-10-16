@@ -56,16 +56,16 @@ public:
 
     /**
      * @brief Implementation: Scan for key-value pairs from a starting point
-     * @param key_prefix The starting key (lower_bound)
+     * @param initial_key_prefix The starting key (lower_bound)
      * @param limit Maximum number of key-value pairs to return
-     * @return Vector of key-value pairs where keys >= key_prefix
+     * @return Vector of key-value pairs where keys >= initial_key_prefix
      */
-    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit) const {
+    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& initial_key_prefix, size_t limit) const {
         std::vector<std::pair<std::string, std::string>> results;
         results.reserve(std::min(limit, storage_.size()));
 
         // Use lower_bound to find the first key >= key_prefix
-        auto it = storage_.lower_bound(key_prefix);
+        auto it = storage_.lower_bound(initial_key_prefix);
         
         // Iterate and collect key-value pairs
         while (it != storage_.end() && results.size() < limit) {

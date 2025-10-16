@@ -15,7 +15,7 @@
  * Derived classes must implement:
  * - std::string read_impl(const std::string& key)
  * - void write_impl(const std::string& key, const std::string& value)
- * - std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit)
+ * - std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& initial_key_prefix, size_t limit)
  */
 template<typename Derived, typename StorageEngineType>
 class PartitionedKeyValueStorage {
@@ -45,12 +45,12 @@ public:
 
     /**
      * @brief Scan for key-value pairs starting with a given prefix
-     * @param key_prefix The prefix to search for
+     * @param key_prefix The initial key prefix to search for
      * @param limit Maximum number of key-value pairs to return
-     * @return Vector of key-value pairs matching the prefix
+     * @return Vector of key-value pairs
      */
-    std::vector<std::pair<std::string, std::string>> scan(const std::string& key_prefix, size_t limit) {
-        return static_cast<Derived*>(this)->scan_impl(key_prefix, limit);
+    std::vector<std::pair<std::string, std::string>> scan(const std::string& initial_key_prefix, size_t limit) {
+        return static_cast<Derived*>(this)->scan_impl(initial_key_prefix, limit);
     }
 
 protected:

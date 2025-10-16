@@ -1,4 +1,5 @@
-#include "RepartitioningKeyValueStorage.h"
+#include "HardRepartitioningKeyValueStorage.h"
+#include "SoftRepartitioningKeyValueStorage.h"
 #include "../keystorage/MapKeyStorage.h"
 #include "../storage/MapStorageEngine.h"
 #include <iostream>
@@ -8,7 +9,7 @@ void test_tracking_disabled() {
     std::cout << "Test 1: Tracking Disabled" << std::endl;
     std::cout << "-------------------------" << std::endl;
     
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     
     // Verify tracking is disabled by default
     assert(!storage.enable_tracking());
@@ -31,7 +32,7 @@ void test_tracking_enabled() {
     std::cout << "Test 2: Tracking Enabled" << std::endl;
     std::cout << "------------------------" << std::endl;
     
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     
     // Enable tracking
     storage.enable_tracking(true);
@@ -72,7 +73,7 @@ void test_access_frequency_tracking() {
     std::cout << "Test 3: Access Frequency Tracking" << std::endl;
     std::cout << "----------------------------------" << std::endl;
     
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     storage.enable_tracking(true);
     
     // Simulate different access patterns
@@ -114,7 +115,7 @@ void test_clear_graph() {
     std::cout << "Test 4: Clear Graph" << std::endl;
     std::cout << "-------------------" << std::endl;
     
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     storage.enable_tracking(true);
     
     // Add some tracked data
@@ -143,7 +144,7 @@ void test_toggle_tracking() {
     std::cout << "Test 5: Toggle Tracking" << std::endl;
     std::cout << "-----------------------" << std::endl;
     
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     
     // Enable tracking and do some operations
     storage.enable_tracking(true);
@@ -177,7 +178,7 @@ void test_scan_with_graph_tracking() {
     std::cout << "Test 6: Scan with Graph Tracking" << std::endl;
     std::cout << "---------------------------------" << std::endl;
     
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     storage.enable_tracking(true);
     
     // Write some keys with a common prefix
@@ -235,7 +236,7 @@ void test_repeated_scans() {
     std::cout << "Test 7: Repeated Scans Build Edge Weights" << std::endl;
     std::cout << "------------------------------------------" << std::endl;
     
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     storage.enable_tracking(true);
     
     // Write keys
@@ -275,7 +276,7 @@ void test_co_access_patterns() {
     std::cout << "Test 8: Co-Access Pattern Detection" << std::endl;
     std::cout << "------------------------------------" << std::endl;
     
-    RepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+    SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
     storage.enable_tracking(true);
     
     // Write keys in different groups

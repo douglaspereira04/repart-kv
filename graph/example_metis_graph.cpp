@@ -67,8 +67,8 @@ int main() {
         
         // Group vertices by partition
         std::map<int, std::vector<std::string>> parts_2;
-        for (const auto& [vertex, part_id] : partitions_2) {
-            parts_2[part_id].push_back(vertex);
+        for (size_t i = 0; i < partitions_2.size(); ++i) {
+            parts_2[partitions_2[i]].push_back(idx_to_vertex[i]);
         }
         
         for (const auto& [part_id, vertices] : parts_2) {
@@ -87,8 +87,8 @@ int main() {
         
         // Group vertices by partition
         std::map<int, std::vector<std::string>> parts_3;
-        for (const auto& [vertex, part_id] : partitions_3) {
-            parts_3[part_id].push_back(vertex);
+        for (size_t i = 0; i < partitions_3.size(); ++i) {
+            parts_3[partitions_3[i]].push_back(idx_to_vertex[i]);
         }
         
         for (const auto& [part_id, vertices] : parts_3) {

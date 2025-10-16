@@ -154,14 +154,14 @@ public:
 
     /**
      * @brief Implementation: Scan for key-value pairs from a starting point
-     * @param key_prefix The starting key (lower_bound)
+     * @param initial_key_prefix The starting key (lower_bound)
      * @param limit Maximum number of key-value pairs to return
      * @return Vector of key-value pairs where keys >= key_prefix (in sorted order)
      * 
      * Note: TreeDBM maintains sorted order, making this very efficient.
      * We use Jump() to go directly to the first key >= key_prefix.
      */
-    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit) const {
+    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& initial_key_prefix, size_t limit) const {
         std::vector<std::pair<std::string, std::string>> results;
         results.reserve(std::min(limit, static_cast<size_t>(1000)));
         
@@ -169,11 +169,11 @@ public:
         auto iter = db_->MakeIterator();
         
         // For empty prefix, start from beginning; otherwise jump to prefix
-        if (key_prefix.empty()) {
+        if (initial_key_prefix.empty()) {
             iter->First();
         } else {
-            // Jump to the first key >= key_prefix (TreeDBM is sorted)
-            iter->Jump(key_prefix);
+            // Jump to the first key >= initial_key_prefix (TreeDBM is sorted)
+            iter->Jump(initial_key_prefix);
         }
         
         // Collect key-value pairs (already in sorted order, no filtering)

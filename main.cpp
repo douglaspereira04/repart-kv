@@ -7,7 +7,7 @@
 #include <fstream>
 #include <filesystem>
 #include "workload/Workload.h"
-#include "kvstorage/RepartitioningKeyValueStorage.h"
+#include "kvstorage/SoftRepartitioningKeyValueStorage.h"
 #include "storage/TkrzwHashStorageEngine.h"
 #include "storage/TkrzwTreeStorageEngine.h"
 #include "keystorage/TkrzwHashKeyStorage.h"
@@ -66,7 +66,7 @@ void metrics_loop(const std::vector<size_t>& executed_counts,
                   const std::atomic<bool>& running,
                   const std::string& output_file,
                   std::chrono::high_resolution_clock::time_point start_time,
-                  RepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>& storage) {
+                  SoftRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>& storage) {
     std::ofstream file(output_file);
     if (!file.is_open()) {
         std::cerr << "Warning: Failed to open metrics file: " << output_file << std::endl;
@@ -133,7 +133,7 @@ void metrics_loop(const std::vector<size_t>& executed_counts,
 void worker_function(
     size_t worker_id,
     const std::vector<Operation>& operations,
-    RepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>& storage,
+    SoftRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>& storage,
     std::vector<size_t>& executed_counts) {
     
     // Execute operations in a strided pattern
@@ -251,15 +251,15 @@ int main(int argc, char* argv[]) {
     std::cout << "  WRITE: " << write_count << std::endl;
     std::cout << "  SCAN:  " << scan_count << std::endl;
     
-    // Create RepartitioningKeyValueStorage instance
+    // Create SoftRepartitioningKeyValueStorage instance
     std::cout << "\n=== Initializing Storage ===" << std::endl;
-    RepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage> storage(
+    SoftRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage> storage(
         PARTITION_COUNT, 
         std::hash<std::string>(), 
         std::chrono::milliseconds(1000),  // tracking_duration: 1 second
         std::chrono::milliseconds(1000)   // repartition_interval: 1 second
     );
-    std::cout << "Created RepartitioningKeyValueStorage with " << PARTITION_COUNT << " partitions (Tkrzw)" << std::endl;
+    std::cout << "Created SoftRepartitioningKeyValueStorage with " << PARTITION_COUNT << " partitions (Tkrzw)" << std::endl;
     std::cout << "Tracking duration: 1000ms, Repartition interval: 1000ms" << std::endl;
     
     // Setup metrics tracking
