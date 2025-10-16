@@ -55,6 +55,7 @@ private:
     PartitionMapType<size_t> partition_map_;           // Maps key ranges to partition IDs
     std::shared_mutex key_map_lock_;                   // Mutex for thread-safe access to key mappers
     bool enable_tracking_;                             // Enable/disable tracking of key access patterns
+    std::atomic<bool> is_repartitioning_;              // Flag indicating if repartitioning is in progress
     size_t partition_count_;                           // Number of partitions
     std::vector<StorageEngineType*> storages_;         // Vector of storage engine instances
     size_t level_;                                     // Current level (tree depth or hierarchy level)
@@ -86,6 +87,7 @@ public:
         std::optional<std::chrono::milliseconds> tracking_duration = std::nullopt,
         std::optional<std::chrono::milliseconds> repartition_interval = std::nullopt)
         : enable_tracking_(false), 
+          is_repartitioning_(false),
           partition_count_(partition_count), 
           level_(0), 
           hash_func_(hash_func),
@@ -184,7 +186,6 @@ public:
             size_t partition_idx = hash_func_(key) % partition_count_;
             storage = storages_[partition_idx];
             storage_map_.put(key, storage);
-            partition_map_.put(key, partition_idx);
         } else if(storage->level() != level_) {
             // Storage is from a different level - reassign to current level
             size_t partition_idx;
@@ -193,12 +194,9 @@ public:
                 // No partition mapping - assign using hash function
                 partition_idx = hash_func_(key) % partition_count_;
                 partition_map_.put(key, partition_idx);
-                storage = storages_[partition_idx];
-                storage_map_.put(key, storage);
-            } else {
-                // Use existing partition mapping
-                storage = storages_[partition_idx];
             }
+            storage = storages_[partition_idx];
+            storage_map_.put(key, storage);
         }
 
         // Lock the storage for writing
@@ -298,7 +296,8 @@ public:
      * will occur lazily as keys are accessed and reassigned to new partitions.
      */
     void repartition() {
-        // Step 1: Disable tracking temporarily
+        // Step 1: Set repartitioning flag and disable tracking temporarily
+        is_repartitioning_ = true;
         key_map_lock_.lock();
         enable_tracking_ = false;
         key_map_lock_.unlock();
@@ -368,6 +367,9 @@ public:
         
         // Unlock key map
         key_map_lock_.unlock();
+        
+        // Step 5: Clear repartitioning flag
+        is_repartitioning_ = false;
     }
 
     /**
@@ -384,6 +386,14 @@ public:
      */
     bool enable_tracking() const {
         return enable_tracking_;
+    }
+
+    /**
+     * @brief Check if repartitioning is currently in progress
+     * @return true if repartitioning is in progress, false otherwise
+     */
+    bool is_repartitioning() const {
+        return is_repartitioning_.load();
     }
 
     /**

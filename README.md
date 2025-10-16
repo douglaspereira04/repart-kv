@@ -12,6 +12,7 @@ A high-performance partitioned key-value storage system with automatic repartiti
 - 🚀 **Zero-overhead abstractions** using CRTP (no virtual functions!)
 - 🔒 **Thread-safe operations** with fine-grained locking primitives
 - 🎯 **C++20 concepts** for compile-time type safety
+- ⚡ **High-performance containers** - Uses unordered_dense for optimal hash map performance
 - 📦 **Multiple storage backends**:
   - `MapStorageEngine` - In-memory storage using `std::map`
   - `TkrzwHashStorageEngine` - High-performance hash-based storage using TKRZW HashDBM (default)
@@ -28,6 +29,7 @@ A high-performance partitioned key-value storage system with automatic repartiti
 - Make or Ninja build system
 - **libtkrzw-dev** - TKRZW database library
 - **libmetis-dev** - METIS graph partitioning library
+- **unordered_dense** - High-performance hash map library (automatically fetched via CMake)
 
 ### Quick Install (Ubuntu/Debian)
 

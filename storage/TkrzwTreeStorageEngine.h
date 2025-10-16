@@ -134,10 +134,6 @@ public:
      * @return The value associated with the key, or empty string if not found
      */
     std::string read_impl(const std::string& key) const {
-        if (!is_open_) {
-            return "";
-        }
-        
         std::string value;
         tkrzw::Status status = db_->Get(key, &value);
         
@@ -153,10 +149,6 @@ public:
      * @param value The value to associate with the key
      */
     void write_impl(const std::string& key, const std::string& value) {
-        if (!is_open_) {
-            return;
-        }
-        
         db_->Set(key, value);
     }
 
@@ -171,11 +163,6 @@ public:
      */
     std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& key_prefix, size_t limit) const {
         std::vector<std::pair<std::string, std::string>> results;
-        
-        if (!is_open_) {
-            return results;
-        }
-        
         results.reserve(std::min(limit, static_cast<size_t>(1000)));
         
         // Create an iterator

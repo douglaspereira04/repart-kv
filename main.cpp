@@ -9,7 +9,9 @@
 #include "workload/Workload.h"
 #include "kvstorage/RepartitioningKeyValueStorage.h"
 #include "storage/TkrzwHashStorageEngine.h"
+#include "storage/TkrzwTreeStorageEngine.h"
 #include "keystorage/TkrzwHashKeyStorage.h"
+#include "keystorage/TkrzwTreeKeyStorage.h"
 
 // Global parameters
 size_t PARTITION_COUNT = 4;
@@ -58,11 +60,13 @@ size_t get_disk_usage_kb() {
  * @param running Atomic flag to control the loop
  * @param output_file Path to the output CSV file
  * @param start_time Start time of the execution for calculating elapsed time
+ * @param storage Reference to the storage instance for tracking status
  */
 void metrics_loop(const std::vector<size_t>& executed_counts, 
                   const std::atomic<bool>& running,
                   const std::string& output_file,
-                  std::chrono::high_resolution_clock::time_point start_time) {
+                  std::chrono::high_resolution_clock::time_point start_time,
+                  RepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>& storage) {
     std::ofstream file(output_file);
     if (!file.is_open()) {
         std::cerr << "Warning: Failed to open metrics file: " << output_file << std::endl;
@@ -70,7 +74,10 @@ void metrics_loop(const std::vector<size_t>& executed_counts,
     }
     
     // Write CSV header
-    file << "elapsed_time_ms,executed_count,memory_kb,disk_kb" << std::endl;
+    file << "elapsed_time_ms,executed_count,memory_kb,disk_kb,Tracking,Repartitioning" << std::endl;
+    
+    // Track previous tracking state to detect transitions
+    bool prev_tracking_enabled = false;
     
     while (running) {
         auto current_time = std::chrono::high_resolution_clock::now();
@@ -85,11 +92,26 @@ void metrics_loop(const std::vector<size_t>& executed_counts,
         size_t memory_kb = get_memory_usage_kb();
         size_t disk_kb = get_disk_usage_kb();
         
+        // Get current tracking and repartitioning status
+        bool current_tracking_enabled = storage.enable_tracking();
+        bool current_repartitioning = storage.is_repartitioning();
+        
+        // Determine repartitioning status: "o" if repartitioning flag is set OR tracking was disabled
+        char repartitioning_status = 'x';
+        if (current_repartitioning || (prev_tracking_enabled && !current_tracking_enabled)) {
+            repartitioning_status = 'o';
+        }
+        
         // Write metrics to CSV
         file << elapsed.count() << "," 
              << count << "," 
              << memory_kb << "," 
-             << disk_kb << std::endl;
+             << disk_kb << ","
+             << (current_tracking_enabled ? 'o' : 'x') << ","
+             << repartitioning_status << std::endl;
+        
+        // Update previous tracking state
+        prev_tracking_enabled = current_tracking_enabled;
         
         // Flush to ensure data is written
         file.flush();
@@ -111,7 +133,7 @@ void metrics_loop(const std::vector<size_t>& executed_counts,
 void worker_function(
     size_t worker_id,
     const std::vector<Operation>& operations,
-    RepartitioningKeyValueStorage<TkrzwHashStorageEngine, TkrzwHashKeyStorage, TkrzwHashKeyStorage>& storage,
+    RepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>& storage,
     std::vector<size_t>& executed_counts) {
     
     // Execute operations in a strided pattern
@@ -231,8 +253,14 @@ int main(int argc, char* argv[]) {
     
     // Create RepartitioningKeyValueStorage instance
     std::cout << "\n=== Initializing Storage ===" << std::endl;
-    RepartitioningKeyValueStorage<TkrzwHashStorageEngine, TkrzwHashKeyStorage, TkrzwHashKeyStorage> storage(PARTITION_COUNT);
+    RepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage> storage(
+        PARTITION_COUNT, 
+        std::hash<std::string>(), 
+        std::chrono::milliseconds(1000),  // tracking_duration: 1 second
+        std::chrono::milliseconds(1000)   // repartition_interval: 1 second
+    );
     std::cout << "Created RepartitioningKeyValueStorage with " << PARTITION_COUNT << " partitions (Tkrzw)" << std::endl;
+    std::cout << "Tracking duration: 1000ms, Repartition interval: 1000ms" << std::endl;
     
     // Setup metrics tracking
     std::vector<size_t> executed_counts(TEST_WORKERS, 0);  // One counter per worker
@@ -245,7 +273,7 @@ int main(int argc, char* argv[]) {
     
     // Start metrics logging thread
     std::thread metrics_thread(metrics_loop, std::ref(executed_counts), std::ref(metrics_running), 
-                               metrics_file, start_time);
+                               metrics_file, start_time, std::ref(storage));
     
     // Create and start worker threads
     std::vector<std::thread> worker_threads;
