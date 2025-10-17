@@ -1,103 +1,108 @@
 #include "Graph.h"
 #include "MetisGraph.h"
-#include <cassert>
+#include "../utils/test_assertions.h"
 #include <iostream>
 #include <set>
 
+// Test result tracking
+int tests_passed = 0;
+int tests_failed = 0;
+
 void test_prepare_from_graph() {
-    std::cout << "Testing prepare_from_graph..." << std::endl;
-    
-    Graph graph;
-    graph.increment_vertex_weight("A");
-    graph.increment_vertex_weight("B");
-    graph.increment_vertex_weight("C");
-    graph.increment_edge_weight("A", "B");
-    graph.increment_edge_weight("B", "C");
-    graph.increment_edge_weight("C", "A");
-    
-    MetisGraph metis_graph;
-    assert(!metis_graph.is_prepared());
-    
-    metis_graph.prepare_from_graph(graph);
-    
-    assert(metis_graph.is_prepared());
-    assert(metis_graph.get_num_vertices() == 3);
-    assert(metis_graph.get_num_edges() == 3);
-    
-    // Check vertex mappings
-    const auto& vertex_to_idx = metis_graph.get_vertex_to_idx();
-    const auto& idx_to_vertex = metis_graph.get_idx_to_vertex();
-    
-    assert(vertex_to_idx.size() == 3);
-    assert(idx_to_vertex.size() == 3);
-    
-    // Check CSR structure
-    const auto& xadj = metis_graph.get_xadj();
-    const auto& adjncy = metis_graph.get_adjncy();
-    
-    assert(xadj.size() == 4);  // nvtxs + 1
-    assert(adjncy.size() == 3);
-    
-    std::cout << "  ✓ Prepare from graph passed" << std::endl;
+    TEST("prepare_from_graph")
+        Graph graph;
+        graph.increment_vertex_weight("A");
+        graph.increment_vertex_weight("B");
+        graph.increment_vertex_weight("C");
+        graph.increment_edge_weight("A", "B");
+        graph.increment_edge_weight("B", "C");
+        graph.increment_edge_weight("C", "A");
+        
+        MetisGraph metis_graph;
+        ASSERT_FALSE(metis_graph.is_prepared());
+        
+        metis_graph.prepare_from_graph(graph);
+        
+        ASSERT_TRUE(metis_graph.is_prepared());
+        ASSERT_EQ(3, metis_graph.get_num_vertices());
+        ASSERT_EQ(3, metis_graph.get_num_edges());
+        
+        // Check vertex mappings
+        const auto& vertex_to_idx = metis_graph.get_vertex_to_idx();
+        const auto& idx_to_vertex = metis_graph.get_idx_to_vertex();
+        
+        ASSERT_EQ(3, vertex_to_idx.size());
+        ASSERT_EQ(3, idx_to_vertex.size());
+        
+        // Check CSR structure
+        const auto& xadj = metis_graph.get_xadj();
+        const auto& adjncy = metis_graph.get_adjncy();
+        
+        ASSERT_EQ(4, xadj.size());  // nvtxs + 1
+        ASSERT_EQ(3, adjncy.size());
+        
+        std::cout << "  ✓ Prepare from graph passed" << std::endl;
+    END_TEST("prepare_from_graph")
 }
 
 void test_empty_graph() {
-    std::cout << "Testing empty graph..." << std::endl;
-    
-    Graph graph;
-    MetisGraph metis_graph;
-    
-    bool exception_thrown = false;
-    try {
-        metis_graph.prepare_from_graph(graph);
-    } catch (const std::runtime_error& e) {
-        exception_thrown = true;
-    }
-    
-    assert(exception_thrown);
-    
-    std::cout << "  ✓ Empty graph handling passed" << std::endl;
+    TEST("empty_graph")
+        Graph graph;
+        MetisGraph metis_graph;
+        
+        bool exception_thrown = false;
+        try {
+            metis_graph.prepare_from_graph(graph);
+        } catch (const std::runtime_error& e) {
+            exception_thrown = true;
+        }
+        
+        ASSERT_TRUE(exception_thrown);
+        
+        std::cout << "  ✓ Empty graph handling passed" << std::endl;
+    END_TEST("empty_graph")
 }
 
 void test_partition_simple() {
-    std::cout << "Testing simple partitioning..." << std::endl;
-    
-    Graph graph;
-    
-    // Create a simple graph with 4 vertices
-    graph.increment_vertex_weight("A");
-    graph.increment_vertex_weight("B");
-    graph.increment_vertex_weight("C");
-    graph.increment_vertex_weight("D");
-    
-    graph.increment_edge_weight("A", "B");
-    graph.increment_edge_weight("B", "C");
-    graph.increment_edge_weight("C", "D");
-    graph.increment_edge_weight("D", "A");
-    
-    MetisGraph metis_graph;
-    metis_graph.prepare_from_graph(graph);
-    
-    // Partition into 2 parts
-    auto partitions = metis_graph.partition(2);
-    
-    assert(partitions.size() == 4);
-    
-    // Check partition IDs are valid (0 or 1)
-    std::set<int> unique_partitions;
-    for (size_t i = 0; i < partitions.size(); ++i) {
-        assert(partitions[i] >= 0 && partitions[i] < 2);
-        unique_partitions.insert(partitions[i]);
-    }
-    
-    // Should use both partitions
-    assert(unique_partitions.size() <= 2);
-    
-    std::cout << "  ✓ Simple partitioning passed" << std::endl;
+    TEST("partition_simple")
+        Graph graph;
+        
+        // Create a simple graph with 4 vertices
+        graph.increment_vertex_weight("A");
+        graph.increment_vertex_weight("B");
+        graph.increment_vertex_weight("C");
+        graph.increment_vertex_weight("D");
+        
+        graph.increment_edge_weight("A", "B");
+        graph.increment_edge_weight("B", "C");
+        graph.increment_edge_weight("C", "D");
+        graph.increment_edge_weight("D", "A");
+        
+        MetisGraph metis_graph;
+        metis_graph.prepare_from_graph(graph);
+        
+        // Partition into 2 parts
+        auto partitions = metis_graph.partition(2);
+        
+        ASSERT_EQ(4, partitions.size());
+        
+        // Check partition IDs are valid (0 or 1)
+        std::set<int> unique_partitions;
+        for (size_t i = 0; i < partitions.size(); ++i) {
+            ASSERT_GE(partitions[i], 0);
+            ASSERT_LT(partitions[i], 2);
+            unique_partitions.insert(partitions[i]);
+        }
+        
+        // Should use both partitions
+        ASSERT_LE(unique_partitions.size(), 2);
+        
+        std::cout << "  ✓ Simple partitioning passed" << std::endl;
+    END_TEST("partition_simple")
 }
 
 void test_partition_with_weights() {
-    std::cout << "Testing partitioning with weights..." << std::endl;
+    TEST("partition_with_weights")
     
     Graph graph;
     
@@ -122,7 +127,7 @@ void test_partition_with_weights() {
     // Partition into 2 parts
     auto partitions = metis_graph.partition(2);
     
-    assert(partitions.size() == 4);
+    ASSERT_EQ(4, partitions.size());
     
     // Calculate partition weights
     int weight_part_0 = 0;
@@ -139,13 +144,14 @@ void test_partition_with_weights() {
     }
     
     // Total weight should be 7
-    assert(weight_part_0 + weight_part_1 == 7);
+    ASSERT_EQ(7, weight_part_0 + weight_part_1);
     
-    std::cout << "  ✓ Partitioning with weights passed" << std::endl;
+        std::cout << "  ✓ Partitioning with weights passed" << std::endl;
+    END_TEST("partition_with_weights")
 }
 
 void test_multiple_partitions() {
-    std::cout << "Testing multiple partitions..." << std::endl;
+    TEST("multiple_partitions")
     
     Graph graph;
     
@@ -169,24 +175,26 @@ void test_multiple_partitions() {
     for (int nparts = 2; nparts <= 4; ++nparts) {
         auto partitions = metis_graph.partition(nparts);
         
-        assert(partitions.size() == 6);
+        ASSERT_EQ(6, partitions.size());
         
         // Check partition IDs are valid
         std::set<int> unique_partitions;
         for (size_t i = 0; i < partitions.size(); ++i) {
-            assert(partitions[i] >= 0 && partitions[i] < nparts);
+            ASSERT_GE(partitions[i], 0);
+            ASSERT_LT(partitions[i], nparts);
             unique_partitions.insert(partitions[i]);
         }
         
         // Should use at most nparts partitions
-        assert(unique_partitions.size() <= static_cast<size_t>(nparts));
+        ASSERT_LE(unique_partitions.size(), static_cast<size_t>(nparts));
     }
     
-    std::cout << "  ✓ Multiple partitions passed" << std::endl;
+        std::cout << "  ✓ Multiple partitions passed" << std::endl;
+    END_TEST("multiple_partitions")
 }
 
 void test_invalid_partition_parameters() {
-    std::cout << "Testing invalid partition parameters..." << std::endl;
+    TEST("invalid_partition_parameters")
     
     Graph graph;
     graph.increment_vertex_weight("A");
@@ -202,29 +210,30 @@ void test_invalid_partition_parameters() {
     } catch (const std::runtime_error& e) {
         exception_thrown = true;
     }
-    assert(exception_thrown);
+        ASSERT_TRUE(exception_thrown);
+        
+        exception_thrown = false;
+        try {
+            metis_graph.partition(-1);
+        } catch (const std::runtime_error& e) {
+            exception_thrown = true;
+        }
+        ASSERT_TRUE(exception_thrown);
+        
+        exception_thrown = false;
+        try {
+            metis_graph.partition(100);  // More partitions than vertices
+        } catch (const std::runtime_error& e) {
+            exception_thrown = true;
+        }
+        ASSERT_TRUE(exception_thrown);
     
-    exception_thrown = false;
-    try {
-        metis_graph.partition(-1);
-    } catch (const std::runtime_error& e) {
-        exception_thrown = true;
-    }
-    assert(exception_thrown);
-    
-    exception_thrown = false;
-    try {
-        metis_graph.partition(100);  // More partitions than vertices
-    } catch (const std::runtime_error& e) {
-        exception_thrown = true;
-    }
-    assert(exception_thrown);
-    
-    std::cout << "  ✓ Invalid partition parameters handling passed" << std::endl;
+        std::cout << "  ✓ Invalid partition parameters handling passed" << std::endl;
+    END_TEST("invalid_partition_parameters")
 }
 
 void test_partition_before_prepare() {
-    std::cout << "Testing partition before prepare..." << std::endl;
+    TEST("partition_before_prepare")
     
     MetisGraph metis_graph;
     
@@ -235,27 +244,38 @@ void test_partition_before_prepare() {
         exception_thrown = true;
     }
     
-    assert(exception_thrown);
-    
-    std::cout << "  ✓ Partition before prepare handling passed" << std::endl;
+        ASSERT_TRUE(exception_thrown);
+        
+        std::cout << "  ✓ Partition before prepare handling passed" << std::endl;
+    END_TEST("partition_before_prepare")
 }
 
 int main() {
-    std::cout << "=== Running MetisGraph Tests ===" << std::endl << std::endl;
+    std::cout << "========================================" << std::endl;
+    std::cout << "  Testing MetisGraph Implementation" << std::endl;
+    std::cout << "========================================" << std::endl << std::endl;
     
-    try {
-        test_prepare_from_graph();
-        test_empty_graph();
-        test_partition_simple();
-        test_partition_with_weights();
-        test_multiple_partitions();
-        test_invalid_partition_parameters();
-        test_partition_before_prepare();
-        
-        std::cout << std::endl << "✓ All tests passed!" << std::endl;
+    test_prepare_from_graph();
+    test_empty_graph();
+    test_partition_simple();
+    test_partition_with_weights();
+    test_multiple_partitions();
+    test_invalid_partition_parameters();
+    test_partition_before_prepare();
+    
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "  Overall Test Results" << std::endl;
+    std::cout << "========================================" << std::endl;
+    std::cout << "Tests passed: " << tests_passed << std::endl;
+    std::cout << "Tests failed: " << tests_failed << std::endl;
+    std::cout << "Total tests:  " << (tests_passed + tests_failed) << std::endl;
+    std::cout << std::endl;
+    
+    if (tests_failed == 0) {
+        std::cout << "✓ All MetisGraph tests passed!" << std::endl;
         return 0;
-    } catch (const std::exception& e) {
-        std::cerr << "✗ Test failed with exception: " << e.what() << std::endl;
+    } else {
+        std::cout << "✗ Some MetisGraph tests failed!" << std::endl;
         return 1;
     }
 }

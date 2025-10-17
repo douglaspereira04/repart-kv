@@ -1,8 +1,8 @@
 #include "MapKeyStorage.h"
 #include "TkrzwHashKeyStorage.h"
 #include "TkrzwTreeKeyStorage.h"
+#include "../utils/test_assertions.h"
 #include <iostream>
-#include <cassert>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -10,43 +10,6 @@
 // Test result tracking
 int tests_passed = 0;
 int tests_failed = 0;
-
-#define TEST(name) \
-    std::cout << "Running test: " << name << "..." << std::endl; \
-    try {
-
-#define END_TEST(name) \
-        std::cout << "  ✓ " << name << " PASSED" << std::endl; \
-        tests_passed++; \
-    } catch (const std::exception& e) { \
-        std::cout << "  ✗ " << name << " FAILED: " << e.what() << std::endl; \
-        tests_failed++; \
-    } catch (...) { \
-        std::cout << "  ✗ " << name << " FAILED: Unknown exception" << std::endl; \
-        tests_failed++; \
-    }
-
-#define ASSERT_EQ(expected, actual) \
-    if ((expected) != (actual)) { \
-        throw std::runtime_error(std::string("Expected '") + std::to_string(expected) + \
-                                "' but got '" + std::to_string(actual) + "'"); \
-    }
-
-#define ASSERT_STR_EQ(expected, actual) \
-    if ((expected) != (actual)) { \
-        throw std::runtime_error(std::string("Expected '") + (expected) + \
-                                "' but got '" + (actual) + "'"); \
-    }
-
-#define ASSERT_TRUE(condition) \
-    if (!(condition)) { \
-        throw std::runtime_error("Condition failed: " #condition); \
-    }
-
-#define ASSERT_FALSE(condition) \
-    if (condition) { \
-        throw std::runtime_error("Condition should be false: " #condition); \
-    }
 
 // Helper function to perform a scan using lower_bound and iterator incrementation
 template<typename StorageType, typename ValueType>

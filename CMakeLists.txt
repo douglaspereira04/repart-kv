@@ -73,7 +73,7 @@ target_compile_features(repart-kv PRIVATE cxx_std_20)
 target_compile_options(repart-kv PRIVATE 
     -Wall -Wextra -Wpedantic
     $<$<CONFIG:Debug>:-g -O0>
-    $<$<CONFIG:Release>:-O3>
+    $<$<CONFIG:Release>:-O2>
 )
 
 # Include directories
