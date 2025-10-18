@@ -336,6 +336,38 @@ target_include_directories(test_readoperation PRIVATE
     ${CMAKE_SOURCE_DIR}/kvstorage/threaded/future
 )
 
+# Storage Operation tests
+add_executable(test_storage_operation 
+    kvstorage/threaded/operation/test_storage_operation.cpp
+)
+
+target_link_libraries(test_storage_operation PRIVATE 
+    Threads::Threads
+)
+target_compile_features(test_storage_operation PRIVATE cxx_std_20)
+target_compile_options(test_storage_operation PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_storage_operation PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/operation
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/future
+)
+
+# WriteOperation class tests
+add_executable(test_writeoperation 
+    kvstorage/threaded/operation/test_writeoperation.cpp
+)
+
+target_link_libraries(test_writeoperation PRIVATE 
+    Threads::Threads
+)
+target_compile_features(test_writeoperation PRIVATE cxx_std_20)
+target_compile_options(test_writeoperation PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_writeoperation PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/operation
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/future
+)
+
 # Graph tests
 add_executable(test_graph 
     graph/test_graph.cpp
