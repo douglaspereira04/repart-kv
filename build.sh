@@ -19,4 +19,9 @@ echo "Building project..."
 make -j$(nproc)
 
 echo "Build completed successfully!"
-echo "Run './repart-kv' to execute the program."
+
+echo "Running tests..."
+cd ..
+./run_tests.sh
+
+echo "Tests completed successfully!"

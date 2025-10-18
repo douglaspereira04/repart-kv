@@ -292,7 +292,7 @@ endif()
 
 # Future class tests
 add_executable(test_future 
-    kvstorage/threaded/test_future.cpp
+    kvstorage/threaded/future/test_future.cpp
 )
 
 target_link_libraries(test_future PRIVATE 
@@ -302,6 +302,7 @@ target_compile_features(test_future PRIVATE cxx_std_20)
 target_compile_options(test_future PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(test_future PRIVATE 
     ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/future
 )
 
 # Operation class tests
