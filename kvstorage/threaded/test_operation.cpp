@@ -1,4 +1,4 @@
-#include "Request.h"
+#include "Operation.h"
 #include "../../utils/test_assertions.h"
 #include <iostream>
 #include <string>
@@ -16,49 +16,49 @@ void test_type_enum() {
     END_TEST("type_enum")
 }
 
-void test_read_request() {
-    TEST("read_request")
+void test_read_operation() {
+    TEST("read_operation")
         std::string key_data = "user_123";
         std::string* key_ptr = &key_data;
         
-        Request request(key_ptr, Type::READ);
+        Operation operation(key_ptr, Type::READ);
         
         // Test type access
-        ASSERT_TRUE(request.type() == Type::READ);
+        ASSERT_TRUE(operation.type() == Type::READ);
         
         // Test key access
-        ASSERT_STR_EQ("user_123", request.key());
-    END_TEST("read_request")
+        ASSERT_STR_EQ("user_123", operation.key());
+    END_TEST("read_operation")
 }
 
-void test_write_request() {
-    TEST("write_request")
+void test_write_operation() {
+    TEST("write_operation")
         std::string key_data = "product_456";
         std::string* key_ptr = &key_data;
         
-        Request request(key_ptr, Type::WRITE);
+        Operation operation(key_ptr, Type::WRITE);
         
         // Test type access
-        ASSERT_TRUE(request.type() == Type::WRITE);
+        ASSERT_TRUE(operation.type() == Type::WRITE);
         
         // Test key access
-        ASSERT_STR_EQ("product_456", request.key());
-    END_TEST("write_request")
+        ASSERT_STR_EQ("product_456", operation.key());
+    END_TEST("write_operation")
 }
 
-void test_scan_request() {
-    TEST("scan_request")
+void test_scan_operation() {
+    TEST("scan_operation")
         std::string key_data = "scan_prefix";
         std::string* key_ptr = &key_data;
         
-        Request request(key_ptr, Type::SCAN);
+        Operation operation(key_ptr, Type::SCAN);
         
         // Test type access
-        ASSERT_TRUE(request.type() == Type::SCAN);
+        ASSERT_TRUE(operation.type() == Type::SCAN);
         
         // Test key access
-        ASSERT_STR_EQ("scan_prefix", request.key());
-    END_TEST("scan_request")
+        ASSERT_STR_EQ("scan_prefix", operation.key());
+    END_TEST("scan_operation")
 }
 
 void test_key_array_access() {
@@ -67,13 +67,13 @@ void test_key_array_access() {
         std::string keys[] = {"key1", "key2", "key3", "key4"};
         std::string* key_ptr = keys;
         
-        Request request(key_ptr, Type::READ);
+        Operation operation(key_ptr, Type::READ);
         
         // Test array access
-        ASSERT_STR_EQ("key1", request.key(0));
-        ASSERT_STR_EQ("key2", request.key(1));
-        ASSERT_STR_EQ("key3", request.key(2));
-        ASSERT_STR_EQ("key4", request.key(3));
+        ASSERT_STR_EQ("key1", operation.key(0));
+        ASSERT_STR_EQ("key2", operation.key(1));
+        ASSERT_STR_EQ("key3", operation.key(2));
+        ASSERT_STR_EQ("key4", operation.key(3));
     END_TEST("key_array_access")
 }
 
@@ -84,19 +84,19 @@ void test_constructor_parameters() {
         std::string key2 = "test_key_2";
         std::string key3 = "test_key_3";
         
-        Request read_req(&key1, Type::READ);
-        Request write_req(&key2, Type::WRITE);
-        Request scan_req(&key3, Type::SCAN);
+        Operation read_op(&key1, Type::READ);
+        Operation write_op(&key2, Type::WRITE);
+        Operation scan_op(&key3, Type::SCAN);
         
-        // Verify each request has correct type and key
-        ASSERT_TRUE(read_req.type() == Type::READ);
-        ASSERT_STR_EQ("test_key_1", read_req.key());
+        // Verify each operation has correct type and key
+        ASSERT_TRUE(read_op.type() == Type::READ);
+        ASSERT_STR_EQ("test_key_1", read_op.key());
         
-        ASSERT_TRUE(write_req.type() == Type::WRITE);
-        ASSERT_STR_EQ("test_key_2", write_req.key());
+        ASSERT_TRUE(write_op.type() == Type::WRITE);
+        ASSERT_STR_EQ("test_key_2", write_op.key());
         
-        ASSERT_TRUE(scan_req.type() == Type::SCAN);
-        ASSERT_STR_EQ("test_key_3", scan_req.key());
+        ASSERT_TRUE(scan_op.type() == Type::SCAN);
+        ASSERT_STR_EQ("test_key_3", scan_op.key());
     END_TEST("constructor_parameters")
 }
 
@@ -105,11 +105,11 @@ void test_const_correctness() {
         std::string key_data = "const_test_key";
         std::string* key_ptr = &key_data;
         
-        const Request request(key_ptr, Type::READ);
+        Operation operation(key_ptr, Type::READ);
         
         // Test that const methods work
-        Type type = request.type();
-        std::string key = request.key();
+        Type type = operation.type();
+        std::string key = operation.key();
         
         ASSERT_TRUE(type == Type::READ);
         ASSERT_STR_EQ("const_test_key", key);
@@ -121,24 +121,24 @@ void test_pointer_relationship() {
         std::string key_data = "pointer_test";
         std::string* key_ptr = &key_data;
         
-        Request request(key_ptr, Type::WRITE);
+        Operation operation(key_ptr, Type::WRITE);
         
-        // Test that the request holds a reference to the original data
-        ASSERT_TRUE(&request.key() == &key_data);
+        // Test that the operation holds a reference to the original data
+        ASSERT_TRUE(&operation.key() == &key_data);
         
-        // Modify original data and verify request sees the change
+        // Modify original data and verify operation sees the change
         key_data = "modified_key";
-        ASSERT_STR_EQ("modified_key", request.key());
+        ASSERT_STR_EQ("modified_key", operation.key());
     END_TEST("pointer_relationship")
 }
 
 int main() {
-    std::cout << "Starting Request class tests..." << std::endl << std::endl;
+    std::cout << "Starting Operation class tests..." << std::endl << std::endl;
     
     test_type_enum();
-    test_read_request();
-    test_write_request();
-    test_scan_request();
+    test_read_operation();
+    test_write_operation();
+    test_scan_operation();
     test_key_array_access();
     test_constructor_parameters();
     test_const_correctness();
@@ -149,7 +149,7 @@ int main() {
     std::cout << "  Failed: " << tests_failed << std::endl;
     
     if (tests_failed == 0) {
-        std::cout << "All Request tests completed successfully!" << std::endl;
+        std::cout << "All Operation tests completed successfully!" << std::endl;
         return 0;
     } else {
         std::cout << "Some tests failed!" << std::endl;

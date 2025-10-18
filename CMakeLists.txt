@@ -304,17 +304,17 @@ target_include_directories(test_future PRIVATE
     ${CMAKE_SOURCE_DIR}
 )
 
-# Request class tests
-add_executable(test_request 
-    kvstorage/threaded/test_request.cpp
+# Operation class tests
+add_executable(test_operation 
+    kvstorage/threaded/test_operation.cpp
 )
 
-target_link_libraries(test_request PRIVATE 
+target_link_libraries(test_operation PRIVATE 
     Threads::Threads
 )
-target_compile_features(test_request PRIVATE cxx_std_20)
-target_compile_options(test_request PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(test_request PRIVATE 
+target_compile_features(test_operation PRIVATE cxx_std_20)
+target_compile_options(test_operation PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_operation PRIVATE 
     ${CMAKE_SOURCE_DIR}
 )
 

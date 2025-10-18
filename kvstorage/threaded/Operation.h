@@ -8,27 +8,27 @@ enum class Type {
     SCAN
 };
 
-class Request {
+class Operation {
 private:
     Type type_;
     std::string* key_;
 
 public:
     // Constructor takes a key pointer and type
-    Request(std::string* key, Type type) : type_(type), key_(key) {}
+    Operation(std::string* key, Type type) : type_(type), key_(key) {}
 
     // Destructor (default)
-    ~Request() = default;
+    ~Operation() = default;
 
     // Copy constructor and assignment operator are deleted
-    // to prevent copying of Request objects
-    Request(const Request&) = delete;
-    Request& operator=(const Request&) = delete;
+    // to prevent copying of Operation objects
+    Operation(const Operation&) = delete;
+    Operation& operator=(const Operation&) = delete;
 
     // Move constructor and assignment operator are deleted
-    // to prevent moving of Request objects
-    Request(Request&&) = delete;
-    Request& operator=(Request&&) = delete;
+    // to prevent moving of Operation objects
+    Operation(Operation&&) = delete;
+    Operation& operator=(Operation&&) = delete;
 
     Type type() const {
         return type_;
