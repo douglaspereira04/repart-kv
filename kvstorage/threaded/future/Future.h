@@ -42,7 +42,7 @@ public:
     }
 
     // Get value reference method returns reference to the value
-    T& get_value_ref() {
+    T& value() {
         return value_;
     }
 };
