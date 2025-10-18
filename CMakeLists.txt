@@ -306,7 +306,7 @@ target_include_directories(test_future PRIVATE
 
 # Operation class tests
 add_executable(test_operation 
-    kvstorage/threaded/test_operation.cpp
+    kvstorage/threaded/operation/test_operation.cpp
 )
 
 target_link_libraries(test_operation PRIVATE 
@@ -316,6 +316,7 @@ target_compile_features(test_operation PRIVATE cxx_std_20)
 target_compile_options(test_operation PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(test_operation PRIVATE 
     ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/operation
 )
 
 # Graph tests
