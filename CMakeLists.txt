@@ -368,6 +368,22 @@ target_include_directories(test_writeoperation PRIVATE
     ${CMAKE_SOURCE_DIR}/kvstorage/threaded/future
 )
 
+# ScanOperation class tests
+add_executable(test_scanoperation 
+    kvstorage/threaded/operation/test_scanoperation.cpp
+)
+
+target_link_libraries(test_scanoperation PRIVATE 
+    Threads::Threads
+)
+target_compile_features(test_scanoperation PRIVATE cxx_std_20)
+target_compile_options(test_scanoperation PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_scanoperation PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/operation
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/future
+)
+
 # Graph tests
 add_executable(test_graph 
     graph/test_graph.cpp

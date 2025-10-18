@@ -16,7 +16,7 @@ public:
 
     // Constructor takes references to key, value strings, and storage engine
     ReadOperation(std::string& key, std::string& value, StorageEngine<StorageType>& storage) 
-        : Operation<StorageType>(&key, Type::READ, storage), future_(value) {}
+        : Operation<StorageType>(&key, Type::READ, &storage), future_(value) {}
 
     // Destructor (default)
     ~ReadOperation() = default;
@@ -39,5 +39,9 @@ public:
     // Notify method that invokes the future notify
     void notify() {
         future_.notify();
+    }
+
+    void wait() {
+        future_.wait();
     }
 };

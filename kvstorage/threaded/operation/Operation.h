@@ -24,8 +24,8 @@ public:
     Operation(std::string* key, Type type) : type_(type), key_(key), storage_(nullptr) {}
 
     // Constructor takes a key pointer, type, and storage engine reference
-    Operation(std::string* key, Type type, StorageEngine<StorageType>& storage) 
-        : type_(type), key_(key), storage_(&storage) {}
+    Operation(std::string* key, Type type, StorageEngine<StorageType>* storage) 
+        : type_(type), key_(key), storage_(storage) {}
 
     // Destructor (default)
     ~Operation() = default;

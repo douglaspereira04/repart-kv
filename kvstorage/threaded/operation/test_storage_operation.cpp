@@ -14,7 +14,7 @@ void test_operation_with_storage() {
         std::string key = "test_key";
         MapStorageEngine storage(0);
         
-        Operation<MapStorageEngine> operation(&key, Type::READ, storage);
+        Operation<MapStorageEngine> operation(&key, Type::READ, &storage);
         
         // Test that operation has access to storage
         ASSERT_TRUE(&operation.storage() == &storage);
