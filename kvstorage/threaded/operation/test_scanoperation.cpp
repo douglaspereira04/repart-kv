@@ -58,7 +58,8 @@ void test_scan_operation_barrier() {
                 // This thread is the coordinator                
                 // Perform range scan starting from scan.key(), limited to scan.values().size()
                 size_t limit = scan_op.values().size();
-                auto results = storage.scan(scan_op.key(), limit);
+                std::vector<std::pair<std::string, std::string>> results;
+                storage.scan(scan_op.key(), limit, results);
                 for (size_t i = 0; i < limit; i++) {
                     scan_op.values()[i] = results[i];
                 }
@@ -79,7 +80,8 @@ void test_scan_operation_barrier() {
                 // This thread is the coordinator                
                 // Perform range scan starting from scan.key(), limited to scan.values().size()
                 size_t limit = scan_op.values().size();
-                auto results = storage.scan(scan_op.key(), limit);
+                std::vector<std::pair<std::string, std::string>> results;
+                storage.scan(scan_op.key(), limit, results);
                 for (size_t i = 0; i < limit; i++) {
                     scan_op.values()[i] = results[i];
                 }

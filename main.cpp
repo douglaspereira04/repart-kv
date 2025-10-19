@@ -150,17 +150,31 @@ void worker_function(
         
         switch (op.type) {
             case OperationType::READ: {
-                std::string value = storage.read(op.key);
+                std::string value;
+                Status status =  storage.read(op.key, value);
+                if (status != Status::SUCCESS) {
+                    std::cerr << "Error: Failed to read key: " << op.key << std::endl;
+                    return;
+                }
                 executed_counts[worker_id]++;
                 break;
             }
             case OperationType::WRITE: {
-                storage.write(op.key, op.value);
+                Status status = storage.write(op.key, op.value);
+                if (status != Status::SUCCESS) {
+                    std::cerr << "Error: Failed to read key: " << op.key << std::endl;
+                    return;
+                }
                 executed_counts[worker_id]++;
                 break;
             }
             case OperationType::SCAN: {
-                auto results = storage.scan(op.key, op.limit);
+                std::vector<std::pair<std::string, std::string>> results;
+                Status status = storage.scan(op.key, op.limit, results);
+                if (status != Status::SUCCESS) {
+                    std::cerr << "Error: Failed to scan key: " << op.key << std::endl;
+                    return;
+                }
                 executed_counts[worker_id]++;
                 break;
             }

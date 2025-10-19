@@ -19,12 +19,20 @@ void test_basic_operations() {
         StorageType storage(2);
         
         // Test write and read
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
-        ASSERT_STR_EQ("value1", storage.read("key1"));
-        ASSERT_STR_EQ("value2", storage.read("key2"));
-        ASSERT_STR_EQ("", storage.read("key3"));  // Non-existent key
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
+        status = storage.read("key3", value);
+        ASSERT_STATUS_EQ(Status::NOT_FOUND, status);
     END_TEST("basic_operations")
 }
 
@@ -45,11 +53,16 @@ void test_enable_tracking() {
         // Enable tracking
         storage.enable_tracking(true);
         ASSERT_TRUE(storage.enable_tracking());
-        
+        std::string value;
         // Perform operations that should be tracked
-        storage.write("key1", "value1");
-        storage.read("key1");
-        storage.read("key1");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
         
         // Check that graph has been populated
         const auto& graph = storage.graph();
@@ -62,22 +75,34 @@ void test_basic_repartition() {
     TEST("basic_repartition")
         StorageType storage(4);
         storage.enable_tracking(true);
-        
+        std::string value;
         // Create some keys with access patterns
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
-        storage.write("key3", "value3");
-        storage.write("key4", "value4");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key3", "value3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key4", "value4");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Access them to build the graph
         for (int i = 0; i < 10; ++i) {
-            storage.read("key1");
-            storage.read("key2");
+            status = storage.read("key1", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value1", value);
+            status = storage.read("key2", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value2", value);
         }
         
         for (int i = 0; i < 5; ++i) {
-            storage.read("key3");
-            storage.read("key4");
+            status = storage.read("key3", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value3", value);
+            status = storage.read("key4", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value4", value);
         }
         
         const Graph& graph_before = storage.graph();
@@ -97,10 +122,18 @@ void test_basic_repartition() {
         std::cout << "    Tracking disabled after repartition" << std::endl;
         
         // Verify data is still accessible
-        ASSERT_STR_EQ("value1", storage.read("key1"));
-        ASSERT_STR_EQ("value2", storage.read("key2"));
-        ASSERT_STR_EQ("value3", storage.read("key3"));
-        ASSERT_STR_EQ("value4", storage.read("key4"));
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
+        status = storage.read("key3", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value3", value);
+        status = storage.read("key4", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value4", value);
         std::cout << "    All keys still accessible after repartition" << std::endl;
     END_TEST("basic_repartition")
 }
@@ -110,44 +143,78 @@ void test_co_access_patterns() {
     TEST("co_access_patterns")
         StorageType storage(3);
         storage.enable_tracking(true);
-        
+        std::string value;
         // Create two groups of keys that are accessed together
-        storage.write("group1_key1", "value1");
-        storage.write("group1_key2", "value2");
-        storage.write("group1_key3", "value3");
+        Status status = storage.write("group1_key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("group1_key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("group1_key3", "value3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
-        storage.write("group2_key1", "value4");
-        storage.write("group2_key2", "value5");
+        status = storage.write("group2_key1", "value4");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("group2_key2", "value5");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Access group1 keys together multiple times
         for (int i = 0; i < 5; ++i) {
-            storage.read("group1_key1");
-            storage.read("group1_key2");
-            storage.read("group1_key3");
+            std::vector<std::pair<std::string, std::string>> results;
+            status = storage.scan("group1_", 3, results);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_EQ(3, results.size());
+            ASSERT_STR_EQ("group1_key1", results[0].first);
+            ASSERT_STR_EQ("value1", results[0].second);
+            ASSERT_STR_EQ("group1_key2", results[1].first);
+            ASSERT_STR_EQ("value2", results[1].second);
+            ASSERT_STR_EQ("group1_key3", results[2].first);
+            ASSERT_STR_EQ("value3", results[2].second);
         }
         
         // Access group2 keys together multiple times
         for (int i = 0; i < 3; ++i) {
-            storage.read("group2_key1");
-            storage.read("group2_key2");
+            std::vector<std::pair<std::string, std::string>> results;
+            status = storage.scan("group2_", 2, results);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_EQ(2, results.size());
+            ASSERT_STR_EQ("group2_key1", results[0].first);
+            ASSERT_STR_EQ("value4", results[0].second);
+            ASSERT_STR_EQ("group2_key2", results[1].first);
+            ASSERT_STR_EQ("value5", results[1].second);
         }
         
         const Graph& graph = storage.graph();
         ASSERT_TRUE(graph.get_vertex_count() > 0);
-        
-        // Check that group1 keys have co-access edges (edges are created during scan operations)
-        // Note: edges are only created when keys are accessed together in scan operations
-        std::cout << "    Group1 keys have co-access edges" << std::endl;
+        for (int group1_key1 = 1; group1_key1 <= 3; ++group1_key1) {
+            for (int group1_key2 = group1_key1 + 1; group1_key2 <= 3; ++group1_key2) {
+                ASSERT_EQ(5, graph.get_edge_weight("group1_key" + std::to_string(group1_key1), "group1_key" + std::to_string(group1_key2)));
+            }
+        }
+        for (int group2_key1 = 1; group2_key1 <= 2; ++group2_key1) {
+            for (int group2_key2 = group2_key1 + 1; group2_key2 <= 2; ++group2_key2) {
+                ASSERT_EQ(3, graph.get_edge_weight("group2_key" + std::to_string(group2_key1), "group2_key" + std::to_string(group2_key2)));
+            }
+        }
         
         // Perform repartitioning
         storage.repartition();
         
         // Verify all keys are still accessible
-        ASSERT_STR_EQ("value1", storage.read("group1_key1"));
-        ASSERT_STR_EQ("value2", storage.read("group1_key2"));
-        ASSERT_STR_EQ("value3", storage.read("group1_key3"));
-        ASSERT_STR_EQ("value4", storage.read("group2_key1"));
-        ASSERT_STR_EQ("value5", storage.read("group2_key2"));
+        status = storage.read("group1_key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("group1_key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
+        status = storage.read("group1_key3", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value3", value);
+        status = storage.read("group2_key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value4", value);
+        status = storage.read("group2_key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value5", value);
         std::cout << "    All keys accessible after repartition" << std::endl;
     END_TEST("co_access_patterns")
 }
@@ -164,16 +231,23 @@ void test_empty_graph_repartition() {
         std::cout << "    Graph is empty (tracking disabled)" << std::endl;
         
         // Write some data
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Try to repartition with empty graph
         storage.repartition();
         std::cout << "    Repartition with empty graph successful" << std::endl;
         
         // Verify data is still accessible
-        ASSERT_STR_EQ("value1", storage.read("key1"));
-        ASSERT_STR_EQ("value2", storage.read("key2"));
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
     END_TEST("empty_graph_repartition")
 }
 
@@ -184,13 +258,21 @@ void test_multiple_repartitions() {
         
         // First tracking period
         storage.enable_tracking(true);
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
-        storage.write("key3", "value3");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key3", "value3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         for (int i = 0; i < 3; ++i) {
-            storage.read("key1");
-            storage.read("key2");
+            std::string value;
+            status = storage.read("key1", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value1", value);
+            status = storage.read("key2", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value2", value);
         }
         
         const Graph& graph1 = storage.graph();
@@ -203,12 +285,19 @@ void test_multiple_repartitions() {
         
         // Second tracking period
         storage.enable_tracking(true);
-        storage.write("key4", "value4");
-        storage.write("key5", "value5");
+        status = storage.write("key4", "value4");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key5", "value5");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         for (int i = 0; i < 2; ++i) {
-            storage.read("key4");
-            storage.read("key5");
+            std::string value;
+            status = storage.read("key4", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value4", value);
+            status = storage.read("key5", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value5", value);
         }
         
         const Graph& graph2 = storage.graph();
@@ -220,11 +309,22 @@ void test_multiple_repartitions() {
         std::cout << "    Second repartition completed" << std::endl;
         
         // Verify all keys are still accessible
-        ASSERT_STR_EQ("value1", storage.read("key1"));
-        ASSERT_STR_EQ("value2", storage.read("key2"));
-        ASSERT_STR_EQ("value3", storage.read("key3"));
-        ASSERT_STR_EQ("value4", storage.read("key4"));
-        ASSERT_STR_EQ("value5", storage.read("key5"));
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
+        status = storage.read("key3", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value3", value);
+        status = storage.read("key4", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value4", value);
+        status = storage.read("key5", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value5", value);
         std::cout << "    All keys accessible after multiple repartitions" << std::endl;
     END_TEST("multiple_repartitions")
 }
@@ -233,12 +333,13 @@ template<typename StorageType>
 void test_repartition_correctness() {
     TEST("repartition_correctness")
         StorageType storage(2);
-        
+        Status status;
         // Write keys with different access patterns
         for (int i = 1; i <= 5; ++i) {
             std::string key = "key" + std::to_string(i);
             std::string value = "value" + std::to_string(i);
-            storage.write(key, value);
+            status = storage.write(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         storage.enable_tracking(true);
 
@@ -246,19 +347,32 @@ void test_repartition_correctness() {
         for (int i = 5; i <= 10; ++i) {
             std::string key = "key" + std::to_string(i);
             std::string value = "value" + std::to_string(i);
-            storage.write(key, value);
+            status = storage.write(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         
         // Access some keys more frequently to create patterns
         for (int i = 0; i < 5; ++i) {
-            storage.read("key1");
-            storage.read("key2");
-            storage.read("key3");
+            std::string value;
+            status = storage.read("key1", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value1", value);
+            status = storage.read("key2", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value2", value);
+            status = storage.read("key3", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value3", value);
         }
         
         for (int i = 0; i < 3; ++i) {
-            storage.read("key4");
-            storage.read("key5");
+            std::string value;
+            status = storage.read("key4", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value4", value);
+            status = storage.read("key5", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ("value5", value);
         }
         
         // Perform repartitioning
@@ -268,7 +382,10 @@ void test_repartition_correctness() {
         for (int i = 1; i <= 10; ++i) {
             std::string key = "key" + std::to_string(i);
             std::string expected_value = "value" + std::to_string(i);
-            ASSERT_STR_EQ(expected_value, storage.read(key));
+            std::string value;
+            status = storage.read(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ(expected_value, value);
         }
         std::cout << "    All 10 keys preserved with correct values" << std::endl;
     END_TEST("repartition_correctness")
@@ -278,16 +395,22 @@ template<typename StorageType>
 void test_scan_operations() {
     TEST("scan_operations")
         StorageType storage(4);
-        
+        Status status;
         // Write some test data
-        storage.write("prefix1_key1", "value1");
-        storage.write("prefix1_key2", "value2");
-        storage.write("prefix2_key1", "value3");
-        storage.write("prefix2_key2", "value4");
+        status = storage.write("prefix1_key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("prefix1_key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("prefix2_key1", "value3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("prefix2_key2", "value4");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         storage.write("other_key", "value5");
         
         // Test scan with prefix
-        auto results = storage.scan("prefix1_", 10);
+        std::vector<std::pair<std::string, std::string>> results;
+        status = storage.scan("prefix1_", 10, results);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_TRUE(results.size() >= 2);  // Should have at least 2 results
         
         // Sort results for consistent comparison
@@ -321,7 +444,8 @@ void test_untracked_keys_preservation() {
         for (int i = 1; i <= 20; ++i) {
             std::string key = "untracked_key_" + std::to_string(i);
             std::string value = "untracked_value_" + std::to_string(i);
-            storage.write(key, value);
+            Status status = storage.write(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
             untracked_keys.push_back({key, value});
         }
         std::cout << "    Written 20 untracked keys" << std::endl;
@@ -332,7 +456,8 @@ void test_untracked_keys_preservation() {
         for (int i = 1; i <= 10; ++i) {
             std::string key = "tracked_key_" + std::to_string(i);
             std::string value = "tracked_value_" + std::to_string(i);
-            storage.write(key, value);
+            Status status = storage.write(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
             tracked_keys.push_back({key, value});
         }
         std::cout << "    Written 10 tracked keys" << std::endl;
@@ -351,7 +476,9 @@ void test_untracked_keys_preservation() {
         
         // Check untracked keys (these are the ones at risk of being lost)
         for (const auto& kv_pair : untracked_keys) {
-            std::vector<std::pair<std::string, std::string>> scan_result = storage.scan(kv_pair.first, 1);
+            std::vector<std::pair<std::string, std::string>> scan_result;
+            Status status = storage.scan(kv_pair.first, 1, scan_result);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
             ASSERT_TRUE(scan_result.size() == 1);
             if (scan_result.size() == 1) {
                 std::string retrieved_value = scan_result[0].second;
@@ -364,7 +491,9 @@ void test_untracked_keys_preservation() {
         
         // Check tracked keys (these should definitely be preserved)
         for (const auto& kv_pair : tracked_keys) {
-            std::string retrieved_value = storage.read(kv_pair.first);
+            std::string retrieved_value;
+            Status status = storage.read(kv_pair.first, retrieved_value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
             ASSERT_STR_EQ(kv_pair.second, retrieved_value);
         }
         std::cout << "    All 10 tracked keys preserved after repartitioning" << std::endl;
@@ -381,29 +510,45 @@ void test_partition_map_consistency() {
         StorageType storage(2);
         
         // Write keys without tracking enabled
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
-        storage.write("key3", "value3");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key3", "value3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         std::cout << "    Written 3 keys without tracking" << std::endl;
         
         // Test scan functionality - this will fail if keys aren't in partition_map_
-        auto results = storage.scan("key", 10);
+        std::vector<std::pair<std::string, std::string>> results;
+        status = storage.scan("key", 10, results);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_TRUE(results.size() >= 3);  // Should find at least the 3 keys we wrote
         std::cout << "    Scan found " << results.size() << " keys (expected >= 3)" << std::endl;
         
         // Verify we can read all keys individually
-        ASSERT_STR_EQ("value1", storage.read("key1"));
-        ASSERT_STR_EQ("value2", storage.read("key2"));
-        ASSERT_STR_EQ("value3", storage.read("key3"));
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
+        status = storage.read("key3", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value3", value);
         std::cout << "    All keys individually accessible" << std::endl;
         
         // Test with tracking enabled
         storage.enable_tracking(true);
-        storage.write("tracked_key", "tracked_value");
-        storage.read("tracked_key");  // Ensure it's tracked
+        status = storage.write("tracked_key", "tracked_value");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("tracked_key", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("tracked_value", value);
         
         // Scan should still work and include the new tracked key
-        results = storage.scan("key", 10);
+        status = storage.scan("key", 10, results);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_TRUE(results.size() >= 4);  // Should find at least 4 keys now
         std::cout << "    Scan after tracking enabled found " << results.size() << " keys (expected >= 4)" << std::endl;
         

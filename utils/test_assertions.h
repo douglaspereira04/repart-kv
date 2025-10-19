@@ -31,6 +31,11 @@ extern int tests_failed;
                                 "' but got '" + std::to_string(actual) + "'"); \
     }
 
+#define ASSERT_STATUS_EQ(expected, actual) \
+    if ((expected) != (actual)) { \
+        throw std::runtime_error(std::string("Expected '") + to_string(expected) + \
+                                "' but got '" + to_string(actual) + "'"); \
+    }
 #define ASSERT_STR_EQ(expected, actual) \
     if ((expected) != (actual)) { \
         throw std::runtime_error(std::string("Expected '") + (expected) + \

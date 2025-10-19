@@ -133,9 +133,10 @@ public:
     /**
      * @brief Read a value by key (implementation for CRTP)
      * @param key The key to read
-     * @return The value associated with the key
+     * @param value Reference to store the value associated with the key
+     * @return Status code indicating the result of the operation
      */
-    std::string read_impl(const std::string& key) {
+    Status read_impl(const std::string& key, std::string& value) {
         // Lock key map for reading
         key_map_lock_.lock_shared();
 
@@ -150,7 +151,7 @@ public:
         if (!found) {
             // Key not found in any partition
             key_map_lock_.unlock_shared();
-            return "";
+            return Status::NOT_FOUND;
         }
         
         // Lock the storage for reading
@@ -160,19 +161,20 @@ public:
         key_map_lock_.unlock_shared();
 
         // Read value from storage
-        std::string value = storage->read(key);
+        Status status = storage->read(key, value);
         
         // Unlock storage
         storage->unlock_shared();
-        return value;
+        return status;
     }
 
     /**
      * @brief Write a key-value pair (implementation for CRTP)
      * @param key The key to write
      * @param value The value to associate with the key
+     * @return Status code indicating the result of the operation
      */
-    void write_impl(const std::string& key, const std::string& value) {
+    Status write_impl(const std::string& key, const std::string& value) {
         // Lock key map for writing
         key_map_lock_.lock();
 
@@ -209,19 +211,21 @@ public:
         key_map_lock_.unlock();
 
         // Write value to storage
-        storage->write(key, value);
+        Status status = storage->write(key, value);
         
         // Unlock storage
         storage->unlock();
+        return status;
     }
 
     /**
      * @brief Scan for key-value pairs starting with a given prefix
      * @param initial_key_prefix The initial key prefix to search for
      * @param limit Maximum number of key-value pairs to return
-     * @return Vector of key-value pairs
+     * @param results Reference to store the results
+     * @return Status code indicating the result of the operation
      */
-    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& initial_key_prefix, size_t limit) {
+    Status scan_impl(const std::string& initial_key_prefix, size_t limit, std::vector<std::pair<std::string, std::string>>& results) {
         std::set<StorageEngineType*> storage_set;
         std::vector<StorageEngineType*> storage_array;
         std::vector<std::string> key_array;
@@ -264,12 +268,15 @@ public:
         key_map_lock_.unlock_shared();
 
         // Read values from storages
-        std::vector<std::pair<std::string, std::string>> value_array;
-        value_array.reserve(key_array.size());
-        
+        results.reserve(key_array.size());
+        Status status;
         for (size_t i = 0; i < storage_array.size(); ++i) {
-            std::string value = storage_array[i]->read(key_array[i]);
-            value_array.push_back({key_array[i], value});
+            std::string value;
+            status = storage_array[i]->read(key_array[i], value);
+            if (status != Status::SUCCESS) {
+                break;
+            }
+            results.push_back({key_array[i], value});
         }
 
         // Unlock all storages
@@ -277,7 +284,7 @@ public:
             storage->unlock_shared();
         }
 
-        return value_array;
+        return status;
     }
 
     /**

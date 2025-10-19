@@ -31,15 +31,28 @@ public:
     StorageEngineWrapperImpl(const std::string& name) : name_(name) {}
 
     std::string read(const std::string& key) const override {
-        return engine_.read(key);
+        std::string value;
+        Status status = engine_.read(key, value);
+        if (status != Status::SUCCESS) {
+            throw std::runtime_error("Failed to read key: " + key);
+        }
+        return value;
     }
 
     void write(const std::string& key, const std::string& value) override {
-        engine_.write(key, value);
+        Status status = engine_.write(key, value);
+        if (status != Status::SUCCESS) {
+            throw std::runtime_error("Failed to write key: " + key);
+        }
     }
 
     std::vector<std::pair<std::string, std::string>> scan(const std::string& prefix, size_t limit) const override {
-        return engine_.scan(prefix, limit);
+        std::vector<std::pair<std::string, std::string>> results;
+        Status status = engine_.scan(prefix, limit, results);
+        if (status != Status::SUCCESS) {
+            throw std::runtime_error("Failed to scan keys: " + prefix);
+        }
+        return results;
     }
 
     std::string get_name() const override {

@@ -18,10 +18,18 @@ void test_tracking_disabled() {
         std::cout << "  ✓ Tracking is disabled by default" << std::endl;
         
         // Write and read keys without tracking
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
-        storage.read("key1");
-        storage.read("key2");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
         
         // Verify graph is still empty (no tracking occurred)
         const Graph& graph = storage.graph();
@@ -40,9 +48,12 @@ void test_tracking_enabled() {
         std::cout << "  ✓ Tracking enabled" << std::endl;
         
         // Write some keys (each write increments vertex weight by 1)
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
-        storage.write("key3", "value3");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key3", "value3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         const Graph& graph = storage.graph();
         
@@ -54,15 +65,19 @@ void test_tracking_enabled() {
         std::cout << "  ✓ Three vertices created with weight 1 each" << std::endl;
         
         // Read key1 twice (should increment its weight by 2)
-        storage.read("key1");
-        storage.read("key1");
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         ASSERT_EQ(3, graph.get_vertex_weight("key1"));  // 1 write + 2 reads
         ASSERT_EQ(1, graph.get_vertex_weight("key2"));  // Still 1
         std::cout << "  ✓ key1 weight is now 3 (1 write + 2 reads)" << std::endl;
         
         // Write to key1 again (should increment by 1)
-        storage.write("key1", "updated_value1");
+        status = storage.write("key1", "updated_value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         ASSERT_EQ(4, graph.get_vertex_weight("key1"));
         std::cout << "  ✓ key1 weight is now 4 after another write" << std::endl;
@@ -75,18 +90,25 @@ void test_access_frequency_tracking() {
         storage.enable_tracking(true);
         
         // Simulate different access patterns
-        storage.write("hot_key", "value");
-        storage.write("warm_key", "value");
-        storage.write("cold_key", "value");
+        Status status = storage.write("hot_key", "value");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("warm_key", "value");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("cold_key", "value");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Access hot_key many times
         for (int i = 0; i < 10; ++i) {
-            storage.read("hot_key");
+            std::string value;
+            status = storage.read("hot_key", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         
         // Access warm_key a few times
         for (int i = 0; i < 3; ++i) {
-            storage.read("warm_key");
+            std::string value;
+            status = storage.read("warm_key", value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         
         // Don't access cold_key at all after writing
@@ -115,9 +137,15 @@ void test_clear_graph() {
         storage.enable_tracking(true);
         
         // Add some tracked data
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
-        storage.read("key1");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         const Graph& graph = storage.graph();
         ASSERT_EQ(2, graph.get_vertex_count());
@@ -142,8 +170,12 @@ void test_toggle_tracking() {
         
         // Enable tracking and do some operations
         storage.enable_tracking(true);
-        storage.write("key1", "value1");
-        storage.read("key1");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         const Graph& graph = storage.graph();
         ASSERT_EQ(2, graph.get_vertex_weight("key1"));
@@ -151,8 +183,10 @@ void test_toggle_tracking() {
         
         // Disable tracking
         storage.enable_tracking(false);
-        storage.read("key1");
-        storage.read("key1");
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Weight should remain the same (no tracking)
         ASSERT_EQ(2, graph.get_vertex_weight("key1"));
@@ -160,7 +194,8 @@ void test_toggle_tracking() {
         
         // Re-enable tracking
         storage.enable_tracking(true);
-        storage.read("key1");
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Weight should now increase
         ASSERT_EQ(3, graph.get_vertex_weight("key1"));
@@ -175,9 +210,12 @@ void test_scan_with_graph_tracking() {
         
         // Write some keys with a common prefix
         storage.write("user:001", "alice");
-        storage.write("user:002", "bob");
+        Status status = storage.write("user:002", "bob");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         storage.write("user:003", "charlie");
-        storage.write("user:004", "diana");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("user:004", "diana");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         const Graph& graph = storage.graph();
         
@@ -193,7 +231,9 @@ void test_scan_with_graph_tracking() {
         std::cout << "  ✓ No edges exist before scan" << std::endl;
         
         // Perform a scan (which calls multi_key_graph_update)
-        auto results = storage.scan("user:", 3);
+        std::vector<std::pair<std::string, std::string>> results;
+        status = storage.scan("user:", 3, results);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Scan should return 3 results
         ASSERT_EQ(3, results.size());
@@ -231,18 +271,24 @@ void test_repeated_scans() {
         
         // Write keys
         storage.write("item:a", "value_a");
-        storage.write("item:b", "value_b");
+        Status status = storage.write("item:b", "value_b");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         storage.write("item:c", "value_c");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         const Graph& graph = storage.graph();
         
         // Perform the same scan 5 times
         for (int i = 0; i < 5; ++i) {
-            storage.scan("item:", 2);
+            std::vector<std::pair<std::string, std::string>> results;
+            status = storage.scan("item:", 2, results);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         
         // Get the first two keys (sorted by the storage) - this is the 6th scan
-        auto first_scan = storage.scan("item:", 2);
+        std::vector<std::pair<std::string, std::string>> first_scan;
+        status = storage.scan("item:", 2, first_scan);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_EQ(2, first_scan.size());
         
         std::string key1 = first_scan[0].first;
@@ -269,27 +315,39 @@ void test_co_access_patterns() {
         
         // Write keys in different groups
         storage.write("group1:a", "value");
-        storage.write("group1:b", "value");
-        storage.write("group1:c", "value");
+        Status status = storage.write("group1:b", "value");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("group1:c", "value");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         storage.write("group2:x", "value");
-        storage.write("group2:y", "value");
-        storage.write("group2:z", "value");
+        status = storage.write("group2:y", "value");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("group2:z", "value");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         const Graph& graph = storage.graph();
         
         // Scan group1 keys together multiple times
         for (int i = 0; i < 10; ++i) {
-            storage.scan("group1:", 3);
+            std::vector<std::pair<std::string, std::string>> results;
+            status = storage.scan("group1:", 3, results);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         
         // Scan group2 keys together multiple times
         for (int i = 0; i < 10; ++i) {
-            storage.scan("group2:", 3);
+            std::vector<std::pair<std::string, std::string>> results;
+            status = storage.scan("group2:", 3, results);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         
         // Get the actual keys from scans
-        auto group1_keys = storage.scan("group1:", 3);
-        auto group2_keys = storage.scan("group2:", 3);
+        std::vector<std::pair<std::string, std::string>> group1_keys;
+        status = storage.scan("group1:", 3, group1_keys);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        std::vector<std::pair<std::string, std::string>> group2_keys;
+        status = storage.scan("group2:", 3, group2_keys);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Check that keys within the same group have strong edges
         if (group1_keys.size() >= 2) {

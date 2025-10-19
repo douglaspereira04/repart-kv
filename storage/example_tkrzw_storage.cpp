@@ -33,12 +33,16 @@ int main() {
         
         // Read data
         std::cout << "\nReading values:" << std::endl;
-        std::cout << "  user:1001 = " << engine.read("user:1001") << std::endl;
-        std::cout << "  product:2001 = " << engine.read("product:2001") << std::endl;
+        std::string value;
+        engine.read("user:1001", value);
+        std::cout << "  user:1001 = " << value << std::endl;
+        engine.read("product:2001", value);
+        std::cout << "  product:2001 = " << value << std::endl;
         
         // Scan with prefix
         std::cout << "\nScanning for 'user:' prefix:" << std::endl;
-        auto users = engine.scan("user:", 10);
+        std::vector<std::pair<std::string, std::string>> users;
+        engine.scan("user:", 10, users);
         for (const auto& [key, value] : users) {
             std::cout << "  " << key << " = " << value << std::endl;
         }
@@ -90,12 +94,16 @@ int main() {
         
         // Verify data persisted
         std::cout << "\nVerifying persisted data:" << std::endl;
-        std::cout << "  session:abc123 = " << engine.read("session:abc123") << std::endl;
-        std::cout << "  config:max_connections = " << engine.read("config:max_connections") << std::endl;
+        std::string value;
+        engine.read("session:abc123", value);
+        std::cout << "  session:abc123 = " << value << std::endl;
+        engine.read("config:max_connections", value);
+        std::cout << "  config:max_connections = " << value << std::endl;
         
         // Scan all sessions
         std::cout << "\nAll sessions:" << std::endl;
-        auto sessions = engine.scan("session:", 10);
+        std::vector<std::pair<std::string, std::string>> sessions;
+        engine.scan("session:", 10, sessions);
         for (const auto& [key, value] : sessions) {
             std::cout << "  " << key << " = " << value << std::endl;
         }
@@ -112,19 +120,23 @@ int main() {
         
         // Update existing key
         engine.write("config:max_connections", "2000");
+        std::string value;
+        engine.read("config:max_connections", value);
         std::cout << "Updated config:max_connections = " 
-                  << engine.read("config:max_connections") << std::endl;
+                  << value << std::endl;
         
         // Remove a key
-        if (engine.remove("session:abc123")) {
+        Status status = engine.remove("session:abc123");
+        if (status == Status::SUCCESS) {
             std::cout << "Removed session:abc123" << std::endl;
         }
         
         std::cout << "Records after removal: " << engine.count() << std::endl;
         
         // Verify removal
-        std::string removed_value = engine.read("session:abc123");
-        std::cout << "Reading removed key returns: '" << removed_value << "' (empty)" << std::endl;
+        std::string removed_value;
+        status = engine.read("session:abc123", removed_value);
+        std::cout << "Reading removed key returns: '" << to_string(status) << " status code" << std::endl;
     }
     
     // ========================================
@@ -153,7 +165,8 @@ int main() {
             
             // Manual shared lock for read
             engine.lock_shared();
-            auto results = engine.scan("thread:", 100);
+            std::vector<std::pair<std::string, std::string>> results;
+            engine.scan("thread:", 100, results);
             int count = results.size();
             engine.unlock_shared();
             
@@ -203,7 +216,8 @@ int main() {
         
         for (int i = 0; i < num_entries; ++i) {
             std::string key = "perf:key:" + std::to_string(i);
-            [[maybe_unused]] std::string value = engine.read(key);
+            [[maybe_unused]] std::string value;
+            engine.read(key, value);
         }
         
         auto read_end = std::chrono::high_resolution_clock::now();
@@ -216,7 +230,8 @@ int main() {
         
         // Scan performance
         start = std::chrono::high_resolution_clock::now();
-        auto scan_results = engine.scan("perf:key:", 1000);
+        std::vector<std::pair<std::string, std::string>> scan_results;
+        engine.scan("perf:key:", 1000, scan_results);
         auto scan_end = std::chrono::high_resolution_clock::now();
         auto scan_duration = std::chrono::duration_cast<std::chrono::microseconds>(scan_end - start);
         

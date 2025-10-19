@@ -131,38 +131,43 @@ public:
     /**
      * @brief Implementation: Read a value by key
      * @param key The key to read
-     * @return The value associated with the key, or empty string if not found
+     * @param value Reference to store the value associated with the key
+     * @return Status code indicating the result of the operation
      */
-    std::string read_impl(const std::string& key) const {
-        std::string value;
+    Status read_impl(const std::string& key, std::string& value) const {
         tkrzw::Status status = db_->Get(key, &value);
         
         if (status == tkrzw::Status::SUCCESS) {
-            return value;
+            return Status::SUCCESS;
         }
-        return "";
+        return Status::NOT_FOUND;
     }
 
     /**
      * @brief Implementation: Write a key-value pair
      * @param key The key to write
      * @param value The value to associate with the key
+     * @return Status code indicating the result of the operation
      */
-    void write_impl(const std::string& key, const std::string& value) {
-        db_->Set(key, value);
+    Status write_impl(const std::string& key, const std::string& value) {
+        tkrzw::Status status = db_->Set(key, value);
+        if (status == tkrzw::Status::SUCCESS) {
+            return Status::SUCCESS;
+        }
+        return Status::ERROR;
     }
 
     /**
      * @brief Implementation: Scan for key-value pairs from a starting point
      * @param initial_key_prefix The starting key (lower_bound)
      * @param limit Maximum number of key-value pairs to return
-     * @return Vector of key-value pairs where keys >= key_prefix (in sorted order)
+     * @param results Reference to store the results of the scan
+     * @return Status code indicating the result of the operation
      * 
      * Note: TreeDBM maintains sorted order, making this very efficient.
      * We use Jump() to go directly to the first key >= key_prefix.
      */
-    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& initial_key_prefix, size_t limit) const {
-        std::vector<std::pair<std::string, std::string>> results;
+    Status scan_impl(const std::string& initial_key_prefix, size_t limit, std::vector<std::pair<std::string, std::string>>& results) const {
         results.reserve(std::min(limit, static_cast<size_t>(1000)));
         
         // Create an iterator
@@ -193,7 +198,7 @@ public:
         }
         
         // Results are already sorted (TreeDBM maintains order)
-        return results;
+        return Status::SUCCESS;
     }
 
     /**
@@ -239,13 +244,14 @@ public:
     /**
      * @brief Remove a key from the database
      * @param key The key to remove
-     * @return true if the key was removed, false if not found
+     * @return Status code indicating the result of the operation
      */
-    bool remove(const std::string& key) {
-        if (!is_open_) {
-            return false;
+    Status remove(const std::string& key) {
+        tkrzw::Status status = db_->Remove(key);
+        if (status == tkrzw::Status::SUCCESS) {
+            return Status::SUCCESS;
         }
-        return db_->Remove(key) == tkrzw::Status::SUCCESS;
+        return Status::ERROR;
     }
 };
 

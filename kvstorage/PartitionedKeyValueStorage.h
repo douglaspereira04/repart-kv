@@ -1,6 +1,7 @@
 #pragma once
 
 #include "../storage/StorageEngine.h"
+#include "../storage/Status.h"
 #include <string>
 #include <vector>
 
@@ -28,29 +29,32 @@ public:
     /**
      * @brief Read a value by key
      * @param key The key to read
-     * @return The value associated with the key
+     * @param value Reference to store the value associated with the key
+     * @return Status code indicating the result of the operation
      */
-    std::string read(const std::string& key) {
-        return static_cast<Derived*>(this)->read_impl(key);
+    Status read(const std::string& key, std::string& value) {
+        return static_cast<Derived*>(this)->read_impl(key, value);
     }
 
     /**
      * @brief Write a key-value pair
      * @param key The key to write
      * @param value The value to associate with the key
+     * @return Status code indicating the result of the operation
      */
-    void write(const std::string& key, const std::string& value) {
-        static_cast<Derived*>(this)->write_impl(key, value);
+    Status write(const std::string& key, const std::string& value) {
+        return static_cast<Derived*>(this)->write_impl(key, value);
     }
 
     /**
      * @brief Scan for key-value pairs starting with a given prefix
      * @param key_prefix The initial key prefix to search for
      * @param limit Maximum number of key-value pairs to return
-     * @return Vector of key-value pairs
+     * @param results Reference to store the results
+     * @return Status code indicating the result of the operation
      */
-    std::vector<std::pair<std::string, std::string>> scan(const std::string& initial_key_prefix, size_t limit) {
-        return static_cast<Derived*>(this)->scan_impl(initial_key_prefix, limit);
+    Status scan(const std::string& initial_key_prefix, size_t limit, std::vector<std::pair<std::string, std::string>>& results) {
+        return static_cast<Derived*>(this)->scan_impl(initial_key_prefix, limit, results);
     }
 
 protected:

@@ -4,7 +4,7 @@
 #include <string>
 #include <shared_mutex>
 #include <vector>
-
+#include "Status.h"
 /**
  * @brief CRTP base class for storage engines
  * @tparam Derived The derived storage engine type
@@ -43,29 +43,32 @@ public:
     /**
      * @brief Read a value by key
      * @param key The key to read
-     * @return The value associated with the key
+     * @param value Reference to store the value associated with the key
+     * @return Status code indicating the result of the operation
      */
-    std::string read(const std::string& key) const {
-        return static_cast<const Derived*>(this)->read_impl(key);
+    Status read(const std::string& key, std::string& value) const {
+        return static_cast<const Derived*>(this)->read_impl(key, value);
     }
 
     /**
      * @brief Write a key-value pair
      * @param key The key to write
      * @param value The value to associate with the key
+     * @return Status code indicating the result of the operation
      */
-    void write(const std::string& key, const std::string& value) {
-        static_cast<Derived*>(this)->write_impl(key, value);
+    Status write(const std::string& key, const std::string& value) {
+        return static_cast<Derived*>(this)->write_impl(key, value);
     }
 
     /**
      * @brief Scan for key-value pairs from a starting point (lower_bound)
      * @param key_start The starting key (returns keys >= key_start)
      * @param limit Maximum number of key-value pairs to return
-     * @return Vector of key-value pairs where keys >= key_start (sorted order)
+     * @param results Reference to store the results of the scan
+     * @return Status code indicating the result of the operation
      */
-    std::vector<std::pair<std::string, std::string>> scan(const std::string& key_start, size_t limit) const {
-        return static_cast<const Derived*>(this)->scan_impl(key_start, limit);
+    Status scan(const std::string& key_start, size_t limit, std::vector<std::pair<std::string, std::string>>& results) const {
+        return static_cast<const Derived*>(this)->scan_impl(key_start, limit, results);
     }
 
     /**

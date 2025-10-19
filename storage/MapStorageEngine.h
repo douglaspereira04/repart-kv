@@ -37,12 +37,13 @@ public:
      * @param key The key to read
      * @return The value associated with the key, or empty string if not found
      */
-    std::string read_impl(const std::string& key) const {
+    Status read_impl(const std::string& key, std::string& value) const {
         auto it = storage_.find(key);
         if (it != storage_.end()) {
-            return it->second;
+            value = it->second;
+            return Status::SUCCESS;
         }
-        return "";
+        return Status::NOT_FOUND;
     }
 
     /**
@@ -50,8 +51,9 @@ public:
      * @param key The key to write
      * @param value The value to associate with the key
      */
-    void write_impl(const std::string& key, const std::string& value) {
+    Status write_impl(const std::string& key, const std::string& value) {
         storage_[key] = value;
+        return Status::SUCCESS;
     }
 
     /**
@@ -60,8 +62,7 @@ public:
      * @param limit Maximum number of key-value pairs to return
      * @return Vector of key-value pairs where keys >= initial_key_prefix
      */
-    std::vector<std::pair<std::string, std::string>> scan_impl(const std::string& initial_key_prefix, size_t limit) const {
-        std::vector<std::pair<std::string, std::string>> results;
+    Status scan_impl(const std::string& initial_key_prefix, size_t limit, std::vector<std::pair<std::string, std::string>>& results) const {
         results.reserve(std::min(limit, storage_.size()));
 
         // Use lower_bound to find the first key >= key_prefix
@@ -73,7 +74,7 @@ public:
             ++it;
         }
 
-        return results;
+        return Status::SUCCESS;
     }
 };
 

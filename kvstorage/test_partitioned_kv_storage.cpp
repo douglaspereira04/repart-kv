@@ -18,14 +18,24 @@ void test_basic_write_read() {
         StorageType storage(4);  // Create with 4 partitions
         
         // Write some values
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
-        storage.write("key3", "value3");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key3", "value3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Read them back
-        ASSERT_STR_EQ("value1", storage.read("key1"));
-        ASSERT_STR_EQ("value2", storage.read("key2"));
-        ASSERT_STR_EQ("value3", storage.read("key3"));
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
+        status = storage.read("key3", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value3", value);
     END_TEST("basic_write_read")
 }
 
@@ -35,7 +45,9 @@ void test_read_nonexistent_key() {
         StorageType storage(4);
         
         // Reading a non-existent key should return empty string
-        ASSERT_STR_EQ("", storage.read("nonexistent"));
+        std::string value;
+        Status status = storage.read("nonexistent", value);
+        ASSERT_STATUS_EQ(Status::NOT_FOUND, status);
     END_TEST("read_nonexistent_key")
 }
 
@@ -43,12 +55,19 @@ template<typename StorageType>
 void test_overwrite_value() {
     TEST("overwrite_value")
         StorageType storage(4);
+        std::string value;
         
-        storage.write("key", "original");
-        ASSERT_STR_EQ("original", storage.read("key"));
+        Status status = storage.write("key", "original");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("key", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("original", value);
         
-        storage.write("key", "updated");
-        ASSERT_STR_EQ("updated", storage.read("key"));
+        status = storage.write("key", "updated");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("key", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("updated", value);
     END_TEST("overwrite_value")
 }
 
@@ -56,14 +75,20 @@ template<typename StorageType>
 void test_empty_key_value() {
     TEST("empty_key_value")
         StorageType storage(4);
-        
+        std::string value;
         // Test empty key
-        storage.write("", "empty_key_value");
-        ASSERT_STR_EQ("empty_key_value", storage.read(""));
+        Status status = storage.write("", "empty_key_value");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("empty_key_value", value);
         
         // Test empty value
-        storage.write("empty_value_key", "");
-        ASSERT_STR_EQ("", storage.read("empty_value_key"));
+        status = storage.write("empty_value_key", "");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("empty_value_key", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("", value);
     END_TEST("empty_key_value")
 }
 
@@ -76,14 +101,18 @@ void test_multiple_partitions() {
         for (int i = 0; i < 20; ++i) {
             std::string key = "key:" + std::to_string(i);
             std::string value = "value:" + std::to_string(i);
-            storage.write(key, value);
+            Status status = storage.write(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         
         // Read them all back
         for (int i = 0; i < 20; ++i) {
             std::string key = "key:" + std::to_string(i);
             std::string expected_value = "value:" + std::to_string(i);
-            ASSERT_STR_EQ(expected_value, storage.read(key));
+            std::string value;
+            Status status = storage.read(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ(expected_value, value);
         }
     END_TEST("multiple_partitions")
 }
@@ -93,13 +122,23 @@ void test_single_partition() {
     TEST("single_partition")
         StorageType storage(1);  // Only one partition
         
-        storage.write("key1", "value1");
-        storage.write("key2", "value2");
-        storage.write("key3", "value3");
+        Status status = storage.write("key1", "value1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key2", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key3", "value3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
-        ASSERT_STR_EQ("value1", storage.read("key1"));
-        ASSERT_STR_EQ("value2", storage.read("key2"));
-        ASSERT_STR_EQ("value3", storage.read("key3"));
+        std::string value;
+        status = storage.read("key1", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key2", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
+        status = storage.read("key3", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value3", value);
     END_TEST("single_partition")
 }
 
@@ -111,13 +150,17 @@ void test_many_partitions() {
         for (int i = 0; i < 100; ++i) {
             std::string key = "item:" + std::to_string(i);
             std::string value = "data:" + std::to_string(i);
-            storage.write(key, value);
+            Status status = storage.write(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         
         for (int i = 0; i < 100; ++i) {
             std::string key = "item:" + std::to_string(i);
             std::string expected_value = "data:" + std::to_string(i);
-            ASSERT_STR_EQ(expected_value, storage.read(key));
+            std::string value;
+            Status status = storage.read(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            ASSERT_STR_EQ(expected_value, value);
         }
     END_TEST("many_partitions")
 }
@@ -131,13 +174,22 @@ void test_large_dataset() {
         for (int i = 0; i < 1000; ++i) {
             std::string key = "key:" + std::to_string(i);
             std::string value = "value:" + std::to_string(i);
-            storage.write(key, value);
+            Status status = storage.write(key, value);
+            ASSERT_STATUS_EQ(Status::SUCCESS, status);
         }
         
         // Read some back
-        ASSERT_STR_EQ("value:0", storage.read("key:0"));
-        ASSERT_STR_EQ("value:500", storage.read("key:500"));
-        ASSERT_STR_EQ("value:999", storage.read("key:999"));
+        std::string value;
+        Status status = storage.read("key:0", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value:0", value);
+        status = storage.read("key:500", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value:500", value);
+        status = storage.read("key:999", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value:999", value);
+        
     END_TEST("large_dataset")
 }
 
@@ -147,16 +199,31 @@ void test_special_characters() {
         StorageType storage(4);
         
         storage.write("key:with:colons", "value1");
-        storage.write("key/with/slashes", "value2");
-        storage.write("key-with-dashes", "value3");
-        storage.write("key_with_underscores", "value4");
-        storage.write("key.with.dots", "value5");
+        Status status = storage.write("key/with/slashes", "value2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key-with-dashes", "value3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key_with_underscores", "value4");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("key.with.dots", "value5");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
-        ASSERT_STR_EQ("value1", storage.read("key:with:colons"));
-        ASSERT_STR_EQ("value2", storage.read("key/with/slashes"));
-        ASSERT_STR_EQ("value3", storage.read("key-with-dashes"));
-        ASSERT_STR_EQ("value4", storage.read("key_with_underscores"));
-        ASSERT_STR_EQ("value5", storage.read("key.with.dots"));
+        std::string value;
+        status = storage.read("key:with:colons", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value1", value);
+        status = storage.read("key/with/slashes", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value2", value);
+        status = storage.read("key-with-dashes", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value3", value);
+        status = storage.read("key_with_underscores", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value4", value);
+        status = storage.read("key.with.dots", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("value5", value);
     END_TEST("special_characters")
 }
 
@@ -164,16 +231,25 @@ template<typename StorageType>
 void test_repeated_operations() {
     TEST("repeated_operations")
         StorageType storage(4);
-        
+        std::string value;
         // Write, read, overwrite, read again
-        storage.write("test_key", "initial");
-        ASSERT_STR_EQ("initial", storage.read("test_key"));
+        Status status = storage.write("test_key", "initial");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("test_key", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("initial", value);
         
-        storage.write("test_key", "second");
-        ASSERT_STR_EQ("second", storage.read("test_key"));
+        status = storage.write("test_key", "second");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("test_key", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("second", value);
         
-        storage.write("test_key", "third");
-        ASSERT_STR_EQ("third", storage.read("test_key"));
+        status = storage.write("test_key", "third");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("test_key", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("third", value);
     END_TEST("repeated_operations")
 }
 
@@ -183,11 +259,16 @@ void test_scan_basic() {
         StorageType storage(4);
         
         storage.write("user:1001", "Alice");
-        storage.write("user:1002", "Bob");
-        storage.write("user:1003", "Charlie");
-        storage.write("product:2001", "Laptop");
+        Status status = storage.write("user:1002", "Bob");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("user:1003", "Charlie");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("product:2001", "Laptop");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
-        auto results = storage.scan("user:", 10);
+        std::vector<std::pair<std::string, std::string>> results;
+        status = storage.scan("user:", 10, results);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_EQ(3, results.size());
         
         // Results should be sorted
@@ -206,12 +287,18 @@ void test_scan_with_limit() {
         StorageType storage(4);
         
         storage.write("item:001", "A");
-        storage.write("item:002", "B");
-        storage.write("item:003", "C");
-        storage.write("item:004", "D");
-        storage.write("item:005", "E");
+        Status status = storage.write("item:002", "B");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("item:003", "C");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("item:004", "D");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("item:005", "E");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
-        auto results = storage.scan("item:", 3);
+        std::vector<std::pair<std::string, std::string>> results;
+        status = storage.scan("item:", 3, results);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_EQ(3, results.size());
         ASSERT_STR_EQ("item:001", results[0].first);
         ASSERT_STR_EQ("A", results[0].second);
@@ -227,11 +314,14 @@ void test_scan_no_matches() {
     TEST("scan_no_matches")
         StorageType storage(4);
         
-        storage.write("apple", "fruit");
-        storage.write("banana", "fruit");
+        Status status = storage.write("apple", "fruit");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("banana", "fruit");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
-        auto results = storage.scan("orange", 10);
-        ASSERT_EQ(0, results.size());
+        std::vector<std::pair<std::string, std::string>> results;
+        status = storage.scan("orange", 10, results);
+        ASSERT_TRUE(status != Status::SUCCESS);
     END_TEST("scan_no_matches")
 }
 
@@ -239,13 +329,18 @@ template<typename StorageType>
 void test_scan_empty_prefix() {
     TEST("scan_empty_prefix")
         StorageType storage(4);
-        
-        storage.write("a", "1");
-        storage.write("b", "2");
-        storage.write("c", "3");
+
+        Status status = storage.write("a", "1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("b", "2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("c", "3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         
         // Empty prefix should match all keys
-        auto results = storage.scan("", 10);
+        std::vector<std::pair<std::string, std::string>> results;
+        status = storage.scan("", 10, results);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_EQ(3, results.size());
     END_TEST("scan_empty_prefix")
 }
@@ -256,19 +351,43 @@ void test_mixed_operations() {
         StorageType storage(4);
         
         // Mix of writes, reads, and overwrites
-        storage.write("a", "1");
-        storage.write("b", "2");
-        ASSERT_STR_EQ("1", storage.read("a"));
+        Status status = storage.write("a", "1");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("b", "2");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        std::string value;
+        status = storage.read("a", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("1", value);
         
-        storage.write("c", "3");
-        storage.write("a", "1_updated");
-        ASSERT_STR_EQ("1_updated", storage.read("a"));
-        ASSERT_STR_EQ("2", storage.read("b"));
-        ASSERT_STR_EQ("3", storage.read("c"));
+        status = storage.write("c", "3");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.write("a", "1_updated");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        status = storage.read("a", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("1_updated", value);
+        status = storage.read("b", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("2", value);
+        status = storage.read("c", value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        ASSERT_STR_EQ("3", value);
         
-        storage.write("d", "4");
-        auto results = storage.scan("", 10);
+        status = storage.write("d", "4");
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
+        std::vector<std::pair<std::string, std::string>> results;
+        status = storage.scan("", 10, results);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_EQ(4, results.size());
+        ASSERT_STR_EQ("a", results[0].first);
+        ASSERT_STR_EQ("1_updated", results[0].second);
+        ASSERT_STR_EQ("b", results[1].first);
+        ASSERT_STR_EQ("2", results[1].second);
+        ASSERT_STR_EQ("c", results[2].first);
+        ASSERT_STR_EQ("3", results[2].second);
+        ASSERT_STR_EQ("d", results[3].first);
+        ASSERT_STR_EQ("4", results[3].second);
     END_TEST("mixed_operations")
 }
 
