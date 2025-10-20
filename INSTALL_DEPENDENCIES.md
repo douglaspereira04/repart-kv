@@ -15,7 +15,8 @@ sudo apt-get install -y \
     liblzma-dev \
     liblz4-dev \
     libzstd-dev \
-    libmetis-dev
+    libmetis-dev \
+    libboost-dev
 ```
 
 ## Step-by-Step Installation
@@ -91,6 +92,13 @@ ls /usr/lib/libmetis.so
 ```
 
 Expected: Library file exists
+
+### Verify Boost
+```bash
+grep -R "#define BOOST_LIB_VERSION" /usr/include/boost/version.hpp
+```
+
+Expected: Version string 1_83 or higher
 
 ### Verify Compression Libraries
 ```bash
@@ -236,6 +244,7 @@ cmake -DCMAKE_PREFIX_PATH=/usr/local ..
 - **CMake**: 3.20 or higher
 - **TKRZW**: 1.0.27 or higher
 - **METIS**: 5.1.0 or higher
+- **Boost**: 1.83 or higher (lockfree SPSC queue)
 - **Compression libs**: lzma, lz4, zstd (development packages)
 
 ## What Each Dependency Does

@@ -222,6 +222,7 @@ All targets compile cleanly with C++20 and `-Wall -Wextra -Wpedantic`.
 - **C++20** - Concepts, constexpr if, auto, templates, chrono, threads
 - **TKRZW** - High-performance key-value database library (default)
 - **METIS** - Multi-level graph partitioning library
+- **Boost (Lockfree)** - `boost::lockfree::spsc_queue` for worker queues
 - **CMake** - Modern build system with 15+ targets
 - **std::shared_mutex** - Reader-writer locking
 - **std::mutex** - Exclusive locking for graph

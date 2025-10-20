@@ -5,15 +5,19 @@
 
 class WriteOperation : public Operation {
 private:
-    std::string* value_;
+    std::string value_;
 
 public:
     // Constructor takes references to key and value strings
     WriteOperation(std::string& key, std::string& value) 
-        : Operation(&key, Type::WRITE), value_(&value) {}
+        : Operation(new std::string(key), Type::WRITE), value_(value) {}
 
-    // Destructor (default)
-    ~WriteOperation() = default;
+    // Destructor
+    ~WriteOperation() {
+        // There is no waiting for writes
+        // Delete the key string since its owned by the operation
+        delete this->key_;
+    }
 
     // Copy constructor and assignment operator are deleted
     // to prevent copying of WriteOperation objects
@@ -27,6 +31,6 @@ public:
 
     // Get value reference method
     std::string& value() {
-        return *value_;
+        return value_;
     }
 };

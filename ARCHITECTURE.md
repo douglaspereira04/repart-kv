@@ -146,6 +146,7 @@ template<
   - Worker 0: ops[0], ops[TEST_WORKERS], ops[2*TEST_WORKERS], ...
   - Worker N: ops[N], ops[N+TEST_WORKERS], ops[N+2*TEST_WORKERS], ...
 - **Benefits**: No operation overlap, good load distribution
+- **Queues**: Lock-free Single-Producer/Single-Consumer queues using Boost `lockfree::spsc_queue`, coordinated with semaphores for bounded capacity
 - **Counters**: Per-worker arrays (no atomic contention)
 
 #### Metrics Thread

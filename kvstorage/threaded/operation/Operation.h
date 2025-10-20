@@ -12,7 +12,7 @@ enum class Type {
 };
 
 class Operation {
-private:
+protected:
     Type type_;
     std::string* key_;
     Status status_;

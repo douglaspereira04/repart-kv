@@ -30,6 +30,7 @@ A high-performance partitioned key-value storage system with automatic repartiti
 - Make or Ninja build system
 - **libtkrzw-dev** - TKRZW database library
 - **libmetis-dev** - METIS graph partitioning library
+- **libboost-dev (>= 1.83)** - Boost Lockfree SPSC queue (system-wide)
 - **unordered_dense** - High-performance hash map library (automatically fetched via CMake)
 
 ### Quick Install (Ubuntu/Debian)
@@ -38,7 +39,7 @@ A high-performance partitioned key-value storage system with automatic repartiti
 sudo apt-get update && sudo apt-get install -y \
     cmake build-essential pkg-config \
     libtkrzw-dev liblzma-dev liblz4-dev libzstd-dev \
-    libmetis-dev
+    libmetis-dev libboost-dev
 ```
 
 **⚠️ Important:** The compression libraries (`liblzma-dev`, `liblz4-dev`, `libzstd-dev`) and METIS are **required**.

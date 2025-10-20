@@ -7,7 +7,7 @@
 sudo apt-get update && sudo apt-get install -y \
     cmake build-essential pkg-config \
     libtkrzw-dev liblzma-dev liblz4-dev libzstd-dev \
-    libmetis-dev
+    libmetis-dev libboost-dev
 
 # Clone and build
 cd repart-kv
