@@ -99,6 +99,27 @@ void test_single_scan_operation() {
     END_TEST("single_scan_operation")
 }
 
+
+void test_sync_multiple_workers() {
+    TEST("sync_multiple_workers")
+        MapStorageEngine engine;
+        const size_t worker_count = 10;
+        std::vector<Worker<8>*> workers;
+        for (size_t i = 0; i < worker_count; ++i) {
+            workers.push_back(new Worker<8>(engine));
+        }
+        
+        SyncOperation *sync_operation = new SyncOperation(worker_count);
+        for (size_t i = 0; i < worker_count; ++i) {
+            workers[i]->enqueue(sync_operation);
+        }
+        
+        for (size_t i = 0; i < worker_count; ++i) {
+            workers[i]->stop();
+        }
+    END_TEST("sync_multiple_workers")
+}
+
 int main() {
     std::cout << "Starting SoftPartitionWorker tests..." << std::endl << std::endl;
 
@@ -106,6 +127,7 @@ int main() {
     test_single_read_operation();
     test_single_write_operation();
     test_single_scan_operation();
+    test_sync_multiple_workers();
 
     std::cout << std::endl << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;

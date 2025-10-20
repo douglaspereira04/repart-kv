@@ -2,7 +2,6 @@
 #include "../../../utils/test_assertions.h"
 #include <iostream>
 #include <thread>
-#include <chrono>
 #include <atomic>
 #include <vector>
 
