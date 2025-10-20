@@ -261,7 +261,9 @@ public:
         for (size_t partition_idx : sorted_partitions) {
             partition_locks_[partition_idx]->unlock_shared();
         }
-
+        if (results.size() == 0) {
+            status = Status::NOT_FOUND;
+        }
         return status;
     }
 

@@ -321,7 +321,7 @@ void test_scan_no_matches() {
         
         std::vector<std::pair<std::string, std::string>> results;
         status = storage.scan("orange", 10, results);
-        ASSERT_TRUE(status != Status::SUCCESS);
+        ASSERT_STATUS_EQ(Status::NOT_FOUND, status);
     END_TEST("scan_no_matches")
 }
 

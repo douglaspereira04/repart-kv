@@ -132,7 +132,7 @@ void test_scan_no_matches() {
         ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("banana", "fruit"));
         
         std::vector<std::pair<std::string, std::string>> results;
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan("orange", 10, results));
+        ASSERT_STATUS_EQ(Status::NOT_FOUND, engine.scan("orange", 10, results));
         ASSERT_EQ(0, results.size());
     END_TEST("scan_no_matches")
 }
@@ -348,7 +348,7 @@ void test_concurrent_reads_writes() {
         
         // Verify final state
         engine.lock_shared();
-        std::vector<std::pair<std::string, std::string>> results;
+        std::vector<std::pair<std::string, std::string>> results(100);
         ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan("key:", 100, results));
         engine.unlock_shared();
         

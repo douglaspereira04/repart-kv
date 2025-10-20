@@ -174,13 +174,22 @@ public:
                   [](const auto& a, const auto& b) { return a.first < b.first; });
         
         // Find first key >= initial_key_prefix and collect up to limit
-        results.reserve(std::min(limit, all_pairs.size()));
+        results.resize(limit);
+        size_t i = 0;
         for (const auto& pair : all_pairs) {
             if (pair.first >= initial_key_prefix) {
-                results.push_back(pair);
-                if (results.size() >= limit) {
+                results[i] = pair;
+                ++i;
+                if (i >= limit) {
                     break;
                 }
+            }
+        }
+
+        if (i < limit) {
+            results.resize(i);
+            if (i == 0) {
+                return Status::NOT_FOUND;
             }
         }
         

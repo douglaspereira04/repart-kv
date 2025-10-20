@@ -183,17 +183,25 @@ public:
         
         // Collect key-value pairs (already in sorted order, no filtering)
         std::string key, value;
-        while (results.size() < limit) {
+        results.resize(limit);
+        size_t i = 0;
+        while (i < limit) {
             tkrzw::Status status = iter->Get(&key, &value);
             if (status != tkrzw::Status::SUCCESS) {
                 break;  // No more entries
             }
             
-            results.push_back({key, value});
-            
+            results[i] = {key, value};
+            ++i;
             // Move to next entry
             if (iter->Next() != tkrzw::Status::SUCCESS) {
                 break;
+            }
+        }
+        if (i < limit) {
+            results.resize(i);
+            if (i == 0) {
+                return Status::NOT_FOUND;
             }
         }
         

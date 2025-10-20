@@ -23,21 +23,20 @@ void test_writeoperation() {
 
 void test_write_operation_value_access() {
     TEST("write_operation_value_access")
-        std::string key = "user_123";
-        std::string value = "user_data";
+        WriteOperation *write_op_ptr;
+        {
+            std::string key = "user_123";
+            std::string value = "user_data";
+            
+            WriteOperation *write_op = new WriteOperation(key, value);
+            write_op_ptr = write_op;
+            ASSERT_TRUE(write_op_ptr->key() == key);
+            ASSERT_TRUE(write_op_ptr->value() == value);
+            ASSERT_FALSE(&write_op_ptr->key() == &key);
+            ASSERT_FALSE(&write_op_ptr->value() == &value);
+        }
         
-        WriteOperation write_op(key, value);
-        
-        // Test value method
-        std::string& value_ref = write_op.value();
-        ASSERT_STR_EQ("user_data", value_ref);
-        
-        // Test that we can modify the value through the reference
-        value_ref = "modified_data";
-        ASSERT_STR_EQ("modified_data", value_ref);
-        
-        // Test that the original value is also modified
-        ASSERT_STR_EQ("modified_data", value);
+        delete write_op_ptr;
     END_TEST("write_operation_value_access")
 }
 
@@ -87,18 +86,13 @@ void test_write_operation_value_modification() {
         ASSERT_STR_EQ("original_value", write_op.value());
         ASSERT_STR_EQ("original_value", value);
         
-        // Modify through WriteOperation
-        write_op.value() = "new_value";
-        
-        // Test that both references show the change
-        ASSERT_STR_EQ("new_value", write_op.value());
-        ASSERT_STR_EQ("new_value", value);
-        
-        // Modify original value directly
-        value = "direct_change";
-        
-        // Test that WriteOperation sees the change
-        ASSERT_STR_EQ("direct_change", write_op.value());
+        // Modify value should not change the WriteOperation value
+        value = "new_value";
+        key = "new_key";
+        ASSERT_STR_EQ("original_value", write_op.value());
+        ASSERT_STR_EQ("modify_test", write_op.key());
+        ASSERT_FALSE(&write_op.key() == &key);
+        ASSERT_FALSE(&write_op.value() == &value);
     END_TEST("write_operation_value_modification")
 }
 

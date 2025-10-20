@@ -1,10 +1,8 @@
-#include "kvstorage/threaded/SoftPartitionWorker.h"
-#include "kvstorage/threaded/operation/ReadOperation.h"
-#include "kvstorage/threaded/operation/WriteOperation.h"
-#include "storage/MapStorageEngine.h"
-#include "utils/test_assertions.h"
-#include <chrono>
-#include <thread>
+#include "SoftPartitionWorker.h"
+#include "operation/ReadOperation.h"
+#include "operation/WriteOperation.h"
+#include "../../storage/MapStorageEngine.h"
+#include "../../utils/test_assertions.h"
 #include <string>
 
 // Test result tracking
@@ -54,8 +52,8 @@ void test_single_write_operation() {
 
         std::string key = "k1";
         std::string value = "v1";
-        WriteOperation write_operation(key, value);
-        worker.enqueue(&write_operation);
+        WriteOperation *write_operation = new WriteOperation(key, value);
+        worker.enqueue(write_operation);
 
         std::string read_value = "";
         ReadOperation read_operation(key, read_value);
@@ -64,7 +62,6 @@ void test_single_write_operation() {
 
         ASSERT_STATUS_EQ(Status::SUCCESS, read_operation.status());
         ASSERT_STR_EQ("v1", read_value);
-
         worker.stop();
     END_TEST("single_write_operation")
 }
@@ -86,7 +83,11 @@ void test_single_scan_operation() {
         std::vector<std::pair<std::string, std::string>> values = {{"", ""}, {"", ""}, {"", ""}};
         ScanOperation scan_operation(key, values, 1);
         worker.enqueue(&scan_operation);
-        scan_operation.wait();
+
+        scan_operation.synchronize();
+        scan_operation.destroy_barriers();
+
+        worker.stop();
 
         ASSERT_STATUS_EQ(Status::SUCCESS, scan_operation.status());
         ASSERT_STR_EQ("k1", values[0].first);
@@ -95,8 +96,6 @@ void test_single_scan_operation() {
         ASSERT_STR_EQ("v2", values[1].second);
         ASSERT_STR_EQ("k3", values[2].first);
         ASSERT_STR_EQ("v3", values[2].second);
-
-        worker.stop();
     END_TEST("single_scan_operation")
 }
 

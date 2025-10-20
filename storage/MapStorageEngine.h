@@ -69,9 +69,19 @@ public:
         auto it = storage_.lower_bound(initial_key_prefix);
         
         // Iterate and collect key-value pairs
-        while (it != storage_.end() && results.size() < limit) {
-            results.push_back({it->first, it->second});
+        results.resize(limit);
+        size_t i = 0;
+        while (it != storage_.end() && i < limit) {
+            results[i] = {it->first, it->second};
+            ++i;
             ++it;
+        }
+
+        if (i < limit) {
+            results.resize(i);
+            if (i == 0) {
+                return Status::NOT_FOUND;
+            }
         }
 
         return Status::SUCCESS;
