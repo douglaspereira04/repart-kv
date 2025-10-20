@@ -7,7 +7,8 @@ enum class Type {
     READ,
     WRITE,
     SCAN,
-    DONE
+    DONE,
+    DUMMY
 };
 
 class Operation {
