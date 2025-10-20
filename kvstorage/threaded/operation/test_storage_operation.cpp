@@ -9,24 +9,8 @@
 int tests_passed = 0;
 int tests_failed = 0;
 
-void test_operation_with_storage() {
-    TEST("operation_with_storage")
-        std::string key = "test_key";
-        MapStorageEngine storage(0);
-        
-        Operation<MapStorageEngine> operation(&key, Type::READ, &storage);
-        
-        // Test that operation has access to storage
-        ASSERT_TRUE(&operation.storage() == &storage);
-        
-        // Test that operation type is correct
-        ASSERT_TRUE(operation.type() == Type::READ);
-        ASSERT_STR_EQ("test_key", operation.key());
-    END_TEST("operation_with_storage")
-}
-
-void test_operation_without_storage() {
-    TEST("operation_without_storage")
+void test_basic_operation() {
+    TEST("basic_operation")
         std::string key = "test_key";
         
         Operation<MapStorageEngine> operation(&key, Type::WRITE);
@@ -34,34 +18,12 @@ void test_operation_without_storage() {
         // Test that operation type is correct
         ASSERT_TRUE(operation.type() == Type::WRITE);
         ASSERT_STR_EQ("test_key", operation.key());
-        
-        // Note: storage() method would cause undefined behavior if called
-        // since storage_ is nullptr, so we don't test it here
-    END_TEST("operation_without_storage")
+
+    END_TEST("basic_operation")
 }
 
-void test_readoperation_with_storage() {
-    TEST("readoperation_with_storage")
-        std::string key = "read_key";
-        std::string value = "read_value";
-        MapStorageEngine storage(0);
-        
-        ReadOperation<MapStorageEngine> read_op(key, value, storage);
-        
-        // Test that ReadOperation inherits storage access
-        ASSERT_TRUE(&read_op.storage() == &storage);
-        
-        // Test that ReadOperation type is correct
-        ASSERT_TRUE(read_op.type() == Type::READ);
-        ASSERT_STR_EQ("read_key", read_op.key());
-        
-        // Test that value access still works
-        ASSERT_STR_EQ("read_value", read_op.value());
-    END_TEST("readoperation_with_storage")
-}
-
-void test_readoperation_without_storage() {
-    TEST("readoperation_without_storage")
+void test_readoperation() {
+    TEST("readoperation")
         std::string key = "read_key";
         std::string value = "read_value";
         
@@ -73,19 +35,14 @@ void test_readoperation_without_storage() {
         
         // Test that value access works
         ASSERT_STR_EQ("read_value", read_op.value());
-        
-        // Note: storage() method would cause undefined behavior if called
-        // since storage_ is nullptr, so we don't test it here
-    END_TEST("readoperation_without_storage")
+    END_TEST("readoperation")
 }
 
 int main() {
     std::cout << "Starting Operation with Storage tests..." << std::endl << std::endl;
     
-    test_operation_with_storage();
-    test_operation_without_storage();
-    test_readoperation_with_storage();
-    test_readoperation_without_storage();
+    test_basic_operation();
+    test_readoperation();
     
     std::cout << std::endl << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;

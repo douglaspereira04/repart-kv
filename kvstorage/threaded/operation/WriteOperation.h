@@ -13,10 +13,6 @@ public:
     WriteOperation(std::string& key, std::string& value) 
         : Operation<StorageType>(&key, Type::WRITE), value_(&value) {}
 
-    // Constructor takes references to key, value strings, and storage engine
-    WriteOperation(std::string& key, std::string& value, StorageEngine<StorageType>& storage) 
-        : Operation<StorageType>(&key, Type::WRITE, &storage), value_(&value) {}
-
     // Destructor (default)
     ~WriteOperation() = default;
 

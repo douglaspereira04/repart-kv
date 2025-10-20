@@ -19,13 +19,6 @@ public:
             pthread_barrier_init(&barrier_, NULL, partition_count);
         }
 
-    // Constructor takes references to key, value strings, and storage engine
-    ScanOperation(std::string* key, std::vector<std::pair<std::string, std::string>>& values, StorageEngine<StorageType>* storage, size_t partition_count) 
-        : Operation<StorageType>(key, Type::SCAN), future_(values) {
-            this->storage_ = storage;
-            pthread_barrier_init(&barrier_, NULL, partition_count);
-        }
-
     // Destructor (default)
     ~ScanOperation() = default;
 

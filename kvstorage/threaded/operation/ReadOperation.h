@@ -13,11 +13,7 @@ public:
     // Constructor takes references to key and value strings
     ReadOperation(std::string& key, std::string& value) 
         : Operation<StorageType>(&key, Type::READ), future_(value) {}
-
-    // Constructor takes references to key, value strings, and storage engine
-    ReadOperation(std::string& key, std::string& value, StorageEngine<StorageType>& storage) 
-        : Operation<StorageType>(&key, Type::READ, &storage), future_(value) {}
-
+    
     // Destructor (default)
     ~ReadOperation() = default;
 

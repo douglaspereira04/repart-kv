@@ -27,7 +27,7 @@ void test_scan_operation_constructor() {
     END_TEST("scan_operation_constructor")
 }
 
-void test_scan_operation_barrier() {
+void test_scan_operation_single_storage() {
     TEST("scan_operation_barrier")
         // Create storage engine and populate with key-value pairs
         MapStorageEngine storage(0);
@@ -117,7 +117,7 @@ int main() {
     std::cout << "Starting ScanOperation class tests..." << std::endl << std::endl;
     
     test_scan_operation_constructor();
-    test_scan_operation_barrier();
+    test_scan_operation_single_storage();
     
     std::cout << std::endl << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
