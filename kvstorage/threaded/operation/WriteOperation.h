@@ -3,15 +3,14 @@
 #include "Operation.h"
 #include <string>
 
-template<typename StorageType>
-class WriteOperation : public Operation<StorageType> {
+class WriteOperation : public Operation {
 private:
     std::string* value_;
 
 public:
     // Constructor takes references to key and value strings
     WriteOperation(std::string& key, std::string& value) 
-        : Operation<StorageType>(&key, Type::WRITE), value_(&value) {}
+        : Operation(&key, Type::WRITE), value_(&value) {}
 
     // Destructor (default)
     ~WriteOperation() = default;

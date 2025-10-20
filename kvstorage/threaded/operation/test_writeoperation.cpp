@@ -13,7 +13,7 @@ void test_writeoperation() {
         std::string key = "write_key";
         std::string value = "write_value";
         
-        WriteOperation<MapStorageEngine> write_op(key, value);
+        WriteOperation write_op(key, value);
         
         // Test that WriteOperation type is correct
         ASSERT_TRUE(write_op.type() == Type::WRITE);
@@ -26,7 +26,7 @@ void test_write_operation_value_access() {
         std::string key = "user_123";
         std::string value = "user_data";
         
-        WriteOperation<MapStorageEngine> write_op(key, value);
+        WriteOperation write_op(key, value);
         
         // Test value method
         std::string& value_ref = write_op.value();
@@ -46,7 +46,7 @@ void test_write_operation() {
         std::string key = "write_key";
         std::string value = "write_value";
         
-        WriteOperation<MapStorageEngine> write_op(key, value);
+        WriteOperation write_op(key, value);
         
         // Test that WriteOperation type is correct
         ASSERT_TRUE(write_op.type() == Type::WRITE);
@@ -65,7 +65,7 @@ void test_write_operation_inheritance() {
         std::string key = "inheritance_test";
         std::string value = "inheritance_value";
         
-        WriteOperation<MapStorageEngine> write_op(key, value);
+        WriteOperation write_op(key, value);
         
         // Test that WriteOperation can be used as Operation
         ASSERT_TRUE(write_op.type() == Type::WRITE);
@@ -81,7 +81,7 @@ void test_write_operation_value_modification() {
         std::string key = "modify_test";
         std::string value = "original_value";
         
-        WriteOperation<MapStorageEngine> write_op(key, value);
+        WriteOperation write_op(key, value);
         
         // Test initial value
         ASSERT_STR_EQ("original_value", write_op.value());

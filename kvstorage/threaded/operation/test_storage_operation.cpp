@@ -13,7 +13,7 @@ void test_basic_operation() {
     TEST("basic_operation")
         std::string key = "test_key";
         
-        Operation<MapStorageEngine> operation(&key, Type::WRITE);
+        Operation operation(&key, Type::WRITE);
         
         // Test that operation type is correct
         ASSERT_TRUE(operation.type() == Type::WRITE);
@@ -27,7 +27,7 @@ void test_readoperation() {
         std::string key = "read_key";
         std::string value = "read_value";
         
-        ReadOperation<MapStorageEngine> read_op(key, value);
+        ReadOperation read_op(key, value);
         
         // Test that ReadOperation type is correct
         ASSERT_TRUE(read_op.type() == Type::READ);

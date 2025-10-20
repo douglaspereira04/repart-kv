@@ -13,7 +13,7 @@ void test_read_operation_constructor() {
         std::string key = "test_key";
         std::string value = "test_value";
         
-        ReadOperation<MapStorageEngine> read_op(key, value);
+        ReadOperation read_op(key, value);
         
         // Test that it inherits from Operation correctly
         ASSERT_TRUE(read_op.type() == Type::READ);
@@ -26,7 +26,7 @@ void test_read_operation_value_access() {
         std::string key = "user_123";
         std::string value = "user_data";
         
-        ReadOperation<MapStorageEngine> read_op(key, value);
+        ReadOperation read_op(key, value);
         
         // Test value method
         std::string& value_ref = read_op.value();
@@ -43,7 +43,7 @@ void test_read_operation_notify() {
         std::string key = "notify_test";
         std::string value = "notify_value";
         
-        ReadOperation<MapStorageEngine> read_op(key, value);
+        ReadOperation read_op(key, value);
         
         // Test notify method (should not block since we're not calling wait)
         read_op.notify();
@@ -58,7 +58,7 @@ void test_read_operation_inheritance() {
         std::string key = "inheritance_test";
         std::string value = "inheritance_value";
         
-        ReadOperation<MapStorageEngine> read_op(key, value);
+        ReadOperation read_op(key, value);
         
         // Test that ReadOperation can be used as Operation
         ASSERT_TRUE(read_op.type() == Type::READ);

@@ -6,8 +6,7 @@
 #include <vector>
 #include <pthread.h>
 
-template<typename StorageType>
-class ScanOperation : public Operation<StorageType> {
+class ScanOperation : public Operation {
 private:
     Future<std::vector<std::pair<std::string, std::string>>> future_;
     pthread_barrier_t barrier_;
@@ -15,7 +14,7 @@ private:
 public:
     // Constructor takes references to key and value strings
     ScanOperation(std::string& key, std::vector<std::pair<std::string, std::string>>& values, size_t partition_count) 
-        : Operation<StorageType>(&key, Type::SCAN), future_(values) {
+        : Operation(&key, Type::SCAN), future_(values) {
             pthread_barrier_init(&barrier_, NULL, partition_count);
         }
 
@@ -50,11 +49,6 @@ public:
     // Destroy barrier method
     void destroy_barrier() {
         pthread_barrier_destroy(&barrier_);
-    }
-
-    // Get storage engine reference
-    const StorageEngine<StorageType>* &storage() const {
-        return this->storage_;
     }
 
     void wait() {

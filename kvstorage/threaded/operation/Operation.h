@@ -2,17 +2,13 @@
 
 #include <string>
 
-// Forward declarations
-template<typename T>
-class StorageEngine;
-
 enum class Type {
     READ,
     WRITE,
-    SCAN
+    SCAN,
+    DONE
 };
 
-template<typename StorageType>
 class Operation {
 private:
     Type type_;

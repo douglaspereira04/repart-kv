@@ -4,15 +4,14 @@
 #include "../future/Future.h"
 #include <string>
 
-template<typename StorageType>
-class ReadOperation : public Operation<StorageType> {
+class ReadOperation : public Operation {
 private:
     Future<std::string> future_;
 
 public:
     // Constructor takes references to key and value strings
     ReadOperation(std::string& key, std::string& value) 
-        : Operation<StorageType>(&key, Type::READ), future_(value) {}
+        : Operation(&key, Type::READ), future_(value) {}
     
     // Destructor (default)
     ~ReadOperation() = default;

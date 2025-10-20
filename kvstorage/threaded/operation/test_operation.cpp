@@ -22,7 +22,7 @@ void test_read_operation() {
         std::string key_data = "user_123";
         std::string* key_ptr = &key_data;
         
-        Operation<MapStorageEngine> operation(key_ptr, Type::READ);
+        Operation operation(key_ptr, Type::READ);
         
         // Test type access
         ASSERT_TRUE(operation.type() == Type::READ);
@@ -37,7 +37,7 @@ void test_write_operation() {
         std::string key_data = "product_456";
         std::string* key_ptr = &key_data;
         
-        Operation<MapStorageEngine> operation(key_ptr, Type::WRITE);
+        Operation operation(key_ptr, Type::WRITE);
         
         // Test type access
         ASSERT_TRUE(operation.type() == Type::WRITE);
@@ -52,7 +52,7 @@ void test_scan_operation() {
         std::string key_data = "scan_prefix";
         std::string* key_ptr = &key_data;
         
-        Operation<MapStorageEngine> operation(key_ptr, Type::SCAN);
+        Operation operation(key_ptr, Type::SCAN);
         
         // Test type access
         ASSERT_TRUE(operation.type() == Type::SCAN);
@@ -68,7 +68,7 @@ void test_key_array_access() {
         std::string keys[] = {"key1", "key2", "key3", "key4"};
         std::string* key_ptr = keys;
         
-        Operation<MapStorageEngine> operation(key_ptr, Type::READ);
+        Operation operation(key_ptr, Type::READ);
         
         // Test array access
         ASSERT_STR_EQ("key1", operation.key(0));
@@ -85,9 +85,9 @@ void test_constructor_parameters() {
         std::string key2 = "test_key_2";
         std::string key3 = "test_key_3";
         
-        Operation<MapStorageEngine> read_op(&key1, Type::READ);
-        Operation<MapStorageEngine> write_op(&key2, Type::WRITE);
-        Operation<MapStorageEngine> scan_op(&key3, Type::SCAN);
+        Operation read_op(&key1, Type::READ);
+        Operation write_op(&key2, Type::WRITE);
+        Operation scan_op(&key3, Type::SCAN);
         
         // Verify each operation has correct type and key
         ASSERT_TRUE(read_op.type() == Type::READ);
@@ -106,7 +106,7 @@ void test_const_correctness() {
         std::string key_data = "const_test_key";
         std::string* key_ptr = &key_data;
         
-        Operation<MapStorageEngine> operation(key_ptr, Type::READ);
+        Operation operation(key_ptr, Type::READ);
         
         // Test that const methods work
         Type type = operation.type();
@@ -122,7 +122,7 @@ void test_pointer_relationship() {
         std::string key_data = "pointer_test";
         std::string* key_ptr = &key_data;
         
-        Operation<MapStorageEngine> operation(key_ptr, Type::WRITE);
+        Operation operation(key_ptr, Type::WRITE);
         
         // Test that the operation holds a reference to the original data
         ASSERT_TRUE(&operation.key() == &key_data);

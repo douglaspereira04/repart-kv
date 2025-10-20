@@ -16,7 +16,7 @@ void test_scan_operation_constructor() {
         std::string key = "test_key";
         std::vector<std::pair<std::string, std::string>> results(5);
         
-        ScanOperation<MapStorageEngine> scan_op(key, results, 3);  // 3 partitions
+        ScanOperation scan_op(key, results, 3);  // 3 partitions
         
         // Test that it inherits from Operation correctly
         ASSERT_TRUE(scan_op.type() == Type::SCAN);
@@ -42,7 +42,7 @@ void test_scan_operation_single_storage() {
         std::vector<std::pair<std::string, std::string>> results;
         results.resize(3);  // Limit scan to 3 results
         
-        ScanOperation<MapStorageEngine> scan_op(scan_key, results, 2);  // 2 partitions
+        ScanOperation scan_op(scan_key, results, 2);  // 2 partitions
         
         // Test that operation is properly constructed
         ASSERT_TRUE(scan_op.type() == Type::SCAN);
