@@ -5,6 +5,7 @@
  * @brief Status codes for storage engine operations
  */
 enum class Status {
+    PENDING,
     SUCCESS,
     NOT_FOUND,
     ERROR,
@@ -17,6 +18,8 @@ enum class Status {
  */
 inline std::string to_string(Status status) {
     switch (status) {
+        case Status::PENDING:
+            return "PENDING";
         case Status::SUCCESS:
             return "SUCCESS";
         case Status::NOT_FOUND:

@@ -102,6 +102,7 @@ void test_future_reference_relationship() {
     TEST("future_reference_relationship")
         std::string value = "test_value";
         Future<std::string> future(value);
+        std::string* value_ptr = &value;
         
         // Test that the future holds a reference to the original data
         ASSERT_TRUE(&future.value() == &value);
@@ -110,6 +111,12 @@ void test_future_reference_relationship() {
         future.value() = "modified_value";
         ASSERT_STR_EQ("modified_value", value);
         ASSERT_STR_EQ("modified_value", future.value());
+
+        future.value("new_value");
+        ASSERT_STR_EQ("new_value", value);
+        ASSERT_STR_EQ("new_value", future.value());
+        ASSERT_TRUE(&future.value() == value_ptr);
+        ASSERT_TRUE(&future.value() == &value);
     END_TEST("future_reference_relationship")
 }
 

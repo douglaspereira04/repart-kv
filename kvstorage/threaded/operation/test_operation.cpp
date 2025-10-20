@@ -133,6 +133,17 @@ void test_pointer_relationship() {
     END_TEST("pointer_relationship")
 }
 
+void test_status() {
+    TEST("status")
+        std::string key_data = "status_test_key";
+        std::string* key_ptr = &key_data;
+        Operation operation(key_ptr, Type::READ);
+        ASSERT_TRUE(operation.status() == Status::PENDING);
+        operation.status(Status::SUCCESS);
+        ASSERT_TRUE(operation.status() == Status::SUCCESS);
+    END_TEST("status")
+}
+
 int main() {
     std::cout << "Starting Operation class tests..." << std::endl << std::endl;
     
@@ -144,6 +155,7 @@ int main() {
     test_constructor_parameters();
     test_const_correctness();
     test_pointer_relationship();
+    test_status();
     
     std::cout << std::endl << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;

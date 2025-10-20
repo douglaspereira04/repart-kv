@@ -31,6 +31,10 @@ public:
         return future_.value();
     }
 
+    void value(const std::string& value) {
+        future_.value(value);
+    }
+
     // Notify method that invokes the future notify
     void notify() {
         future_.notify();

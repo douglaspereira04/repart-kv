@@ -45,4 +45,8 @@ public:
     T& value() {
         return value_;
     }
+
+    void value(const T& value) {
+        value_ = value;
+    }
 };

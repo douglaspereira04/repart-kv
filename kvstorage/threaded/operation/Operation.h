@@ -1,5 +1,6 @@
 #pragma once
 
+#include "storage/Status.h"
 #include <string>
 
 enum class Type {
@@ -13,10 +14,11 @@ class Operation {
 private:
     Type type_;
     std::string* key_;
+    Status status_;
 
 public:
     // Constructor takes a key pointer and type
-    Operation(std::string* key, Type type) : type_(type), key_(key) {}
+    Operation(std::string* key, Type type) : type_(type), key_(key), status_(Status::PENDING) {}
 
     // Destructor (default)
     ~Operation() = default;
@@ -41,5 +43,13 @@ public:
 
     const std::string& key(size_t idx) const {
         return key_[idx];
+    }
+
+    Status status() const {
+        return status_;
+    }
+
+    void status(Status status) {
+        status_ = status;
     }
 };
