@@ -29,6 +29,8 @@ public:
 
     // Wait method that waits for the barrier
     void wait() {
-        pthread_barrier_wait(&barrier_);
+        if (pthread_barrier_wait(&barrier_) == PTHREAD_BARRIER_SERIAL_THREAD) {
+            pthread_barrier_destroy(&barrier_);
+        }
     }
 };

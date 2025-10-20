@@ -384,6 +384,37 @@ target_include_directories(test_scanoperation PRIVATE
     ${CMAKE_SOURCE_DIR}/kvstorage/threaded/future
 )
 
+# DoneOperation class tests
+add_executable(test_doneoperation 
+    kvstorage/threaded/operation/test_doneoperation.cpp
+)
+
+target_link_libraries(test_doneoperation PRIVATE 
+    Threads::Threads
+)
+target_compile_features(test_doneoperation PRIVATE cxx_std_20)
+target_compile_options(test_doneoperation PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_doneoperation PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/operation
+)
+
+# SyncOperation class tests
+add_executable(test_syncoperation 
+    kvstorage/threaded/operation/test_syncoperation.cpp
+)
+
+target_link_libraries(test_syncoperation PRIVATE 
+    Threads::Threads
+)
+target_compile_features(test_syncoperation PRIVATE cxx_std_20)
+target_compile_options(test_syncoperation PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_syncoperation PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/operation
+    ${CMAKE_SOURCE_DIR}/kvstorage/threaded/future
+)
+
 # Graph tests
 add_executable(test_graph 
     graph/test_graph.cpp

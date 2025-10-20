@@ -8,6 +8,7 @@ enum class Type {
     WRITE,
     SCAN,
     DONE,
+    SYNC,
     DUMMY
 };
 

@@ -6,6 +6,7 @@
 #include "kvstorage/threaded/operation/DoneOperation.h"
 #include "operation/Operation.h"
 #include "operation/ReadOperation.h"
+#include "operation/SyncOperation.h"
 #include "operation/WriteOperation.h"
 #include "operation/ScanOperation.h"
 
@@ -86,6 +87,18 @@ public:
     }
 
     /**
+     * @brief Sync operation
+     * @param operation The sync operation to perform
+     */
+    void sync(SyncOperation* operation) {
+        bool is_coordinator = operation->wait();
+        if (is_coordinator) {
+            operation->destroy_barrier();
+            delete operation;
+        }
+    }
+
+    /**
      * @brief Dequeue an operation from the queue
      * @param operation Output parameter to store the dequeued operation
      * 
@@ -153,6 +166,9 @@ public:
                     break;
                 case Type::SCAN:
                     scan(static_cast<ScanOperation*>(operation));
+                    break;
+                case Type::SYNC:
+                    sync(static_cast<SyncOperation*>(operation));
                     break;
                 case Type::DONE:
                     static_cast<DoneOperation*>(operation)->wait();
