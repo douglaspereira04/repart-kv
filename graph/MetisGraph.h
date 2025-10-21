@@ -45,6 +45,9 @@ private:
     // Flag indicating if graph has been prepared
     bool prepared_;
 
+    // Partition result array
+    std::vector<idx_t> part_;
+
 public:
     /**
      * @brief Default constructor
@@ -126,15 +129,23 @@ public:
         ncon_ = 1;
         prepared_ = true;
     }
+
+    /**
+     * @brief Gets the partition result array.
+     * 
+     * @return Const reference to the partition result array
+     */
+    const std::vector<idx_t>& get_partition_result() const {
+        return part_;
+    }
     
     /**
-     * @brief Partitions the graph using METIS and returns partition assignments.
+     * @brief Partitions the graph using METIS.
      * 
      * @param num_partitions Number of partitions to create
-     * @return Vector of partition IDs (0 to num_partitions-1) for each vertex in idx_to_vertex_ order
      * @throws std::runtime_error if graph not prepared or METIS fails
      */
-    std::vector<idx_t> partition(int num_partitions) {
+    void partition(int num_partitions) {
         if (!prepared_) {
             throw std::runtime_error("Graph must be prepared before partitioning");
         }
@@ -152,7 +163,7 @@ public:
         idx_t objval;  // Edge-cut or communication volume
         
         // Partition result array
-        std::vector<idx_t> part(nvtxs_);
+        part_.resize(nvtxs_);
         
         // METIS options (use defaults)
         idx_t options[METIS_NOPTIONS];
@@ -175,7 +186,7 @@ public:
                 nullptr,              // Imbalance tolerance (use default)
                 options,              // Options array
                 &objval,              // Output: edge-cut
-                part.data()           // Output: partition assignment
+                part_.data()           // Output: partition assignment
             );
         } else {
             // Use k-way partitioning for larger number of partitions
@@ -192,16 +203,13 @@ public:
                 nullptr,              // Imbalance tolerance
                 options,              // Options array
                 &objval,              // Output: edge-cut
-                part.data()           // Output: partition assignment
+                part_.data()           // Output: partition assignment
             );
         }
         
         if (ret != METIS_OK) {
             throw std::runtime_error("METIS partitioning failed with error code: " + std::to_string(ret));
         }
-        
-        // Return the partition assignments directly
-        return part;
     }
     
     /**

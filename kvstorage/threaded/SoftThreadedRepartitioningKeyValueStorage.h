@@ -53,8 +53,7 @@ class SoftThreadedRepartitioningKeyValueStorage
         StorageEngineType
       > {
 private:
-    PartitionMapType<size_t> *key_map_;           // Maps key ranges to partition IDs
-    PartitionMapType<size_t> *updated_key_map_;   // Maps key ranges to partition IDs
+    PartitionMapType<size_t> key_map_;           // Maps key ranges to partition IDs
     std::atomic_bool update_key_map_;            // Flag indicating if the partition map should be updated
     std::shared_mutex key_map_lock_;                   // Mutex for thread-safe access to key mappers
     std::atomic_bool enable_tracking_;                             // Enable/disable tracking of key access patterns
@@ -95,7 +94,8 @@ public:
         const HashFunc& hash_func = HashFunc(),
         std::optional<std::chrono::milliseconds> tracking_duration = std::nullopt,
         std::optional<std::chrono::milliseconds> repartition_interval = std::nullopt)
-        : update_key_map_(false),
+        : key_map_(PartitionMapType<size_t>()),
+          update_key_map_(false),
           enable_tracking_(false), 
           partition_count_(partition_count), 
           storage_(StorageEngineType(0)),
@@ -107,9 +107,6 @@ public:
           running_(true),
           workers_(), 
           auto_repartitioning_(false){
-
-        key_map_ = new PartitionMapType<size_t>();
-        updated_key_map_ = nullptr;
         
         // Create workers
         workers_.reserve(partition_count_);
@@ -149,7 +146,7 @@ public:
      * @return Status code indicating the result of the operation
      */
      Status read_impl(const std::string& key, std::string& value) {
-        verify_and_swap_partition_maps();
+        verify_and_update_key_map();
         // Lock key map for reading
         key_map_lock_.lock_shared();
 
@@ -160,10 +157,11 @@ public:
 
         // Look up which partition owns this key
         size_t partition_idx;
-        bool found = key_map_->get(key, partition_idx);
+        bool found = key_map_.get(key, partition_idx);
         if (!found) {
-            // Key not mapped yet - fall back to hash partitioning
-            partition_idx = hash_func_(key) % partition_count_;
+            // If the key is not mapped it is not stored
+            key_map_lock_.unlock_shared();
+            return Status::NOT_FOUND;
         }
 
         ReadOperation read_operation(key, value);
@@ -184,7 +182,7 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status write_impl(const std::string& key, const std::string& value) {
-        verify_and_swap_partition_maps();
+        verify_and_update_key_map();
         // Lock key map for writing
         key_map_lock_.lock();
 
@@ -195,11 +193,11 @@ public:
 
         // Look up or assign partition for this key
         size_t partition_idx;
-        bool found = key_map_->get(key, partition_idx);
+        bool found = key_map_.get(key, partition_idx);
         if (!found) {
             // Key not mapped yet - fall back to hash partitioning
             partition_idx = hash_func_(key) % partition_count_;
-            key_map_->put(key, partition_idx);
+            key_map_.put(key, partition_idx);
         }
         
         WriteOperation *write_operation = new WriteOperation(key, value);
@@ -220,7 +218,7 @@ public:
      */
     Status scan_impl(const std::string& initial_key_prefix, size_t limit, std::vector<std::pair<std::string, std::string>>& results) {
 
-        verify_and_swap_partition_maps();
+        verify_and_update_key_map();
 
         std::set<size_t> partition_set;
         std::vector<std::string> key_array;
@@ -229,7 +227,7 @@ public:
         key_map_lock_.lock_shared();
 
         // Get iterator starting from initial_key
-        auto it = key_map_->lower_bound(initial_key_prefix);
+        auto it = key_map_.lower_bound(initial_key_prefix);
         
         size_t count = 0;
         // Collect storage pointers and keys up to limit
@@ -264,7 +262,13 @@ public:
     }
 
 
-    void verify_and_swap_partition_maps() {
+    /**
+     * @brief Verify and update the key map
+     * 
+     * This method verifies if the key map should be updated and updates it if needed.
+     * It also releases the semaphore to allow the repartitioning thread to proceed to the next repartitioning cycle.
+     */
+    void verify_and_update_key_map() {
         // We take a look at the update_key_map_ flag in a relaxed manner
         // if seems enabled, we verify with stronger memory order
         if (update_key_map_.load(std::memory_order_relaxed)) {
@@ -273,7 +277,7 @@ public:
                 // Lock key map so it can be changed safely
                 key_map_lock_.lock();
                 if (update_key_map_) {
-                    std::swap(key_map_, updated_key_map_);
+                    update_key_map();
                     update_key_map_ = false;
                     
                     // We release the semaphore to allow the repartitioning
@@ -288,9 +292,9 @@ public:
                 // be processed only after every previously
                 // enqueued operations, to any worker, are processed
                 // This voids multiple workers acting in the same partition
-                SyncOperation sync_operation(partition_count_);
+                SyncOperation *sync_operation = new SyncOperation(partition_count_);
                 for (size_t i = 0; i < partition_count_; ++i) {
-                    workers_[i]->enqueue(&sync_operation);
+                    workers_[i]->enqueue(sync_operation);
                 }
         
                 // Unlock key map
@@ -298,6 +302,19 @@ public:
             }
         }
     }
+
+
+    /**
+     * @brief Update the key map with the new partition assignments
+     */
+    void update_key_map() {
+        const auto& idx_to_vertex = metis_graph_.get_idx_to_vertex();
+        std::vector<idx_t> metis_partitions = metis_graph_.get_partition_result();
+        for (size_t i = 0; i < metis_partitions.size(); ++i) {
+            key_map_.put(idx_to_vertex[i], static_cast<size_t>(metis_partitions[i]));
+        }
+    }
+
     /**
      * @brief Repartition data across available partitions (implementation)
      * 
@@ -316,6 +333,9 @@ public:
      * will occur lazily as keys are accessed and reassigned to new partitions.
      */
     void repartition_impl() { 
+        // Set repartitioning flag to true (this flag is for testing purposes)
+        is_repartitioning_ = true;
+
         // Tracking is disabled during repartitioning 
         // and during the tracking_duration_ interval 
         // Will be re-enabled before waiting for the next 
@@ -332,11 +352,16 @@ public:
         if (graph_.get_vertex_count() > 0) {
             try {
                 metis_graph_.prepare_from_graph(graph_);
-                metis_partitions = metis_graph_.partition(partition_count_);\
+                metis_graph_.partition(partition_count_);
+                update_key_map_ = true;
             } catch (const std::exception& e) {
                 // If METIS fails, keep the old partition map
                 // This can happen if the graph is too small or has other issues
             }
+
+            // Now metis_graph is available with improved key to partition 
+            // assignments. The next operation call will update the key map,
+            // with the new assignments and re-start the repartitioning cycle.
         }
         
         // Step 2: Clear the graph for fresh tracking
@@ -345,14 +370,6 @@ public:
         // Unlock graph after processing
         graph_lock_.unlock();
 
-        // Step 3: create an updated_key_map_ with new assignments
-        // Delete the old updated_key_map_ before creating the new one
-        delete updated_key_map_;
-        updated_key_map_ = new PartitionMapType<size_t>();
-        const auto& idx_to_vertex = metis_graph_.get_idx_to_vertex();
-        for (size_t i = 0; i < metis_partitions.size(); ++i) {
-            updated_key_map_->put(idx_to_vertex[i], static_cast<size_t>(metis_partitions[i]));
-        }
         
         // Clear repartitioning flag (this flag is for testing purposes)
         is_repartitioning_ = false;

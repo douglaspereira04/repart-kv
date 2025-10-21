@@ -63,7 +63,8 @@ int main() {
         
         // Partition into 2 parts
         std::cout << "Partitioning into 2 parts..." << std::endl;
-        auto partitions_2 = metis_graph.partition(2);
+        metis_graph.partition(2);
+        auto partitions_2 = metis_graph.get_partition_result();
         
         // Group vertices by partition
         std::map<int, std::vector<std::string>> parts_2;
@@ -83,7 +84,8 @@ int main() {
         
         // Partition into 3 parts
         std::cout << "Partitioning into 3 parts..." << std::endl;
-        auto partitions_3 = metis_graph.partition(3);
+        metis_graph.partition(3);
+        auto partitions_3 = metis_graph.get_partition_result();
         
         // Group vertices by partition
         std::map<int, std::vector<std::string>> parts_3;

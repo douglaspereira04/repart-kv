@@ -1,6 +1,5 @@
 #pragma once
 
-#include <iostream>
 #include <thread>
 #include <semaphore>
 #include <boost/lockfree/spsc_queue.hpp>

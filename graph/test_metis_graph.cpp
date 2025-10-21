@@ -82,7 +82,8 @@ void test_partition_simple() {
         metis_graph.prepare_from_graph(graph);
         
         // Partition into 2 parts
-        auto partitions = metis_graph.partition(2);
+        metis_graph.partition(2);
+        auto partitions = metis_graph.get_partition_result();
         
         ASSERT_EQ(4, partitions.size());
         
@@ -125,7 +126,8 @@ void test_partition_with_weights() {
     metis_graph.prepare_from_graph(graph);
     
     // Partition into 2 parts
-    auto partitions = metis_graph.partition(2);
+    metis_graph.partition(2);
+    auto partitions = metis_graph.get_partition_result();
     
     ASSERT_EQ(4, partitions.size());
     
@@ -173,7 +175,8 @@ void test_multiple_partitions() {
     
     // Test different partition counts
     for (int nparts = 2; nparts <= 4; ++nparts) {
-        auto partitions = metis_graph.partition(nparts);
+        metis_graph.partition(nparts);
+        auto partitions = metis_graph.get_partition_result();
         
         ASSERT_EQ(6, partitions.size());
         

@@ -301,7 +301,8 @@ public:
         if (graph_.get_vertex_count() > 0) {
             try {
                 metis_graph_.prepare_from_graph(graph_);
-                metis_partitions = metis_graph_.partition(partition_count_);\
+                metis_graph_.partition(partition_count_);
+                metis_partitions = metis_graph_.get_partition_result();
             } catch (const std::exception& e) {
                 // If METIS fails, keep the old partition map
                 // This can happen if the graph is too small or has other issues
