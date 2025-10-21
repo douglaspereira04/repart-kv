@@ -18,10 +18,8 @@ void test_stop_signal() {
         MapStorageEngine engine;
         Worker<4> worker(engine);
 
-        // stop should enqueue DoneOperation and return after worker exits
-        worker.stop();
-
-        // If we reached here without deadlock, pass
+        // The stop signal should be done on destructor
+        // If the test finishes, pass
         ASSERT_TRUE(true);
     END_TEST("stop_signal")
 }
@@ -40,8 +38,6 @@ void test_single_read_operation() {
 
         ASSERT_STATUS_EQ(Status::SUCCESS, read_operation.status());
         ASSERT_STR_EQ("v1", value);
-
-        worker.stop();
     END_TEST("single_read_operation")
 }
 
@@ -62,7 +58,6 @@ void test_single_write_operation() {
 
         ASSERT_STATUS_EQ(Status::SUCCESS, read_operation.status());
         ASSERT_STR_EQ("v1", read_value);
-        worker.stop();
     END_TEST("single_write_operation")
 }
 
@@ -84,10 +79,7 @@ void test_single_scan_operation() {
         ScanOperation scan_operation(key, values, 1);
         worker.enqueue(&scan_operation);
 
-        scan_operation.synchronize();
-        scan_operation.destroy_barriers();
-
-        worker.stop();
+        scan_operation.sync();
 
         ASSERT_STATUS_EQ(Status::SUCCESS, scan_operation.status());
         ASSERT_STR_EQ("k1", values[0].first);
@@ -115,7 +107,7 @@ void test_sync_multiple_workers() {
         }
         
         for (size_t i = 0; i < worker_count; ++i) {
-            workers[i]->stop();
+            delete workers[i];
         }
     END_TEST("sync_multiple_workers")
 }

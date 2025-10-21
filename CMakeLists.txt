@@ -9,7 +9,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 # Set build type to Release if not specified
 if(NOT CMAKE_BUILD_TYPE)
-    set(CMAKE_BUILD_TYPE Release)
+    set(CMAKE_BUILD_TYPE Debug)
 endif()
 
 # Add pthread for multithreading support
@@ -413,6 +413,24 @@ target_include_directories(test_syncoperation PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/kvstorage/threaded/operation
     ${CMAKE_SOURCE_DIR}/kvstorage/threaded/future
+)
+
+# SoftPartitionWorker class tests
+add_executable(test_soft_partition_worker 
+    kvstorage/threaded/test_soft_partition_worker.cpp
+)
+
+target_link_libraries(test_soft_partition_worker PRIVATE 
+    Threads::Threads
+    ${TKRZW_ALL_LIBS}
+    ${METIS_LIB}
+    unordered_dense::unordered_dense
+)
+target_compile_features(test_soft_partition_worker PRIVATE cxx_std_20)
+target_compile_options(test_soft_partition_worker PRIVATE -Wall -Wextra -Wpedantic)
+target_include_directories(test_soft_partition_worker PRIVATE 
+    ${CMAKE_SOURCE_DIR}
+    ${TKRZW_INCLUDE_DIRS}
 )
 
 # Graph tests

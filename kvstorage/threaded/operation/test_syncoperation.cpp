@@ -12,7 +12,7 @@ int tests_failed = 0;
 void test_constructor() {
     TEST("constructor")
         SyncOperation sync_op(3);
-        
+
         // Test that it's properly constructed
         ASSERT_TRUE(sync_op.type() == Type::SYNC);
         ASSERT_TRUE(sync_op.status() == Status::PENDING);
@@ -47,27 +47,27 @@ void test_status_inheritance() {
     END_TEST("status_inheritance")
 }
 
-void test_wait() {
-    TEST("test_wait")
+void test_sync() {
+    TEST("test_sync")
         SyncOperation sync_op(2);
         
         std::thread t1([&sync_op]() {
-            sync_op.wait();
+            sync_op.sync();
         });
-        sync_op.wait();
+        sync_op.sync();
         t1.join();
-    END_TEST("test_wait")
+    END_TEST("test_sync")
 }
 
 void test_barrier_destroy() {
     TEST("barrier_destroy")
         SyncOperation sync_op(2);
+        std::thread t1([&sync_op]() {
+            sync_op.sync();
+        });
+        sync_op.sync();
+        t1.join();
         
-        // Test that destroy_barrier can be called
-        sync_op.destroy_barrier();
-        
-        // If we get here without crashing, the destroy works
-        std::cout << "    Note: Barrier destroyed successfully" << std::endl;
     END_TEST("barrier_destroy")
 }
 
@@ -82,7 +82,7 @@ void test_large_partition_count() {
         // Create many threads that will all wait on the barrier
         for (int i = 0; i < partition_count; ++i) {
             threads.emplace_back([&sync_op, &completion_count]() {
-                sync_op.wait();
+                sync_op.sync();
                 completion_count++;
             });
         }
@@ -102,7 +102,7 @@ int main() {
     test_constructor();
     test_type_verification();
     test_status_inheritance();
-    test_wait();
+    test_sync();
     test_barrier_destroy();
     test_large_partition_count();
     

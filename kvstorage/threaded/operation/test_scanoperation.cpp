@@ -65,10 +65,7 @@ void test_scan_operation_single_storage() {
                 }
             }
             // Second wait - all threads synchronize again
-            if (scan_op.is_coordinator()){
-                // Only one thread notify the operation
-                scan_op.notify();
-            }
+            scan_op.sync();
         });
         
         std::thread t2([&]() {
@@ -87,14 +84,11 @@ void test_scan_operation_single_storage() {
                 }
             }
             // Second wait - all threads synchronize again
-            if (scan_op.is_coordinator()){
-                // Only one thread notify the operation
-                scan_op.notify();
-            }
+            scan_op.sync();
         });
 
         // Wait for the operation to complete
-        scan_op.wait();
+        scan_op.sync();
 
         // Check that scan results are populated correctly
         // Results should contain key2, key3, key4 based on our scan

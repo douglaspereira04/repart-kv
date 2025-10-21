@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iostream>
 #include <thread>
 #include <semaphore>
 #include <boost/lockfree/spsc_queue.hpp>
@@ -37,9 +38,8 @@ public:
         : storage_(storage), 
           queue_(Q),          // Initialize SPSC queue with capacity Q
           available_sem_(0),   // Initially no operations available
-          free_sem_(Q) {      // Initially Q free spaces available
-        // Start the worker thread
-        worker_thread_ = std::thread(&SoftPartitionWorker::worker_loop, this);
+          free_sem_(Q),        // Initially Q free spaces available
+          worker_thread_(std::thread(&SoftPartitionWorker::worker_loop, this)) {      
     }
 
     /**
@@ -47,13 +47,13 @@ public:
      */
     ~SoftPartitionWorker() {
         // Signal the worker thread to stop by enqueueing a special operation
-        // This is a simple way to signal termination
+        stop();
         if (worker_thread_.joinable()) {
             worker_thread_.join();
         }
     }
 
-    /**
+    /** 
      * @brief Read operation
      * @param operation The read operation to perform
      */
@@ -79,11 +79,11 @@ public:
     void scan(ScanOperation* operation) {
         bool is_coordinator = operation->is_coordinator();
         if (is_coordinator) {
-            Status status = storage_.scan(operation->key(), operation->values());
+            size_t limit = operation->limit();
+            Status status = storage_.scan(operation->key(), limit, operation->values());
             operation->status(status);
-            operation->notify();
         }
-        is_coordinator = operation->is_coordinator();
+        operation->sync();
     }
 
     /**
@@ -91,9 +91,8 @@ public:
      * @param operation The sync operation to perform
      */
     void sync(SyncOperation* operation) {
-        bool is_coordinator = operation->wait();
+        bool is_coordinator = operation->sync();
         if (is_coordinator) {
-            operation->destroy_barrier();
             delete operation;
         }
     }

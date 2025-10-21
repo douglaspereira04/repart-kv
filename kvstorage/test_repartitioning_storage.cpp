@@ -4,6 +4,7 @@
 #include "../keystorage/MapKeyStorage.h"
 #include "../storage/MapStorageEngine.h"
 #include "../utils/test_assertions.h"
+#include "kvstorage/threaded/SoftThreadedRepartitioningKeyValueStorage.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -23,16 +24,19 @@ void test_basic_operations() {
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
         status = storage.write("key2", "value2");
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
-        
+        std::cout << "    Write key1 and key2" << std::endl;
         std::string value;
         status = storage.read("key1", value);
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_STR_EQ("value1", value);
+        std::cout << "    Read key1" << std::endl;
         status = storage.read("key2", value);
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_STR_EQ("value2", value);
+        std::cout << "    Read key2" << std::endl;
         status = storage.read("key3", value);
         ASSERT_STATUS_EQ(Status::NOT_FOUND, status);
+        std::cout << "    Read key3" << std::endl;
     END_TEST("basic_operations")
 }
 
@@ -184,12 +188,15 @@ void test_co_access_patterns() {
         }
         
         const Graph& graph = storage.graph();
+        // Verify graph has been populated
         ASSERT_TRUE(graph.get_vertex_count() > 0);
+        // Verify group1 edges
         for (int group1_key1 = 1; group1_key1 <= 3; ++group1_key1) {
             for (int group1_key2 = group1_key1 + 1; group1_key2 <= 3; ++group1_key2) {
                 ASSERT_EQ(5, graph.get_edge_weight("group1_key" + std::to_string(group1_key1), "group1_key" + std::to_string(group1_key2)));
             }
         }
+        // Verify group2 edges
         for (int group2_key1 = 1; group2_key1 <= 2; ++group2_key1) {
             for (int group2_key2 = group2_key1 + 1; group2_key2 <= 2; ++group2_key2) {
                 ASSERT_EQ(3, graph.get_edge_weight("group2_key" + std::to_string(group2_key1), "group2_key" + std::to_string(group2_key2)));
@@ -215,7 +222,6 @@ void test_co_access_patterns() {
         status = storage.read("group2_key2", value);
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_STR_EQ("value5", value);
-        std::cout << "    All keys accessible after repartition" << std::endl;
     END_TEST("co_access_patterns")
 }
 
@@ -585,6 +591,9 @@ int main() {
         
         // Test SoftRepartitioningKeyValueStorage  
         run_test_suite<SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage>>("SoftRepartitioningKeyValueStorage");
+
+        // Test SoftThreadedRepartitioningKeyValueStorage  
+        run_test_suite<SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>>("SoftThreadedRepartitioningKeyValueStorage");
         
         std::cout << "\n========================================\n";
         std::cout << "  All Repartitioning Tests PASSED!\n";

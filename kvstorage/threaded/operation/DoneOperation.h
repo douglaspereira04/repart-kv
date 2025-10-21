@@ -14,8 +14,10 @@ public:
             pthread_barrier_init(&barrier_, NULL, 2);
         }
 
-    // Destructor (default)
-    ~DoneOperation() = default;
+    // Destructor
+    ~DoneOperation() {
+        destroy_barrier();
+    }
 
     // Copy constructor and assignment operator are deleted
     // to prevent copying of DoneOperation objects
@@ -27,10 +29,13 @@ public:
     DoneOperation(DoneOperation&&) = delete;
     DoneOperation& operator=(DoneOperation&&) = delete;
 
+    // Destroy barrier
+    void destroy_barrier() {
+        pthread_barrier_destroy(&barrier_);
+    }
+
     // Wait method that waits for the barrier
     void wait() {
-        if (pthread_barrier_wait(&barrier_) == PTHREAD_BARRIER_SERIAL_THREAD) {
-            pthread_barrier_destroy(&barrier_);
-        }
+        pthread_barrier_wait(&barrier_);
     }
 };

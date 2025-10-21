@@ -18,7 +18,9 @@ public:
         }
 
     // Destructor (default)
-    ~SyncOperation() = default;
+    ~SyncOperation() {
+        destroy_barrier();
+    }
 
     // Copy constructor and assignment operator are deleted
     // to prevent copying of ScanOperation objects
@@ -31,11 +33,11 @@ public:
     SyncOperation& operator=(SyncOperation&&) = delete;
 
     // Wait for all partitions to synchronize
-    void wait() {
-        pthread_barrier_wait(&barrier_);
+    bool sync() {
+        return pthread_barrier_wait(&barrier_) == PTHREAD_BARRIER_SERIAL_THREAD;
     }
 
-    // Destroy barrier method
+    // Destroy barrier
     void destroy_barrier() {
         pthread_barrier_destroy(&barrier_);
     }

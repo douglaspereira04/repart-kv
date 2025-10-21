@@ -53,15 +53,12 @@ class SoftThreadedRepartitioningKeyValueStorage
         StorageEngineType
       > {
 private:
-    std::vector<std::unique_ptr<SoftPartitionWorker<StorageEngineType, Q>>> workers_; // Workers for each partition
     PartitionMapType<size_t> *key_map_;           // Maps key ranges to partition IDs
     PartitionMapType<size_t> *updated_key_map_;   // Maps key ranges to partition IDs
     std::atomic_bool update_key_map_;            // Flag indicating if the partition map should be updated
     std::shared_mutex key_map_lock_;                   // Mutex for thread-safe access to key mappers
     std::atomic_bool enable_tracking_;                             // Enable/disable tracking of key access patterns
-    std::atomic<bool> is_repartitioning_;              // Flag indicating if repartitioning is in progress
-    std::counting_semaphore<2> repartitioning_semaphore_; 
-    // Semaphore for repartitioning max of 2 because there might be already one permit while calling the destructor
+
     size_t partition_count_;                           // Number of partitions
     StorageEngineType storage_;                        // Storage engine instance for the storage
     HashFunc hash_func_;                               // Hash function for key hashing
@@ -72,11 +69,18 @@ private:
     
     // Threading attributes for automatic repartitioning
     std::thread repartitioning_thread_;                // Background thread for automatic repartitioning
+    std::atomic<bool> is_repartitioning_;              // Flag indicating if repartitioning is in progress
+    std::counting_semaphore<2> repartitioning_semaphore_; 
+    // Semaphore for repartitioning max of 2 because there might be already one permit while calling the destructor
     std::optional<std::chrono::milliseconds> tracking_duration_;     // Duration to track key accesses
     std::optional<std::chrono::milliseconds> repartition_interval_;  // Interval between repartitioning cycles
     std::atomic<bool> running_;                        // Flag to control the repartitioning loop
     std::condition_variable cv_;                       // Condition variable to wake the thread
     std::mutex cv_mutex_;                              // Mutex for condition variable
+    std::vector<std::unique_ptr<SoftPartitionWorker<StorageEngineType, Q>>> workers_; // Workers for each partition
+
+    std::atomic<bool> auto_repartitioning_;            // Flag indicating if auto repartitioning is enabled
+
 
 public:
     /**
@@ -91,15 +95,18 @@ public:
         const HashFunc& hash_func = HashFunc(),
         std::optional<std::chrono::milliseconds> tracking_duration = std::nullopt,
         std::optional<std::chrono::milliseconds> repartition_interval = std::nullopt)
-        : enable_tracking_(false), 
-          is_repartitioning_(false),
+        : update_key_map_(false),
+          enable_tracking_(false), 
           partition_count_(partition_count), 
           storage_(StorageEngineType(0)),
           hash_func_(hash_func),
+          is_repartitioning_(false),
+          repartitioning_semaphore_(1),
           tracking_duration_(tracking_duration),
           repartition_interval_(repartition_interval),
-          repartitioning_semaphore_(1),
-          running_(true) {
+          running_(true),
+          workers_(), 
+          auto_repartitioning_(false){
 
         key_map_ = new PartitionMapType<size_t>();
         updated_key_map_ = nullptr;
@@ -112,6 +119,7 @@ public:
         
         // Start repartitioning thread if both durations are set
         if (tracking_duration_.has_value() && repartition_interval_.has_value()) {
+            auto_repartitioning_ = true;
             repartitioning_thread_ = std::thread(&SoftThreadedRepartitioningKeyValueStorage::repartition_loop, this);
         }
     }
@@ -123,7 +131,7 @@ public:
         // Stop the repartitioning thread if it's running
         running_ = false;
         
-        // Wake up the thread if it's sleeping
+        // Wake up threads
         repartitioning_semaphore_.release();
         cv_.notify_all();
         
@@ -223,8 +231,9 @@ public:
         // Get iterator starting from initial_key
         auto it = key_map_->lower_bound(initial_key_prefix);
         
+        size_t count = 0;
         // Collect storage pointers and keys up to limit
-        while (limit > 0) {
+        while (count < limit) {
             if (it.is_end()) {
                 break;
             }
@@ -234,7 +243,7 @@ public:
             key_array.push_back(it.get_key());
             
             ++it;
-            limit--;
+            ++count;
         }
 
         // Track key access patterns if enabled
@@ -242,24 +251,26 @@ public:
             multi_key_graph_update(key_array);
         }
 
-        
+        results.resize(limit);
         ScanOperation scan_operation(initial_key_prefix, results, partition_set.size());
         for (size_t partition_idx : partition_set) {
-            workers_[partition_idx]->enqueue(scan_operation);
+            workers_[partition_idx]->enqueue(&scan_operation);
         }
         // Unlock key map
         key_map_lock_.unlock_shared();
-        scan_operation.wait();
+        scan_operation.sync();
         
         return scan_operation.status();
     }
 
 
     void verify_and_swap_partition_maps() {
-        // We take a lool at the update_key_map_ flag in a relaxed manner
+        // We take a look at the update_key_map_ flag in a relaxed manner
         // if seems enabled, we verify with stronger memory order
         if (update_key_map_.load(std::memory_order_relaxed)) {
             if (update_key_map_) {
+
+                // Lock key map so it can be changed safely
                 key_map_lock_.lock();
                 if (update_key_map_) {
                     std::swap(key_map_, updated_key_map_);
@@ -267,8 +278,22 @@ public:
                     
                     // We release the semaphore to allow the repartitioning
                     // thread to proceed to the next repartitioning cycle
-                    repartitioning_semaphore_.release();
+                    if (auto_repartitioning_) {
+                        repartitioning_semaphore_.release();
+                    }
                 }
+                
+                // Submit Sync operation to all workers
+                // This way, future enqueued operations will
+                // be processed only after every previously
+                // enqueued operations, to any worker, are processed
+                // This voids multiple workers acting in the same partition
+                SyncOperation sync_operation(partition_count_);
+                for (size_t i = 0; i < partition_count_; ++i) {
+                    workers_[i]->enqueue(&sync_operation);
+                }
+        
+                // Unlock key map
                 key_map_lock_.unlock();
             }
         }
@@ -290,7 +315,13 @@ public:
      * Note: This implementation does not migrate existing data. Data migration
      * will occur lazily as keys are accessed and reassigned to new partitions.
      */
-    void repartition_impl() {        
+    void repartition_impl() { 
+        // Tracking is disabled during repartitioning 
+        // and during the tracking_duration_ interval 
+        // Will be re-enabled before waiting for the next 
+        // repartitioning interval
+        this->enable_tracking(false);
+       
         // Step 1: Partition the graph using METIS
         std::unordered_map<std::string, size_t> new_partition_map;
         std::vector<idx_t> metis_partitions;
@@ -434,13 +465,6 @@ private:
                 break;
             }
             lock.unlock();
-
-
-            // Tracking is disabled during repartitioning 
-            // and during the tracking_duration_ interval 
-            // Will be re-enabled before waiting for the next 
-            // repartitioning interval
-            this->enable_tracking(false);
             
             // Perform repartitioning 
             repartition_impl();
