@@ -13,8 +13,8 @@ private:
 
 public:
     // Constructor takes references to key and value strings
-    ScanOperation(std::string& key, std::vector<std::pair<std::string, std::string>>& values, size_t partition_count) 
-        : Operation(&key, Type::SCAN), future_(values) {
+    ScanOperation(const std::string& key, std::vector<std::pair<std::string, std::string>>& values, size_t partition_count) 
+        : Operation(const_cast<std::string*>(&key), Type::SCAN), future_(values) {
             pthread_barrier_init(&barrier_, NULL, partition_count);
         }
 

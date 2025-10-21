@@ -9,7 +9,7 @@ private:
 
 public:
     // Constructor takes references to key and value strings
-    WriteOperation(std::string& key, std::string& value) 
+    WriteOperation(const std::string& key, const std::string& value) 
         : Operation(new std::string(key), Type::WRITE), value_(value) {}
 
     // Destructor

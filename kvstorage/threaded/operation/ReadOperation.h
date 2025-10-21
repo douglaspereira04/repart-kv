@@ -10,8 +10,8 @@ private:
 
 public:
     // Constructor takes references to key and value strings
-    ReadOperation(std::string& key, std::string& value) 
-        : Operation(&key, Type::READ), future_(value) {}
+    ReadOperation(const std::string& key, std::string& value) 
+        : Operation(const_cast<std::string*>(&key), Type::READ), future_(value) {}
     
     // Destructor (default)
     ~ReadOperation() = default;

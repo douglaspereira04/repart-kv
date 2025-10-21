@@ -47,7 +47,7 @@ public:
         return key_[idx];
     }
 
-    Status status() const {
+    Status status() {
         return status_;
     }
 
