@@ -10,6 +10,7 @@
 #include "workload/Workload.h"
 #include "kvstorage/HardRepartitioningKeyValueStorage.h"
 #include "kvstorage/SoftRepartitioningKeyValueStorage.h"
+#include "kvstorage/threaded/SoftThreadedRepartitioningKeyValueStorage.h"
 #include "storage/TkrzwHashStorageEngine.h"
 #include "storage/TkrzwTreeStorageEngine.h"
 #include "keystorage/TkrzwHashKeyStorage.h"
@@ -137,7 +138,7 @@ void metrics_loop(const std::vector<size_t>& executed_counts,
 template<typename StorageType>
 void worker_function(
     size_t worker_id,
-    const std::vector<Operation>& operations,
+    const std::vector<workload::Operation>& operations,
     StorageType& storage,
     std::vector<size_t>& executed_counts) {
     
@@ -149,7 +150,7 @@ void worker_function(
         const auto& op = operations[i];
         
         switch (op.type) {
-            case OperationType::READ: {
+            case workload::OperationType::READ: {
                 std::string value;
                 Status status =  storage.read(op.key, value);
                 if (status != Status::SUCCESS) {
@@ -159,7 +160,7 @@ void worker_function(
                 executed_counts[worker_id]++;
                 break;
             }
-            case OperationType::WRITE: {
+            case workload::OperationType::WRITE: {
                 Status status = storage.write(op.key, op.value);
                 if (status != Status::SUCCESS) {
                     std::cerr << "Error: Failed to read key: " << op.key << std::endl;
@@ -168,7 +169,7 @@ void worker_function(
                 executed_counts[worker_id]++;
                 break;
             }
-            case OperationType::SCAN: {
+            case workload::OperationType::SCAN: {
                 std::vector<std::pair<std::string, std::string>> results;
                 Status status = storage.scan(op.key, op.limit, results);
                 if (status != Status::SUCCESS) {
@@ -184,7 +185,7 @@ void worker_function(
 
 // Template function to run workload with any RepartitioningKeyValueStorage implementation
 template<typename StorageType>
-void run_workload_with_storage(const std::vector<Operation>& operations,
+void run_workload_with_storage(const std::vector<workload::Operation>& operations,
                               size_t partition_count,
                               size_t test_workers,
                               const std::string& storage_type_name) {
@@ -192,7 +193,9 @@ void run_workload_with_storage(const std::vector<Operation>& operations,
     std::cout << "\n=== Initializing Storage ===" << std::endl;
     StorageType storage(
         partition_count, 
-        std::hash<std::string>()
+        std::hash<std::string>(),
+        std::chrono::milliseconds(1000),
+        std::chrono::milliseconds(1000)
     );
     std::cout << "Created " << storage_type_name << " with " << partition_count << " partitions (Tkrzw)" << std::endl;
     std::cout << "Tracking duration: 1000ms, Repartition interval: 1000ms" << std::endl;
@@ -261,10 +264,11 @@ void print_usage(const char* program_name) {
     std::cout << "  workload_file    Path to the workload file" << std::endl;
     std::cout << "  partition_count  Number of partitions (default: 4)" << std::endl;
     std::cout << "  test_workers     Number of worker threads (default: 1)" << std::endl;
-    std::cout << "  storage_type     Storage implementation: 'hard' or 'soft' (default: soft)" << std::endl;
+    std::cout << "  storage_type     Storage implementation: 'hard', 'soft', or 'threaded' (default: soft)" << std::endl;
     std::cout << "\nStorage Types:" << std::endl;
     std::cout << "  hard            HardRepartitioningKeyValueStorage (creates new storage engines)" << std::endl;
     std::cout << "  soft            SoftRepartitioningKeyValueStorage (uses single storage with partition locks)" << std::endl;
+    std::cout << "  threaded        SoftThreadedRepartitioningKeyValueStorage (threaded soft repartitioning)" << std::endl;
     std::cout << "\nWorkload file format:" << std::endl;
     std::cout << "  0,<key>         : READ operation" << std::endl;
     std::cout << "  1,<key>         : WRITE operation (uses 1KB default value)" << std::endl;
@@ -308,8 +312,8 @@ int main(int argc, char* argv[]) {
     
     if (argc >= 5) {
         STORAGE_TYPE = argv[4];
-        if (STORAGE_TYPE != "hard" && STORAGE_TYPE != "soft") {
-            std::cerr << "Error: storage_type must be 'hard' or 'soft', got: " << STORAGE_TYPE << std::endl;
+        if (STORAGE_TYPE != "hard" && STORAGE_TYPE != "soft" && STORAGE_TYPE != "threaded") {
+            std::cerr << "Error: storage_type must be 'hard', 'soft', or 'threaded', got: " << STORAGE_TYPE << std::endl;
             return 1;
         }
     }
@@ -322,9 +326,9 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
     
     // Read workload
-    std::vector<Operation> operations;
+    std::vector<workload::Operation> operations;
     try {
-        operations = read_workload(workload_file);
+        operations = workload::read_workload(workload_file);
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
@@ -336,13 +340,13 @@ int main(int argc, char* argv[]) {
     size_t read_count = 0, write_count = 0, scan_count = 0;
     for (const auto& op : operations) {
         switch (op.type) {
-            case OperationType::READ:
+            case workload::OperationType::READ:
                 read_count++;
                 break;
-            case OperationType::WRITE:
+            case workload::OperationType::WRITE:
                 write_count++;
                 break;
-            case OperationType::SCAN:
+            case workload::OperationType::SCAN:
                 scan_count++;
                 break;
         }
@@ -360,6 +364,9 @@ int main(int argc, char* argv[]) {
     } else if (STORAGE_TYPE == "soft") {
         using StorageType = SoftRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>;
         run_workload_with_storage<StorageType>(operations, PARTITION_COUNT, TEST_WORKERS, "SoftRepartitioningKeyValueStorage");
+    } else if (STORAGE_TYPE == "threaded") {
+        using StorageType = SoftThreadedRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage>;
+        run_workload_with_storage<StorageType>(operations, PARTITION_COUNT, TEST_WORKERS, "SoftThreadedRepartitioningKeyValueStorage");
     } else {
         std::cerr << "Error: Unknown storage type: " << STORAGE_TYPE << std::endl;
         return 1;

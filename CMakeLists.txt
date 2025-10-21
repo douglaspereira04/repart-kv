@@ -28,6 +28,14 @@ FetchContent_MakeAvailable(unordered_dense)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(TKRZW REQUIRED tkrzw)
 
+# Find LMDB library
+find_library(LMDB_LIB NAMES lmdb)
+if(LMDB_LIB)
+    message(STATUS "LMDB library found: ${LMDB_LIB}")
+else()
+    message(WARNING "LMDB library not found. Install liblmdb++-dev to enable LMDB storage engine.")
+endif()
+
 # TKRZW compression dependencies (optional, used if available)
 find_library(LZMA_LIB NAMES lzma)
 find_library(LZ4_LIB NAMES lz4)
@@ -90,6 +98,7 @@ add_executable(test_storage_engine
 target_link_libraries(test_storage_engine PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
+    ${LMDB_LIB}
     unordered_dense::unordered_dense
 )
 target_compile_features(test_storage_engine PRIVATE cxx_std_20)

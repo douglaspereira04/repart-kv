@@ -7,6 +7,8 @@
 #include <stdexcept>
 #include <iostream>
 
+namespace workload {
+
 // Default value for write operations (1024 bytes)
 inline const std::string DEFAULT_VALUE_1KB(1024, 'x');
 
@@ -113,4 +115,6 @@ inline std::vector<Operation> read_workload(const std::string& filepath) {
     file.close();
     return operations;
 }
+
+} // namespace workload
 

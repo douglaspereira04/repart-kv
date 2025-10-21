@@ -167,7 +167,7 @@ while (!it.is_end()) {
 #include "workload/Workload.h"
 
 // Parse workload file
-auto operations = read_workload("workload.txt");
+auto operations = workload::read_workload("workload.txt");
 
 // Create storage
 RepartitioningKeyValueStorage<...> storage(8);

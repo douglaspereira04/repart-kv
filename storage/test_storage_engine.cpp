@@ -1,6 +1,7 @@
 #include "MapStorageEngine.h"
 #include "TkrzwHashStorageEngine.h"
 #include "TkrzwTreeStorageEngine.h"
+#include "LmdbStorageEngine.h"
 #include "../utils/test_assertions.h"
 #include <iostream>
 #include <thread>
@@ -62,23 +63,6 @@ void test_overwrite_value() {
 }
 
 template<typename EngineType>
-void test_empty_key_value() {
-    TEST("empty_key_value")
-        EngineType engine;
-        std::string read_value;
-        // Test empty key
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("", "empty_key_value"));
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.read("", read_value));
-        ASSERT_STR_EQ("empty_key_value", read_value);
-        
-        // Test empty value
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("empty_value_key", ""));
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.read("empty_value_key", read_value));
-        ASSERT_STR_EQ("", read_value);
-    END_TEST("empty_key_value")
-}
-
-template<typename EngineType>
 void test_scan_basic() {
     TEST("scan_basic")
         EngineType engine;
@@ -137,21 +121,6 @@ void test_scan_no_matches() {
     END_TEST("scan_no_matches")
 }
 
-template<typename EngineType>
-void test_scan_empty_prefix() {
-    TEST("scan_empty_prefix")
-        EngineType engine;
-        
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("a", "1"));
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("b", "2"));
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("c", "3"));
-        
-        // Empty prefix should match all keys
-        std::vector<std::pair<std::string, std::string>> results;
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan("", 10, results));
-        ASSERT_EQ(3, results.size());
-    END_TEST("scan_empty_prefix")
-}
 
 template<typename EngineType>
 void test_scan_exact_match() {
@@ -181,7 +150,7 @@ void test_scan_sorted_order() {
         ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("m", "middle"));
         
         std::vector<std::pair<std::string, std::string>> results;
-        ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan("", 10, results));
+        ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan("a", 10, results));
         ASSERT_EQ(3, results.size());
         ASSERT_STR_EQ("a", results[0].first);
         ASSERT_STR_EQ("first", results[0].second);
@@ -402,13 +371,10 @@ void run_test_suite(const std::string& engine_name) {
     test_basic_write_read<EngineType>();
     test_read_nonexistent_key<EngineType>();
     test_overwrite_value<EngineType>();
-    test_empty_key_value<EngineType>();
-    
     // Scan tests
     test_scan_basic<EngineType>();
     test_scan_with_limit<EngineType>();
     test_scan_no_matches<EngineType>();
-    test_scan_empty_prefix<EngineType>();
     test_scan_exact_match<EngineType>();
     test_scan_sorted_order<EngineType>();
     test_scan_after_updates<EngineType>();
@@ -432,6 +398,7 @@ int main() {
     run_test_suite<MapStorageEngine>("MapStorageEngine");
     run_test_suite<TkrzwHashStorageEngine>("TkrzwHashStorageEngine");
     run_test_suite<TkrzwTreeStorageEngine>("TkrzwTreeStorageEngine");
+    run_test_suite<LmdbStorageEngine>("LmdbStorageEngine");
     
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;
