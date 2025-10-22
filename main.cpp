@@ -7,6 +7,9 @@
 #include <fstream>
 #include <filesystem>
 #include <iomanip>
+#include "keystorage/MapKeyStorage.h"
+#include "storage/LmdbStorageEngine.h"
+#include "storage/MapStorageEngine.h"
 #include "workload/Workload.h"
 #include "kvstorage/HardRepartitioningKeyValueStorage.h"
 #include "kvstorage/SoftRepartitioningKeyValueStorage.h"
@@ -365,7 +368,7 @@ int main(int argc, char* argv[]) {
         using StorageType = SoftRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>;
         run_workload_with_storage<StorageType>(operations, PARTITION_COUNT, TEST_WORKERS, "SoftRepartitioningKeyValueStorage");
     } else if (STORAGE_TYPE == "threaded") {
-        using StorageType = SoftThreadedRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, TkrzwTreeKeyStorage>;
+        using StorageType = SoftThreadedRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, MapKeyStorage>;
         run_workload_with_storage<StorageType>(operations, PARTITION_COUNT, TEST_WORKERS, "SoftThreadedRepartitioningKeyValueStorage");
     } else {
         std::cerr << "Error: Unknown storage type: " << STORAGE_TYPE << std::endl;

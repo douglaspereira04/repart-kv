@@ -141,8 +141,8 @@ public:
         size_t partition_idx;
         bool found = partition_map_.get(key, partition_idx);
         if (!found) {
-            // Key not mapped yet - fall back to hash partitioning
-            partition_idx = hash_func_(key) % partition_count_;
+            key_map_lock_.unlock_shared();
+            return Status::NOT_FOUND;
         }
 
         // Lock the partition for reading
@@ -205,7 +205,6 @@ public:
      */
     Status scan_impl(const std::string& initial_key_prefix, size_t limit, std::vector<std::pair<std::string, std::string>>& results) {
         std::set<size_t> partition_set;
-        std::vector<size_t> partition_array;
         std::vector<std::string> key_array;
 
         // Lock key map for reading
@@ -214,19 +213,19 @@ public:
         // Get iterator starting from initial_key
         auto it = partition_map_.lower_bound(initial_key_prefix);
         
+        size_t count = 0;
         // Collect storage pointers and keys up to limit
-        while (limit > 0) {
+        while (count < limit) {
             if (it.is_end()) {
                 break;
             }
             
             size_t partition_idx = it.get_value();
             partition_set.insert(partition_idx);
-            partition_array.push_back(partition_idx);
             key_array.push_back(it.get_key());
             
             ++it;
-            limit--;
+            ++count;
         }
 
         // Track key access patterns if enabled
@@ -246,23 +245,12 @@ public:
         key_map_lock_.unlock_shared();
 
         // Read values from storage
-        results.reserve(key_array.size());
-        Status status;
-        for (size_t i = 0; i < partition_array.size(); ++i) {
-            std::string value;
-            status = storage_.read(key_array[i], value);
-            if (status != Status::SUCCESS) {
-                break;
-            }
-            results.push_back({key_array[i], value});
-        }
+        results.resize(limit);
+        Status status = storage_.scan(initial_key_prefix, limit, results);
 
         // Unlock all partitions
         for (size_t partition_idx : sorted_partitions) {
-            partition_locks_[partition_idx]->unlock_shared();
-        }
-        if (results.size() == 0) {
-            status = Status::NOT_FOUND;
+            partition_locks_[partition_idx]->unlock();
         }
         return status;
     }
@@ -297,39 +285,42 @@ public:
         
         // Lock graph for reading and processing
         graph_lock_.lock();
-        
+        bool success = false;
         if (graph_.get_vertex_count() > 0) {
             try {
                 metis_graph_.prepare_from_graph(graph_);
                 metis_graph_.partition(partition_count_);
                 metis_partitions = metis_graph_.get_partition_result();
+                success = true;
             } catch (const std::exception& e) {
                 // If METIS fails, keep the old partition map
                 // This can happen if the graph is too small or has other issues
             }
         }
         
-        // Step 3: Lock and update partition assignments
-        key_map_lock_.lock();
-        
-        for (size_t partition_idx = 0; partition_idx < partition_count_; ++partition_idx) {
-            partition_locks_[partition_idx]->lock();
-        }
-        
-        // Update partition_map with new assignments
-        const auto& idx_to_vertex = metis_graph_.get_idx_to_vertex();
-        for (size_t i = 0; i < metis_partitions.size(); ++i) {
-            partition_map_.put(idx_to_vertex[i], static_cast<size_t>(metis_partitions[i]));
-        }
-        
-        // Unlock all partitions
-        for (size_t partition_idx = 0; partition_idx < partition_count_; ++partition_idx) {
-            partition_locks_[partition_idx]->unlock();
-        }
+        if (success) {
+            // Step 3: Lock and update partition assignments
+            key_map_lock_.lock();
+            
+            for (size_t partition_idx = 0; partition_idx < partition_count_; ++partition_idx) {
+                partition_locks_[partition_idx]->lock();
+            }
+            
+            // Update partition_map with new assignments
+            const auto& idx_to_vertex = metis_graph_.get_idx_to_vertex();
+            for (size_t i = 0; i < metis_partitions.size(); ++i) {
+                partition_map_.put(idx_to_vertex[i], static_cast<size_t>(metis_partitions[i]));
+            }
+            
+            // Unlock all partitions
+            for (size_t partition_idx = 0; partition_idx < partition_count_; ++partition_idx) {
+                partition_locks_[partition_idx]->unlock();
+            }
 
-        // Unlock key map
-        key_map_lock_.unlock();
-        
+            // Unlock key map
+            key_map_lock_.unlock();
+        }
+            
         // Step 4: Clear the graph for fresh tracking
         graph_.clear();
         

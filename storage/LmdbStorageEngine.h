@@ -1,12 +1,13 @@
 #pragma once
 
 #include "StorageEngine.h"
-#include <lmdb++.h>
+#include <lmdb.h>
 #include <string>
 #include <vector>
-#include <memory>
 #include <ctime>
 #include <filesystem>
+#include <atomic>
+#include <chrono>
 
 /**
  * @brief LMDB-based implementation of StorageEngine
@@ -19,7 +20,7 @@
  * - Crash recovery
  * - Zero-copy reads
  * 
- * Requires C++20 and liblmdb++-dev to be installed.
+ * Requires C++20 and liblmdb-dev to be installed.
  * 
  * Key features:
  * - Keys are stored in sorted order (lexicographic)
@@ -35,10 +36,13 @@
  */
 class LmdbStorageEngine : public StorageEngine<LmdbStorageEngine> {
 private:
-    std::unique_ptr<lmdb::env> env_;
-    lmdb::dbi dbi_;
+    MDB_env* env_;
+    MDB_dbi dbi_;
     bool is_open_;
     std::string db_path_;
+    
+    static std::atomic_int db_counter;
+    static std::string id;
 
 public:
     /**
@@ -49,82 +53,43 @@ public:
      */
     explicit LmdbStorageEngine(size_t level = 0) 
         : StorageEngine<LmdbStorageEngine>(level),
-          env_(std::make_unique<lmdb::env>(lmdb::env::create())),
+          env_(nullptr),
           dbi_(MDB_dbi{}),
           is_open_(false) {
         
-        // Create a temporary directory for the LMDB database
-        std::string temp_dir = "/tmp/lmdb_temp_" + std::to_string(time(nullptr));
-        std::filesystem::create_directories(temp_dir);
-        db_path_ = temp_dir;
-        
-        try {
-            // Set map size to 100MB
-            env_->set_mapsize(100 * 1024 * 1024);
-            env_->set_max_dbs(1);
-            env_->open(db_path_.c_str(), MDB_CREATE | MDB_NOSYNC, 0644);
-            
-            // Open the database
-            auto txn = lmdb::txn::begin(*env_);
-            dbi_ = lmdb::dbi::open(txn, nullptr, MDB_CREATE);
-            txn.commit();
-            
-            is_open_ = true;
-        } catch (const lmdb::error& e) {
-            is_open_ = false;
-        }
+        init();
     }
 
     /**
      * @brief Constructor with file path - creates a persistent database
      * @param file_path Path to the database directory
-     * @param map_size Maximum size of the memory map in bytes (default: 100MB)
+     * @param map_size Maximum size of the memory map in bytes (default: 50GB)
      * @param level The hierarchy level for this storage engine (default: 0)
      */
     explicit LmdbStorageEngine(const std::string& file_path, 
-                               size_t map_size = 100 * 1024 * 1024,
+                               size_t map_size = 50ULL * 1024 * 1024 * 1024,
                                size_t level = 0) 
         : StorageEngine<LmdbStorageEngine>(level),
-          env_(std::make_unique<lmdb::env>(lmdb::env::create())),
+          env_(nullptr),
           dbi_(MDB_dbi{}),
           is_open_(false),
           db_path_(file_path) {
         
-        try {
-            // Create directory if it doesn't exist
-            std::filesystem::create_directories(file_path);
-            
-            // Set map size and open environment
-            env_->set_mapsize(map_size);
-            env_->set_max_dbs(1);
-            env_->open(file_path.c_str(), MDB_CREATE, 0644);
-            
-            // Open the database
-            auto txn = lmdb::txn::begin(*env_);
-            dbi_ = lmdb::dbi::open(txn, nullptr, MDB_CREATE);
-            txn.commit();
-            
-            is_open_ = true;
-        } catch (const lmdb::error& e) {
-            is_open_ = false;
-        }
+        init_with_path(file_path, map_size);
     }
 
     /**
      * @brief Destructor - closes the database and cleans up
      */
     ~LmdbStorageEngine() {
-        if (is_open_) {
-            try {
-                env_->close();
-                is_open_ = false;
-                
-                // Clean up temporary directory if it was created
-                if (db_path_.find("/tmp/lmdb_temp_") == 0) {
-                    std::filesystem::remove_all(db_path_);
-                }
-            } catch (const lmdb::error& e) {
-                // Ignore errors during cleanup
+        if (is_open_ && env_) {
+            mdb_dbi_close(env_, dbi_);
+            mdb_env_close(env_);
+            is_open_ = false;
+            
+            // Clean up temporary directory if it was created
+            if (db_path_.find("/tmp/repart_kv_storage/") == 0) {
+                std::filesystem::remove_all(db_path_);
             }
         }
     }
@@ -136,26 +101,25 @@ public:
     // Enable move
     LmdbStorageEngine(LmdbStorageEngine&& other) noexcept 
         : StorageEngine<LmdbStorageEngine>(other.level_),
-          env_(std::move(other.env_)),
-          dbi_(std::move(other.dbi_)),
+          env_(other.env_),
+          dbi_(other.dbi_),
           is_open_(other.is_open_),
           db_path_(std::move(other.db_path_)) {
+        other.env_ = nullptr;
         other.is_open_ = false;
     }
 
     LmdbStorageEngine& operator=(LmdbStorageEngine&& other) noexcept {
         if (this != &other) {
-            if (is_open_) {
-                try {
-                    env_->close();
-                } catch (const lmdb::error& e) {
-                    // Ignore errors during cleanup
-                }
+            if (is_open_ && env_) {
+                mdb_dbi_close(env_, dbi_);
+                mdb_env_close(env_);
             }
-            env_ = std::move(other.env_);
-            dbi_ = std::move(other.dbi_);
+            env_ = other.env_;
+            dbi_ = other.dbi_;
             is_open_ = other.is_open_;
             db_path_ = std::move(other.db_path_);
+            other.env_ = nullptr;
             other.is_open_ = false;
         }
         return *this;
@@ -168,29 +132,30 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status read_impl(const std::string& key, std::string& value) const {
-        if (!is_open_) {
+        if (!is_open_ || !env_) {
             return Status::ERROR;
         }
         
-        try {
-            auto txn = lmdb::txn::begin(*env_, nullptr, MDB_RDONLY);
-            auto cursor = lmdb::cursor::open(txn, dbi_);
-            
-            lmdb::val key_val(key);
-            lmdb::val data_val;
-            
-            if (cursor.get(key_val, data_val, MDB_SET_KEY)) {
-                value = std::string(data_val.data(), data_val.size());
-                cursor.close();
-                txn.commit();
-                return Status::SUCCESS;
-            } else {
-                cursor.close();
-                txn.commit();
-                return Status::NOT_FOUND;
-            }
-        } catch (const lmdb::error& e) {
+        MDB_txn* txn;
+        MDB_val mdb_key;
+        MDB_val mdb_value;
+        
+        int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+        if (rc != 0) {
             return Status::ERROR;
+        }
+        
+        mdb_key.mv_size = key.size();
+        mdb_key.mv_data = const_cast<void*>(static_cast<const void*>(key.c_str()));
+        
+        rc = mdb_get(txn, dbi_, &mdb_key, &mdb_value);
+        if (rc == MDB_SUCCESS) {
+            value = std::string(reinterpret_cast<char*>(mdb_value.mv_data), mdb_value.mv_size);
+            mdb_txn_abort(txn);
+            return Status::SUCCESS;
+        } else {
+            mdb_txn_abort(txn);
+            return Status::NOT_FOUND;
         }
     }
 
@@ -200,18 +165,37 @@ public:
      * @param value The value to associate with the key
      * @return Status code indicating the result of the operation
      */
-    Status write_impl(const std::string& key, const std::string& value) {        
-        try {
-            auto txn = lmdb::txn::begin(*env_);
-            lmdb::val key_val(key);
-            lmdb::val data_val(value);
-            
-            dbi_.put(txn, key_val, data_val);
-            txn.commit();
-            return Status::SUCCESS;
-        } catch (const lmdb::error& e) {
+    Status write_impl(const std::string& key, const std::string& value) {
+        if (!is_open_ || !env_) {
             return Status::ERROR;
         }
+        
+        MDB_txn* txn;
+        MDB_val mdb_key;
+        MDB_val mdb_value;
+        
+        int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+        if (rc != 0) {
+            return Status::ERROR;
+        }
+        
+        mdb_key.mv_size = key.size();
+        mdb_key.mv_data = const_cast<void*>(static_cast<const void*>(key.c_str()));
+        mdb_value.mv_size = value.size();
+        mdb_value.mv_data = const_cast<void*>(static_cast<const void*>(value.c_str()));
+        
+        rc = mdb_put(txn, dbi_, &mdb_key, &mdb_value, 0);
+        if (rc != 0) {
+            mdb_txn_abort(txn);
+            return Status::ERROR;
+        }
+        
+        rc = mdb_txn_commit(txn);
+        if (rc != 0) {
+            return Status::ERROR;
+        }
+        
+        return Status::SUCCESS;
     }
 
     /**
@@ -225,46 +209,56 @@ public:
      * We use MDB_SET_RANGE to find the first key >= key_prefix.
      */
     Status scan_impl(const std::string& initial_key_prefix, size_t limit, std::vector<std::pair<std::string, std::string>>& results) const {
-
-        size_t count = 0;
-        results.resize(limit);
-        try {
-            auto txn = lmdb::txn::begin(*env_, nullptr, MDB_RDONLY);
-            auto cursor = lmdb::cursor::open(txn, dbi_);
+        if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        
+        results.clear();
+        results.reserve(limit);
+        
+        MDB_txn* txn;
+        MDB_cursor* cursor;
+        MDB_val mdb_key;
+        MDB_val mdb_value;
+        
+        int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+        if (rc != 0) {
+            return Status::ERROR;
+        }
+        
+        rc = mdb_cursor_open(txn, dbi_, &cursor);
+        if (rc != 0) {
+            mdb_txn_abort(txn);
+            return Status::ERROR;
+        }
+        
+        // Set the cursor to the first key >= initial_key_prefix
+        mdb_key.mv_size = initial_key_prefix.size();
+        mdb_key.mv_data = const_cast<void*>(static_cast<const void*>(initial_key_prefix.c_str()));
+        
+        rc = mdb_cursor_get(cursor, &mdb_key, &mdb_value, MDB_SET_RANGE);
+        if (rc == MDB_SUCCESS) {
+            // Add the first result
+            std::string key(reinterpret_cast<char*>(mdb_key.mv_data), mdb_key.mv_size);
+            std::string value(reinterpret_cast<char*>(mdb_value.mv_data), mdb_value.mv_size);
+            results.emplace_back(key, value);
             
-            lmdb::val key_val;
-            lmdb::val data_val;
-    
-            lmdb::val prefix_val(initial_key_prefix);
-            if (cursor.get(prefix_val, data_val, MDB_SET_RANGE)) {
-                // Add the first result
-                std::string key(prefix_val.data(), prefix_val.size());
-                std::string value(data_val.data(), data_val.size());
-                results[count] = std::make_pair(key, value);
-                ++count;
-                // Continue iterating
-                while (count < limit && cursor.get(key_val, data_val, MDB_NEXT)) {
-                    key = std::string(key_val.data(), key_val.size());
-                    value = std::string(data_val.data(), data_val.size());
-                    results[count] = std::make_pair(key, value);
-                    ++count;
-                }
+            // Continue iterating
+            while (results.size() < limit && mdb_cursor_get(cursor, &mdb_key, &mdb_value, MDB_NEXT) == 0) {
+                key = std::string(reinterpret_cast<char*>(mdb_key.mv_data), mdb_key.mv_size);
+                value = std::string(reinterpret_cast<char*>(mdb_value.mv_data), mdb_value.mv_size);
+                results.emplace_back(key, value);
             }
-            
-            cursor.close();
-            txn.commit();
-            
-            if (count < limit) {
-                results.resize(count);
-                if (count == 0) {
-                    return Status::NOT_FOUND;
-                }
-            }
-            
-            return Status::SUCCESS;
-        } catch (const lmdb::error& e) {
+        }
+        
+        mdb_cursor_close(cursor);
+        mdb_txn_abort(txn);
+        
+        if (results.empty()) {
             return Status::NOT_FOUND;
         }
+        
+        return Status::SUCCESS;
     }
 
     /**
@@ -280,18 +274,26 @@ public:
      * @return Number of key-value pairs
      */
     int64_t count() const {
-        if (!is_open_) {
+        if (!is_open_ || !env_) {
             return 0;
         }
         
-        try {
-            auto txn = lmdb::txn::begin(*env_, nullptr, MDB_RDONLY);
-            int64_t count = dbi_.size(txn);
-            txn.commit();
-            return count;
-        } catch (const lmdb::error& e) {
+        MDB_txn* txn;
+        MDB_stat stat;
+        
+        int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+        if (rc != 0) {
             return 0;
         }
+        
+        rc = mdb_stat(txn, dbi_, &stat);
+        mdb_txn_abort(txn);
+        
+        if (rc != 0) {
+            return 0;
+        }
+        
+        return stat.ms_entries;
     }
 
     /**
@@ -299,32 +301,33 @@ public:
      * @return true if successful, false otherwise
      */
     bool sync() {
-        if (!is_open_) {
+        if (!is_open_ || !env_) {
             return false;
         }
         
-        try {
-            env_->sync(true);
-            return true;
-        } catch (const lmdb::error& e) {
-            return false;
-        }
+        int rc = mdb_env_sync(env_, 1);
+        return rc == 0;
     }
 
     /**
      * @brief Clear all entries from the database
      */
     void clear() {
-        if (!is_open_) {
+        if (!is_open_ || !env_) {
             return;
         }
         
-        try {
-            auto txn = lmdb::txn::begin(*env_);
-            dbi_.drop(txn, false);  // false = don't delete the database, just clear it
-            txn.commit();
-        } catch (const lmdb::error& e) {
-            // Ignore errors during clear
+        MDB_txn* txn;
+        int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+        if (rc != 0) {
+            return;
+        }
+        
+        rc = mdb_drop(txn, dbi_, 0);  // 0 = don't delete the database, just clear it
+        if (rc == 0) {
+            mdb_txn_commit(txn);
+        } else {
+            mdb_txn_abort(txn);
         }
     }
 
@@ -334,23 +337,28 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status remove(const std::string& key) {
-        if (!is_open_) {
+        if (!is_open_ || !env_) {
             return Status::ERROR;
         }
         
-        try {
-            auto txn = lmdb::txn::begin(*env_);
-            lmdb::val key_val(key);
-            
-            if (dbi_.del(txn, key_val)) {
-                txn.commit();
-                return Status::SUCCESS;
-            } else {
-                txn.abort();
-                return Status::NOT_FOUND;
-            }
-        } catch (const lmdb::error& e) {
+        MDB_txn* txn;
+        MDB_val mdb_key;
+        
+        int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+        if (rc != 0) {
             return Status::ERROR;
+        }
+        
+        mdb_key.mv_size = key.size();
+        mdb_key.mv_data = const_cast<void*>(static_cast<const void*>(key.c_str()));
+        
+        rc = mdb_del(txn, dbi_, &mdb_key, nullptr);
+        if (rc == 0) {
+            mdb_txn_commit(txn);
+            return Status::SUCCESS;
+        } else {
+            mdb_txn_abort(txn);
+            return Status::NOT_FOUND;
         }
     }
 
@@ -361,4 +369,71 @@ public:
     const std::string& get_path() const {
         return db_path_;
     }
+
+private:
+    /**
+     * @brief Initialize the database with a temporary path
+     */
+    void init() {
+        db_path_ = std::string("/tmp/repart_kv_storage/") +
+                   id +
+                   std::string("/") +
+                   std::to_string(db_counter.fetch_add(1, std::memory_order_relaxed));
+        std::filesystem::create_directories(db_path_);
+        
+        init_with_path(db_path_, 50ULL * 1024 * 1024 * 1024);
+    }
+    
+    /**
+     * @brief Initialize the database with a specific path
+     * @param path The database path
+     * @param map_size The map size
+     */
+    void init_with_path(const std::string& path, size_t map_size) {
+        int rc = mdb_env_create(&env_);
+        if (rc != 0) {
+            is_open_ = false;
+            return;
+        }
+        
+        mdb_env_set_maxdbs(env_, 1);
+        mdb_env_set_mapsize(env_, map_size);
+        
+        rc = mdb_env_open(env_, path.c_str(), MDB_NOSYNC | MDB_NOMETASYNC, 0664);
+        if (rc != 0) {
+            mdb_env_close(env_);
+            env_ = nullptr;
+            is_open_ = false;
+            return;
+        }
+        
+        MDB_txn* txn;
+        rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+        if (rc != 0) {
+            mdb_env_close(env_);
+            env_ = nullptr;
+            is_open_ = false;
+            return;
+        }
+        
+        rc = mdb_dbi_open(txn, nullptr, 0, &dbi_);
+        if (rc != 0) {
+            mdb_txn_abort(txn);
+            mdb_env_close(env_);
+            env_ = nullptr;
+            is_open_ = false;
+            return;
+        }
+        
+        mdb_txn_commit(txn);
+        is_open_ = true;
+    }
 };
+
+// Static member definitions
+inline std::atomic_int LmdbStorageEngine::db_counter = 0;
+inline std::string LmdbStorageEngine::id = std::to_string(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch()
+    ).count()
+);

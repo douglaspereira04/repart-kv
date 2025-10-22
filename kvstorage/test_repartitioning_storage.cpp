@@ -5,6 +5,7 @@
 #include "../storage/MapStorageEngine.h"
 #include "../utils/test_assertions.h"
 #include "kvstorage/threaded/SoftThreadedRepartitioningKeyValueStorage.h"
+#include "storage/LmdbStorageEngine.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -485,6 +486,7 @@ void test_untracked_keys_preservation() {
             std::vector<std::pair<std::string, std::string>> scan_result;
             Status status = storage.scan(kv_pair.first, 1, scan_result);
             ASSERT_STATUS_EQ(Status::SUCCESS, status);
+            std::cout << "    Scan result size: " << scan_result.size() << std::endl;
             ASSERT_TRUE(scan_result.size() == 1);
             if (scan_result.size() == 1) {
                 std::string retrieved_value = scan_result[0].second;
@@ -593,7 +595,7 @@ int main() {
         run_test_suite<SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage>>("SoftRepartitioningKeyValueStorage");
 
         // Test SoftThreadedRepartitioningKeyValueStorage  
-        run_test_suite<SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>>("SoftThreadedRepartitioningKeyValueStorage");
+        run_test_suite<SoftThreadedRepartitioningKeyValueStorage<LmdbStorageEngine, MapKeyStorage>>("SoftThreadedRepartitioningKeyValueStorage");
         
         std::cout << "\n========================================\n";
         std::cout << "  All Repartitioning Tests PASSED!\n";

@@ -66,11 +66,12 @@ add_executable(repart-kv
     main.cpp
 )
 
-# Link pthread, TKRZW, METIS, and unordered_dense
+# Link pthread, TKRZW, METIS, LMDB, and unordered_dense
 target_link_libraries(repart-kv PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
     ${METIS_LIB}
+    ${LMDB_LIB}
     unordered_dense::unordered_dense
 )
 
@@ -289,6 +290,7 @@ if(METIS_LIB)
         Threads::Threads
         ${TKRZW_ALL_LIBS}
         ${METIS_LIB}
+        ${LMDB_LIB}
         unordered_dense::unordered_dense
     )
     target_compile_features(test_repartitioning_storage PRIVATE cxx_std_20)

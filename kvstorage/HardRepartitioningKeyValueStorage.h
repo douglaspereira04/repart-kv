@@ -149,7 +149,7 @@ public:
         StorageEngineType* storage;
         bool found = storage_map_.get(key, storage);
         if (!found) {
-            // Key not found in any partition
+            // Key not found in any storage
             key_map_lock_.unlock_shared();
             return Status::NOT_FOUND;
         }
@@ -236,8 +236,9 @@ public:
         // Get iterator starting from initial_key
         auto it = storage_map_.lower_bound(initial_key_prefix);
         
+        size_t count = 0;
         // Collect storage pointers and keys up to limit
-        while (limit > 0) {
+        while (count < limit) {
             if (it.is_end()) {
                 break;
             }
@@ -248,7 +249,7 @@ public:
             key_array.push_back(it.get_key());
             
             ++it;
-            limit--;
+            ++count;
         }
 
         // Track key access patterns if enabled
@@ -319,54 +320,57 @@ public:
         // Lock graph for reading and processing
         graph_lock_.lock();
         
+        bool success = false;
         if (graph_.get_vertex_count() > 0) {
             try {
                 metis_graph_.prepare_from_graph(graph_);
                 metis_graph_.partition(partition_count_);
                 metis_partitions = metis_graph_.get_partition_result();
+                success = true;
             } catch (const std::exception& e) {
                 // If METIS fails, keep the old partition map
                 // This can happen if the graph is too small or has other issues
             }
         }
-        
-        // Step 3: Lock and update partition assignments
-        key_map_lock_.lock();
-        
-        // Save old storages
-        auto old_storages = storages_;
-        
-        // Lock all old storages in sorted order (by pointer address) to avoid deadlocks
-        std::vector<StorageEngineType*> sorted_storages = old_storages;
-        std::sort(sorted_storages.begin(), sorted_storages.end());
-        
-        for (auto* storage : sorted_storages) {
-            storage->lock_shared();
+        if (success) {
+            // Step 3: Lock and update partition assignments
+            key_map_lock_.lock();
+            
+            // Save old storages
+            auto old_storages = storages_;
+            
+            // Lock all old storages in sorted order (by pointer address) to avoid deadlocks
+            std::vector<StorageEngineType*> sorted_storages = old_storages;
+            std::sort(sorted_storages.begin(), sorted_storages.end());
+            
+            for (auto* storage : sorted_storages) {
+                storage->lock_shared();
+            }
+            
+            // Update partition_map with new assignments
+            const auto& idx_to_vertex = metis_graph_.get_idx_to_vertex();
+            for (size_t i = 0; i < metis_partitions.size(); ++i) {
+                partition_map_.put(idx_to_vertex[i], static_cast<size_t>(metis_partitions[i]));
+            }
+            
+            // Create new storage engines
+            storages_.clear();
+            storages_.reserve(partition_count_);
+            // Increment level for new storage engines
+            level_++;
+            for (size_t i = 0; i < partition_count_; ++i) {
+                storages_.push_back(new StorageEngineType(level_));
+            }
+            
+            // Unlock all old storages
+            for (auto* storage : sorted_storages) {
+                storage->unlock_shared();
+            }
+            
+            // Unlock key map
+            key_map_lock_.unlock();
         }
-        
-        // Update partition_map with new assignments
-        const auto& idx_to_vertex = metis_graph_.get_idx_to_vertex();
-        for (size_t i = 0; i < metis_partitions.size(); ++i) {
-            partition_map_.put(idx_to_vertex[i], static_cast<size_t>(metis_partitions[i]));
-        }
-        
-        // Create new storage engines
-        storages_.clear();
-        storages_.reserve(partition_count_);
-        // Increment level for new storage engines
-        level_++;
-        for (size_t i = 0; i < partition_count_; ++i) {
-            storages_.push_back(new StorageEngineType(level_));
-        }
-        
-        // Unlock all old storages
-        for (auto* storage : sorted_storages) {
-            storage->unlock_shared();
-        }
-        
-        // Unlock key map
-        key_map_lock_.unlock();
-        
+            
         // Step 4: Clear the graph for fresh tracking
         graph_.clear();
         
