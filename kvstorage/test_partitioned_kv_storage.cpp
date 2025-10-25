@@ -1,5 +1,6 @@
 #include "HardRepartitioningKeyValueStorage.h"
 #include "SoftRepartitioningKeyValueStorage.h"
+#include "threaded/SoftThreadedRepartitioningKeyValueStorage.h"
 #include "../storage/MapStorageEngine.h"
 #include "../keystorage/MapKeyStorage.h"
 #include "../utils/test_assertions.h"
@@ -428,14 +429,19 @@ int main() {
     std::cout << "  Generic PartitionedKeyValueStorage Test Suite" << std::endl;
     std::cout << "========================================" << std::endl;
     
-    // Test RepartitioningKeyValueStorage with MapStorageEngine
-    using TestStorage = SoftRepartitioningKeyValueStorage<
-        MapStorageEngine,
-        MapKeyStorage,
-        MapKeyStorage
-    >;
+    // Type aliases for cleaner code
+    using SoftRepartitioningStorage = SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage>;
+    using HardRepartitioningStorage = HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage>;
+    using SoftThreadedRepartitioningStorage = SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>;
     
-    run_test_suite<TestStorage>("RepartitioningKeyValueStorage<MapStorageEngine>");
+    // Test SoftRepartitioningKeyValueStorage
+    run_test_suite<SoftRepartitioningStorage>("SoftRepartitioningKeyValueStorage");
+    
+    // Test HardRepartitioningKeyValueStorage
+    run_test_suite<HardRepartitioningStorage>("HardRepartitioningKeyValueStorage");
+    
+    // Test SoftThreadedRepartitioningKeyValueStorage
+    run_test_suite<SoftThreadedRepartitioningStorage>("SoftThreadedRepartitioningKeyValueStorage");
     
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;
@@ -446,7 +452,10 @@ int main() {
     std::cout << std::endl;
     
     if (tests_failed == 0) {
-        std::cout << "✓ All tests passed for partitioned key-value storage!" << std::endl;
+        std::cout << "✓ All tests passed for all partitioned key-value storage types!" << std::endl;
+        std::cout << "✓ SoftRepartitioningKeyValueStorage: PASSED" << std::endl;
+        std::cout << "✓ HardRepartitioningKeyValueStorage: PASSED" << std::endl;
+        std::cout << "✓ SoftThreadedRepartitioningKeyValueStorage: PASSED" << std::endl;
         return 0;
     } else {
         std::cout << "✗ Some tests failed!" << std::endl;

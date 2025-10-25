@@ -1,5 +1,6 @@
 #include "HardRepartitioningKeyValueStorage.h"
 #include "SoftRepartitioningKeyValueStorage.h"
+#include "threaded/SoftThreadedRepartitioningKeyValueStorage.h"
 #include "../keystorage/MapKeyStorage.h"
 #include "../storage/MapStorageEngine.h"
 #include "../utils/test_assertions.h"
@@ -9,9 +10,10 @@
 int tests_passed = 0;
 int tests_failed = 0;
 
-void test_tracking_disabled() {
-    TEST("tracking_disabled")
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+template<typename StorageType>
+void test_tracking_disabled(const std::string& storage_name) {
+    TEST("tracking_disabled_" + storage_name)
+        StorageType storage(4);
         
         // Verify tracking is disabled by default
         ASSERT_FALSE(storage.enable_tracking());
@@ -35,12 +37,13 @@ void test_tracking_disabled() {
         const Graph& graph = storage.graph();
         ASSERT_EQ(0, graph.get_vertex_count());
         std::cout << "  ✓ Graph remains empty when tracking is disabled" << std::endl;
-    END_TEST("tracking_disabled")
+    END_TEST("tracking_disabled_" + storage_name)
 }
 
-void test_tracking_enabled() {
-    TEST("tracking_enabled")
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+template<typename StorageType>
+void test_tracking_enabled(const std::string& storage_name) {
+    TEST("tracking_enabled_" + storage_name)
+        StorageType storage(4);
         
         // Enable tracking
         storage.enable_tracking(true);
@@ -81,12 +84,13 @@ void test_tracking_enabled() {
         
         ASSERT_EQ(4, graph.get_vertex_weight("key1"));
         std::cout << "  ✓ key1 weight is now 4 after another write" << std::endl;
-    END_TEST("tracking_enabled")
+    END_TEST("tracking_enabled_" + storage_name)
 }
 
-void test_access_frequency_tracking() {
-    TEST("access_frequency_tracking")
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+template<typename StorageType>
+void test_access_frequency_tracking(const std::string& storage_name) {
+    TEST("access_frequency_tracking_" + storage_name)
+        StorageType storage(4);
         storage.enable_tracking(true);
         
         // Simulate different access patterns
@@ -128,12 +132,13 @@ void test_access_frequency_tracking() {
         std::cout << "  ✓ warm_key weight: " << warm_weight << " (1 write + 3 reads)" << std::endl;
         std::cout << "  ✓ cold_key weight: " << cold_weight << " (1 write only)" << std::endl;
         std::cout << "  ✓ Access frequency correctly tracked" << std::endl;
-    END_TEST("access_frequency_tracking")
+    END_TEST("access_frequency_tracking_" + storage_name)
 }
 
-void test_clear_graph() {
-    TEST("clear_graph")
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+template<typename StorageType>
+void test_clear_graph(const std::string& storage_name) {
+    TEST("clear_graph_" + storage_name)
+        StorageType storage(4);
         storage.enable_tracking(true);
         
         // Add some tracked data
@@ -161,12 +166,13 @@ void test_clear_graph() {
         storage.write("key1", "new_value");
         ASSERT_EQ(1, graph.get_vertex_weight("key1"));
         std::cout << "  ✓ New accesses tracked from fresh state" << std::endl;
-    END_TEST("clear_graph")
+    END_TEST("clear_graph_" + storage_name)
 }
 
-void test_toggle_tracking() {
-    TEST("toggle_tracking")
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+template<typename StorageType>
+void test_toggle_tracking(const std::string& storage_name) {
+    TEST("toggle_tracking_" + storage_name)
+        StorageType storage(4);
         
         // Enable tracking and do some operations
         storage.enable_tracking(true);
@@ -200,12 +206,13 @@ void test_toggle_tracking() {
         // Weight should now increase
         ASSERT_EQ(3, graph.get_vertex_weight("key1"));
         std::cout << "  ✓ Tracking resumed after re-enabling" << std::endl;
-    END_TEST("toggle_tracking")
+    END_TEST("toggle_tracking_" + storage_name)
 }
 
-void test_scan_with_graph_tracking() {
-    TEST("scan_with_graph_tracking")
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+template<typename StorageType>
+void test_scan_with_graph_tracking(const std::string& storage_name) {
+    TEST("scan_with_graph_tracking_" + storage_name)
+        StorageType storage(4);
         storage.enable_tracking(true);
         
         // Write some keys with a common prefix
@@ -261,12 +268,13 @@ void test_scan_with_graph_tracking() {
             }
         }
         std::cout << "  ✓ All edge pairs verified with weight 1" << std::endl;
-    END_TEST("scan_with_graph_tracking")
+    END_TEST("scan_with_graph_tracking_" + storage_name)
 }
 
-void test_repeated_scans() {
-    TEST("repeated_scans")
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+template<typename StorageType>
+void test_repeated_scans(const std::string& storage_name) {
+    TEST("repeated_scans_" + storage_name)
+        StorageType storage(4);
         storage.enable_tracking(true);
         
         // Write keys
@@ -305,12 +313,13 @@ void test_repeated_scans() {
         std::cout << "  ✓ Edge weight is 6 (incremented on each scan)" << std::endl;
         
         std::cout << "  ✓ Repeated scans correctly build edge weights" << std::endl;
-    END_TEST("repeated_scans")
+    END_TEST("repeated_scans_" + storage_name)
 }
 
-void test_co_access_patterns() {
-    TEST("co_access_patterns")
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage> storage(4);
+template<typename StorageType>
+void test_co_access_patterns(const std::string& storage_name) {
+    TEST("co_access_patterns_" + storage_name)
+        StorageType storage(4);
         storage.enable_tracking(true);
         
         // Write keys in different groups
@@ -380,22 +389,43 @@ void test_co_access_patterns() {
         }
         
         std::cout << "  ✓ Co-access patterns correctly detected" << std::endl;
-    END_TEST("co_access_patterns")
+    END_TEST("co_access_patterns_" + storage_name)
+}
+
+// Type aliases for cleaner code
+using SoftRepartitioningStorage = SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage>;
+using HardRepartitioningStorage = HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage, MapKeyStorage>;
+using SoftThreadedRepartitioningStorage = SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>;
+
+template<typename StorageType>
+void run_all_tests_for_storage(const std::string& storage_name) {
+    std::cout << "\n========================================" << std::endl;
+    std::cout << "  Testing " << storage_name << std::endl;
+    std::cout << "========================================" << std::endl << std::endl;
+    
+    test_tracking_disabled<StorageType>(storage_name);
+    test_tracking_enabled<StorageType>(storage_name);
+    test_access_frequency_tracking<StorageType>(storage_name);
+    test_clear_graph<StorageType>(storage_name);
+    test_toggle_tracking<StorageType>(storage_name);
+    test_scan_with_graph_tracking<StorageType>(storage_name);
+    test_repeated_scans<StorageType>(storage_name);
+    test_co_access_patterns<StorageType>(storage_name);
 }
 
 int main() {
     std::cout << "========================================" << std::endl;
-    std::cout << "  Testing Graph Tracking in RepartitioningKeyValueStorage" << std::endl;
+    std::cout << "  Testing Graph Tracking in All RepartitioningKeyValueStorage Types" << std::endl;
     std::cout << "========================================" << std::endl << std::endl;
     
-    test_tracking_disabled();
-    test_tracking_enabled();
-    test_access_frequency_tracking();
-    test_clear_graph();
-    test_toggle_tracking();
-    test_scan_with_graph_tracking();
-    test_repeated_scans();
-    test_co_access_patterns();
+    // Test SoftRepartitioningKeyValueStorage
+    run_all_tests_for_storage<SoftRepartitioningStorage>("SoftRepartitioningKeyValueStorage");
+    
+    // Test HardRepartitioningKeyValueStorage
+    run_all_tests_for_storage<HardRepartitioningStorage>("HardRepartitioningKeyValueStorage");
+    
+    // Test SoftThreadedRepartitioningKeyValueStorage
+    run_all_tests_for_storage<SoftThreadedRepartitioningStorage>("SoftThreadedRepartitioningKeyValueStorage");
     
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;
@@ -417,6 +447,7 @@ int main() {
         std::cout << "  ✓ Edge weights reflect frequency of co-access" << std::endl;
         std::cout << "  ✓ Keys accessed together can be identified for co-location" << std::endl;
         std::cout << "  ✓ Ready for intelligent repartitioning decisions" << std::endl;
+        std::cout << "  ✓ All storage types (Soft, Hard, SoftThreaded) work correctly" << std::endl;
         return 0;
     } else {
         std::cout << "✗ Some Graph Tracking tests failed!" << std::endl;

@@ -240,6 +240,10 @@ public:
         // Collect storage pointers and keys up to limit
         while (count < limit) {
             if (it.is_end()) {
+                if (count == 0) {
+                    key_map_lock_.unlock_shared();
+                    return Status::NOT_FOUND;
+                }
                 break;
             }
             

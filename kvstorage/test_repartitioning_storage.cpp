@@ -25,19 +25,15 @@ void test_basic_operations() {
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
         status = storage.write("key2", "value2");
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
-        std::cout << "    Write key1 and key2" << std::endl;
         std::string value;
         status = storage.read("key1", value);
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_STR_EQ("value1", value);
-        std::cout << "    Read key1" << std::endl;
         status = storage.read("key2", value);
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_STR_EQ("value2", value);
-        std::cout << "    Read key2" << std::endl;
         status = storage.read("key3", value);
         ASSERT_STATUS_EQ(Status::NOT_FOUND, status);
-        std::cout << "    Read key3" << std::endl;
     END_TEST("basic_operations")
 }
 
@@ -486,7 +482,6 @@ void test_untracked_keys_preservation() {
             std::vector<std::pair<std::string, std::string>> scan_result;
             Status status = storage.scan(kv_pair.first, 1, scan_result);
             ASSERT_STATUS_EQ(Status::SUCCESS, status);
-            std::cout << "    Scan result size: " << scan_result.size() << std::endl;
             ASSERT_TRUE(scan_result.size() == 1);
             if (scan_result.size() == 1) {
                 std::string retrieved_value = scan_result[0].second;
