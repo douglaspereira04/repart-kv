@@ -3,6 +3,7 @@
 #include "../utils/test_assertions.h"
 #include <iostream>
 #include <set>
+#include <vector>
 
 // Test result tracking
 int tests_passed = 0;
@@ -260,13 +261,16 @@ int main() {
     std::cout << "========================================" << std::endl
               << std::endl;
 
-    test_prepare_from_graph();
-    test_empty_graph();
-    test_partition_simple();
-    test_partition_with_weights();
-    test_multiple_partitions();
-    test_invalid_partition_parameters();
-    test_partition_before_prepare();
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"prepare_from_graph", test_prepare_from_graph},
+        {"empty_graph", test_empty_graph},
+        {"partition_simple", test_partition_simple},
+        {"partition_with_weights", test_partition_with_weights},
+        {"multiple_partitions", test_multiple_partitions},
+        {"invalid_partition_parameters", test_invalid_partition_parameters},
+        {"partition_before_prepare", test_partition_before_prepare}};
+
+    run_test_suite("MetisGraph Implementation", tests);
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;

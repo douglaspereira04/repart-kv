@@ -4,6 +4,7 @@
 #include <thread>
 #include <chrono>
 #include <string>
+#include <vector>
 
 // Test result tracking
 int tests_passed = 0;
@@ -121,16 +122,17 @@ void test_future_reference_relationship() {
 }
 
 int main() {
-    std::cout << "Starting Future class tests..." << std::endl << std::endl;
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"future_constructor", test_future_constructor},
+        {"future_int_operations", test_future_int_operations},
+        {"future_string_operations", test_future_string_operations},
+        {"future_const_correctness", test_future_const_correctness},
+        {"future_correctness", test_future_correctness},
+        {"future_reference_relationship", test_future_reference_relationship}};
 
-    test_future_constructor();
-    test_future_int_operations();
-    test_future_string_operations();
-    test_future_const_correctness();
-    test_future_correctness();
-    test_future_reference_relationship();
+    run_test_suite("Future class", tests);
 
-    std::cout << std::endl << "Test Summary:" << std::endl;
+    std::cout << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
 

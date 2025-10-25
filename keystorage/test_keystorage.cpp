@@ -391,41 +391,47 @@ void test_numeric_value_ranges() {
 
 // Helper function to run all tests for a given storage type and value type
 template <typename StorageType, typename ValueType>
-void run_test_suite(const std::string &storage_name,
-                    const std::string &value_type_name) {
-    std::cout << "\n========================================" << std::endl;
-    std::cout << "  Testing: " << storage_name << "<" << value_type_name << ">"
-              << std::endl;
-    std::cout << "========================================" << std::endl;
-    std::cout << std::endl;
+void run_storage_test_suite(const std::string &storage_name,
+                            const std::string &value_type_name) {
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"basic_put_get",
+         []() { test_basic_put_get<StorageType, ValueType>(); }},
+        {"get_nonexistent_key",
+         []() { test_get_nonexistent_key<StorageType, ValueType>(); }},
+        {"overwrite_value",
+         []() { test_overwrite_value<StorageType, ValueType>(); }},
+        {"lower_bound_basic",
+         []() { test_lower_bound_basic<StorageType, ValueType>(); }},
+        {"lower_bound_exact_match",
+         []() { test_lower_bound_exact_match<StorageType, ValueType>(); }},
+        {"lower_bound_no_match",
+         []() { test_lower_bound_no_match<StorageType, ValueType>(); }},
+        {"lower_bound_empty_prefix",
+         []() { test_lower_bound_empty_prefix<StorageType, ValueType>(); }},
+        {"iterator_incrementation",
+         []() { test_iterator_incrementation<StorageType, ValueType>(); }},
+        {"scan_basic", []() { test_scan_basic<StorageType, ValueType>(); }},
+        {"scan_with_limit",
+         []() { test_scan_with_limit<StorageType, ValueType>(); }},
+        {"scan_no_matches",
+         []() { test_scan_no_matches<StorageType, ValueType>(); }},
+        {"scan_empty_prefix",
+         []() { test_scan_empty_prefix<StorageType, ValueType>(); }},
+        {"scan_sorted_order",
+         []() { test_scan_sorted_order<StorageType, ValueType>(); }},
+        {"scan_partial_prefix",
+         []() { test_scan_partial_prefix<StorageType, ValueType>(); }},
+        {"scan_after_updates",
+         []() { test_scan_after_updates<StorageType, ValueType>(); }},
+        {"large_dataset",
+         []() { test_large_dataset<StorageType, ValueType>(); }},
+        {"special_characters",
+         []() { test_special_characters<StorageType, ValueType>(); }},
+        {"numeric_value_ranges",
+         []() { test_numeric_value_ranges<StorageType, ValueType>(); }}};
 
-    // Basic functionality tests
-    test_basic_put_get<StorageType, ValueType>();
-    test_get_nonexistent_key<StorageType, ValueType>();
-    test_overwrite_value<StorageType, ValueType>();
-
-    // Lower bound tests
-    test_lower_bound_basic<StorageType, ValueType>();
-    test_lower_bound_exact_match<StorageType, ValueType>();
-    test_lower_bound_no_match<StorageType, ValueType>();
-    test_lower_bound_empty_prefix<StorageType, ValueType>();
-
-    // Iterator tests
-    test_iterator_incrementation<StorageType, ValueType>();
-
-    // Scan tests (using lower_bound + iterator)
-    test_scan_basic<StorageType, ValueType>();
-    test_scan_with_limit<StorageType, ValueType>();
-    test_scan_no_matches<StorageType, ValueType>();
-    test_scan_empty_prefix<StorageType, ValueType>();
-    test_scan_sorted_order<StorageType, ValueType>();
-    test_scan_partial_prefix<StorageType, ValueType>();
-    test_scan_after_updates<StorageType, ValueType>();
-
-    // Edge cases and special scenarios
-    test_large_dataset<StorageType, ValueType>();
-    test_special_characters<StorageType, ValueType>();
-    test_numeric_value_ranges<StorageType, ValueType>();
+    std::string suite_name = storage_name + "<" + value_type_name + ">";
+    run_test_suite(suite_name, tests);
 }
 
 int main() {
@@ -435,30 +441,33 @@ int main() {
 
     // Test all storage implementations with int
     std::cout << "\n=== Testing with int ===" << std::endl;
-    run_test_suite<MapKeyStorage<int>, int>("MapKeyStorage", "int");
-    run_test_suite<TkrzwHashKeyStorage<int>, int>("TkrzwHashKeyStorage", "int");
-    run_test_suite<TkrzwTreeKeyStorage<int>, int>("TkrzwTreeKeyStorage", "int");
-    run_test_suite<LmdbKeyStorage<int>, int>("LmdbKeyStorage", "int");
+    run_storage_test_suite<MapKeyStorage<int>, int>("MapKeyStorage", "int");
+    run_storage_test_suite<TkrzwHashKeyStorage<int>, int>("TkrzwHashKeyStorage",
+                                                          "int");
+    run_storage_test_suite<TkrzwTreeKeyStorage<int>, int>("TkrzwTreeKeyStorage",
+                                                          "int");
+    run_storage_test_suite<LmdbKeyStorage<int>, int>("LmdbKeyStorage", "int");
 
     // Test all storage implementations with long
     std::cout << "\n=== Testing with long ===" << std::endl;
-    run_test_suite<MapKeyStorage<long>, long>("MapKeyStorage", "long");
-    run_test_suite<TkrzwHashKeyStorage<long>, long>("TkrzwHashKeyStorage",
-                                                    "long");
-    run_test_suite<TkrzwTreeKeyStorage<long>, long>("TkrzwTreeKeyStorage",
-                                                    "long");
-    run_test_suite<LmdbKeyStorage<long>, long>("LmdbKeyStorage", "long");
+    run_storage_test_suite<MapKeyStorage<long>, long>("MapKeyStorage", "long");
+    run_storage_test_suite<TkrzwHashKeyStorage<long>, long>(
+        "TkrzwHashKeyStorage", "long");
+    run_storage_test_suite<TkrzwTreeKeyStorage<long>, long>(
+        "TkrzwTreeKeyStorage", "long");
+    run_storage_test_suite<LmdbKeyStorage<long>, long>("LmdbKeyStorage",
+                                                       "long");
 
     // Test all storage implementations with uint64_t
     std::cout << "\n=== Testing with uint64_t ===" << std::endl;
-    run_test_suite<MapKeyStorage<uint64_t>, uint64_t>("MapKeyStorage",
-                                                      "uint64_t");
-    run_test_suite<TkrzwHashKeyStorage<uint64_t>, uint64_t>(
+    run_storage_test_suite<MapKeyStorage<uint64_t>, uint64_t>("MapKeyStorage",
+                                                              "uint64_t");
+    run_storage_test_suite<TkrzwHashKeyStorage<uint64_t>, uint64_t>(
         "TkrzwHashKeyStorage", "uint64_t");
-    run_test_suite<TkrzwTreeKeyStorage<uint64_t>, uint64_t>(
+    run_storage_test_suite<TkrzwTreeKeyStorage<uint64_t>, uint64_t>(
         "TkrzwTreeKeyStorage", "uint64_t");
-    run_test_suite<LmdbKeyStorage<uint64_t>, uint64_t>("LmdbKeyStorage",
-                                                       "uint64_t");
+    run_storage_test_suite<LmdbKeyStorage<uint64_t>, uint64_t>("LmdbKeyStorage",
+                                                               "uint64_t");
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;

@@ -2,6 +2,7 @@
 #include "../utils/test_assertions.h"
 #include <iostream>
 #include <chrono>
+#include <vector>
 
 // Test result tracking
 int tests_passed = 0;
@@ -29,7 +30,6 @@ void testBasicVertexOperations() {
     ASSERT_FALSE(graph.has_vertex("D"));
     ASSERT_EQ(0, graph.get_vertex_weight("D"));
 
-    std::cout << "  ✓ Basic vertex operations passed" << std::endl;
     END_TEST("basic_vertex_operations")
 }
 
@@ -59,7 +59,6 @@ void testBasicEdgeOperations() {
     ASSERT_FALSE(graph.has_edge("X", "Y"));
     ASSERT_EQ(0, graph.get_edge_weight("X", "Y"));
 
-    std::cout << "  ✓ Basic edge operations passed" << std::endl;
     END_TEST("basic_edge_operations")
 }
 
@@ -81,7 +80,6 @@ void testCombinedOperations() {
     ASSERT_EQ(6, graph.get_vertex_weight("A"));
     ASSERT_EQ(6, graph.get_edge_weight("A", "B"));
 
-    std::cout << "  ✓ Combined operations passed" << std::endl;
     END_TEST("combined_operations")
 }
 
@@ -105,7 +103,6 @@ void testClearOperation() {
     ASSERT_FALSE(graph.has_vertex("A"));
     ASSERT_FALSE(graph.has_edge("A", "B"));
 
-    std::cout << "  ✓ Clear operation passed" << std::endl;
     END_TEST("clear_operation")
 }
 
@@ -123,9 +120,6 @@ void testPerformance() {
     auto end = std::chrono::high_resolution_clock::now();
     auto duration =
         std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    std::cout << "  " << numOperations << " vertex operations in "
-              << duration.count() << "ms" << std::endl;
-
     // Test edge insertion performance
     start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < numOperations; ++i) {
@@ -137,26 +131,21 @@ void testPerformance() {
     end = std::chrono::high_resolution_clock::now();
     duration =
         std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-    std::cout << "  " << numOperations << " edge operations in "
-              << duration.count() << "ms" << std::endl;
 
-    std::cout << "  ✓ Performance test completed" << std::endl;
     END_TEST("performance")
 }
 
 int main() {
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"basic_vertex_operations", testBasicVertexOperations},
+        {"basic_edge_operations", testBasicEdgeOperations},
+        {"combined_operations", testCombinedOperations},
+        {"clear_operation", testClearOperation},
+        {"performance", testPerformance}};
+
+    run_test_suite("Graph Implementation", tests);
+
     std::cout << "========================================" << std::endl;
-    std::cout << "  Testing Graph Implementation" << std::endl;
-    std::cout << "========================================" << std::endl
-              << std::endl;
-
-    testBasicVertexOperations();
-    testBasicEdgeOperations();
-    testCombinedOperations();
-    testClearOperation();
-    testPerformance();
-
-    std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;
     std::cout << "========================================" << std::endl;
     std::cout << "Tests passed: " << tests_passed << std::endl;

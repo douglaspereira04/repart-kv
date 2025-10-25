@@ -4,6 +4,7 @@
 #include "../../../utils/test_assertions.h"
 #include <iostream>
 #include <string>
+#include <vector>
 
 // Test result tracking
 int tests_passed = 0;
@@ -39,13 +40,13 @@ void test_readoperation() {
 }
 
 int main() {
-    std::cout << "Starting Operation with Storage tests..." << std::endl
-              << std::endl;
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"basic_operation", test_basic_operation},
+        {"readoperation", test_readoperation}};
 
-    test_basic_operation();
-    test_readoperation();
+    run_test_suite("Operation with Storage", tests);
 
-    std::cout << std::endl << "Test Summary:" << std::endl;
+    std::cout << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
 

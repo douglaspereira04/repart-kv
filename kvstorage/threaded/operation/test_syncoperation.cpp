@@ -93,17 +93,17 @@ void test_large_partition_count() {
 }
 
 int main() {
-    std::cout << "Starting SyncOperation class tests..." << std::endl
-              << std::endl;
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"constructor", test_constructor},
+        {"type_verification", test_type_verification},
+        {"status_inheritance", test_status_inheritance},
+        {"test_sync", test_sync},
+        {"barrier_destroy", test_barrier_destroy},
+        {"large_partition_count", test_large_partition_count}};
 
-    test_constructor();
-    test_type_verification();
-    test_status_inheritance();
-    test_sync();
-    test_barrier_destroy();
-    test_large_partition_count();
+    run_test_suite("SyncOperation class", tests);
 
-    std::cout << std::endl << "Test Summary:" << std::endl;
+    std::cout << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
 

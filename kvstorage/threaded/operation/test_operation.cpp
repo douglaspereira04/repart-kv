@@ -3,6 +3,7 @@
 #include "../../../utils/test_assertions.h"
 #include <iostream>
 #include <string>
+#include <vector>
 
 // Test result tracking
 int tests_passed = 0;
@@ -145,19 +146,20 @@ void test_status() {
 }
 
 int main() {
-    std::cout << "Starting Operation class tests..." << std::endl << std::endl;
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"type_enum", test_type_enum},
+        {"read_operation", test_read_operation},
+        {"write_operation", test_write_operation},
+        {"scan_operation", test_scan_operation},
+        {"key_array_access", test_key_array_access},
+        {"constructor_parameters", test_constructor_parameters},
+        {"const_correctness", test_const_correctness},
+        {"pointer_relationship", test_pointer_relationship},
+        {"status", test_status}};
 
-    test_type_enum();
-    test_read_operation();
-    test_write_operation();
-    test_scan_operation();
-    test_key_array_access();
-    test_constructor_parameters();
-    test_const_correctness();
-    test_pointer_relationship();
-    test_status();
+    run_test_suite("Operation class", tests);
 
-    std::cout << std::endl << "Test Summary:" << std::endl;
+    std::cout << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
 

@@ -3,6 +3,7 @@
 #include "../../../utils/test_assertions.h"
 #include <iostream>
 #include <string>
+#include <vector>
 
 // Test result tracking
 int tests_passed = 0;
@@ -97,16 +98,17 @@ void test_write_operation_value_modification() {
 }
 
 int main() {
-    std::cout << "Starting WriteOperation class tests..." << std::endl
-              << std::endl;
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"writeoperation", test_writeoperation},
+        {"write_operation_value_access", test_write_operation_value_access},
+        {"write_operation", test_write_operation},
+        {"write_operation_inheritance", test_write_operation_inheritance},
+        {"write_operation_value_modification",
+         test_write_operation_value_modification}};
 
-    test_writeoperation();
-    test_write_operation_value_access();
-    test_write_operation();
-    test_write_operation_inheritance();
-    test_write_operation_value_modification();
+    run_test_suite("WriteOperation class", tests);
 
-    std::cout << std::endl << "Test Summary:" << std::endl;
+    std::cout << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
 

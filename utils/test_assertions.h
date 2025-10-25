@@ -3,18 +3,38 @@
 #include <iostream>
 #include <string>
 #include <stdexcept>
+#include <vector>
+#include <functional>
 
 // Test result tracking
 extern int tests_passed;
 extern int tests_failed;
 
+// Test function type
+using TestFunction = std::function<void()>;
+
+// Test runner function
+void run_test_suite(
+    const std::string &suite_name,
+    const std::vector<std::pair<std::string, TestFunction>> &tests) {
+    std::cout << "========================================" << std::endl;
+    std::cout << "  Testing " << suite_name << std::endl;
+    std::cout << "========================================" << std::endl;
+    std::cout << std::endl;
+
+    for (const auto &[test_name, test_func] : tests) {
+        std::cout << "Running test: " << test_name << "...";
+        test_func();
+        std::cout << " ✓ " << test_name << " PASSED" << std::endl;
+    }
+
+    std::cout << std::endl;
+}
+
 // Test framework macros
-#define TEST(name)                                                             \
-    std::cout << "Running test: " << name << "..." << std::endl;               \
-    try {
+#define TEST(name) try {
 
 #define END_TEST(name)                                                         \
-    std::cout << "  ✓ " << name << " PASSED" << std::endl;                     \
     tests_passed++;                                                            \
     }                                                                          \
     catch (const std::exception &e) {                                          \

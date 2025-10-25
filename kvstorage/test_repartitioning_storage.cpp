@@ -564,23 +564,28 @@ template <typename StorageType> void test_partition_map_consistency() {
 
 // Test suite runner for a specific storage type
 template <typename StorageType>
-void run_test_suite(const std::string &storage_name) {
-    std::cout << "\n=== Testing " << storage_name << " ===" << std::endl;
+void run_repartitioning_test_suite(const std::string &storage_name) {
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"basic_operations", []() { test_basic_operations<StorageType>(); }},
+        {"tracking_disabled_by_default",
+         []() { test_tracking_disabled_by_default<StorageType>(); }},
+        {"enable_tracking", []() { test_enable_tracking<StorageType>(); }},
+        {"basic_repartition", []() { test_basic_repartition<StorageType>(); }},
+        {"co_access_patterns",
+         []() { test_co_access_patterns<StorageType>(); }},
+        {"empty_graph_repartition",
+         []() { test_empty_graph_repartition<StorageType>(); }},
+        {"multiple_repartitions",
+         []() { test_multiple_repartitions<StorageType>(); }},
+        {"repartition_correctness",
+         []() { test_repartition_correctness<StorageType>(); }},
+        {"scan_operations", []() { test_scan_operations<StorageType>(); }},
+        {"untracked_keys_preservation",
+         []() { test_untracked_keys_preservation<StorageType>(); }},
+        {"partition_map_consistency",
+         []() { test_partition_map_consistency<StorageType>(); }}};
 
-    test_basic_operations<StorageType>();
-    test_tracking_disabled_by_default<StorageType>();
-    test_enable_tracking<StorageType>();
-    test_basic_repartition<StorageType>();
-    test_co_access_patterns<StorageType>();
-    test_empty_graph_repartition<StorageType>();
-    test_multiple_repartitions<StorageType>();
-    test_repartition_correctness<StorageType>();
-    test_scan_operations<StorageType>();
-    test_untracked_keys_preservation<StorageType>();
-    test_partition_map_consistency<StorageType>();
-
-    std::cout << "\n" << storage_name << " Test Summary:" << std::endl;
-    std::cout << "  ✓ All " << storage_name << " tests completed" << std::endl;
+    run_test_suite(storage_name, tests);
 }
 
 int main() {
@@ -590,17 +595,17 @@ int main() {
 
     try {
         // Test HardRepartitioningKeyValueStorage
-        run_test_suite<HardRepartitioningKeyValueStorage<
+        run_repartitioning_test_suite<HardRepartitioningKeyValueStorage<
             MapStorageEngine, MapKeyStorage, MapKeyStorage>>(
             "HardRepartitioningKeyValueStorage");
 
         // Test SoftRepartitioningKeyValueStorage
-        run_test_suite<SoftRepartitioningKeyValueStorage<
+        run_repartitioning_test_suite<SoftRepartitioningKeyValueStorage<
             MapStorageEngine, MapKeyStorage, MapKeyStorage>>(
             "SoftRepartitioningKeyValueStorage");
 
         // Test SoftThreadedRepartitioningKeyValueStorage
-        run_test_suite<SoftThreadedRepartitioningKeyValueStorage<
+        run_repartitioning_test_suite<SoftThreadedRepartitioningKeyValueStorage<
             LmdbStorageEngine, MapKeyStorage>>(
             "SoftThreadedRepartitioningKeyValueStorage");
 

@@ -384,33 +384,27 @@ template <typename EngineType> void test_scan_after_updates() {
 
 // Helper function to run all tests for a given engine type
 template <typename EngineType>
-void run_test_suite(const std::string &engine_name) {
-    std::cout << "\n========================================" << std::endl;
-    std::cout << "  Testing: " << engine_name << std::endl;
-    std::cout << "========================================" << std::endl;
-    std::cout << std::endl;
+void run_storage_engine_test_suite(const std::string &engine_name) {
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"basic_write_read", []() { test_basic_write_read<EngineType>(); }},
+        {"read_nonexistent_key",
+         []() { test_read_nonexistent_key<EngineType>(); }},
+        {"overwrite_value", []() { test_overwrite_value<EngineType>(); }},
+        {"scan_basic", []() { test_scan_basic<EngineType>(); }},
+        {"scan_with_limit", []() { test_scan_with_limit<EngineType>(); }},
+        {"scan_no_matches", []() { test_scan_no_matches<EngineType>(); }},
+        {"scan_exact_match", []() { test_scan_exact_match<EngineType>(); }},
+        {"scan_sorted_order", []() { test_scan_sorted_order<EngineType>(); }},
+        {"scan_after_updates", []() { test_scan_after_updates<EngineType>(); }},
+        {"scan_empty_prefix", []() { test_scan_empty_prefix<EngineType>(); }},
+        {"large_dataset", []() { test_large_dataset<EngineType>(); }},
+        {"special_characters", []() { test_special_characters<EngineType>(); }},
+        {"manual_locking", []() { test_manual_locking<EngineType>(); }},
+        {"concurrent_writes", []() { test_concurrent_writes<EngineType>(); }},
+        {"concurrent_reads_writes",
+         []() { test_concurrent_reads_writes<EngineType>(); }}};
 
-    // Basic functionality tests
-    test_basic_write_read<EngineType>();
-    test_read_nonexistent_key<EngineType>();
-    test_overwrite_value<EngineType>();
-    // Scan tests
-    test_scan_basic<EngineType>();
-    test_scan_with_limit<EngineType>();
-    test_scan_no_matches<EngineType>();
-    test_scan_exact_match<EngineType>();
-    test_scan_sorted_order<EngineType>();
-    test_scan_after_updates<EngineType>();
-    test_scan_empty_prefix<EngineType>();
-
-    // Edge cases and special scenarios
-    test_large_dataset<EngineType>();
-    test_special_characters<EngineType>();
-
-    // Locking and concurrency tests
-    test_manual_locking<EngineType>();
-    test_concurrent_writes<EngineType>();
-    test_concurrent_reads_writes<EngineType>();
+    run_test_suite(engine_name, tests);
 }
 
 int main() {
@@ -419,10 +413,12 @@ int main() {
     std::cout << "========================================" << std::endl;
 
     // Test all storage engine implementations
-    run_test_suite<MapStorageEngine>("MapStorageEngine");
-    run_test_suite<TkrzwHashStorageEngine>("TkrzwHashStorageEngine");
-    run_test_suite<TkrzwTreeStorageEngine>("TkrzwTreeStorageEngine");
-    run_test_suite<LmdbStorageEngine>("LmdbStorageEngine");
+    run_storage_engine_test_suite<MapStorageEngine>("MapStorageEngine");
+    run_storage_engine_test_suite<TkrzwHashStorageEngine>(
+        "TkrzwHashStorageEngine");
+    run_storage_engine_test_suite<TkrzwTreeStorageEngine>(
+        "TkrzwTreeStorageEngine");
+    run_storage_engine_test_suite<LmdbStorageEngine>("LmdbStorageEngine");
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;

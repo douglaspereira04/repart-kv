@@ -104,18 +104,17 @@ void test_scan_operation_single_storage() {
     t1.join();
     t2.join();
 
-    std::cout << "  ✓ Scan operation completed successfully" << std::endl;
     END_TEST("scan_operation_single_key")
 }
 
 int main() {
-    std::cout << "Starting ScanOperation class tests..." << std::endl
-              << std::endl;
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"scan_operation_constructor", test_scan_operation_constructor},
+        {"scan_operation_single_storage", test_scan_operation_single_storage}};
 
-    test_scan_operation_constructor();
-    test_scan_operation_single_storage();
+    run_test_suite("ScanOperation class", tests);
 
-    std::cout << std::endl << "Test Summary:" << std::endl;
+    std::cout << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
 

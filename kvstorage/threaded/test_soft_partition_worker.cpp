@@ -4,6 +4,7 @@
 #include "../../storage/MapStorageEngine.h"
 #include "../../utils/test_assertions.h"
 #include <string>
+#include <vector>
 
 // Test result tracking
 int tests_passed = 0;
@@ -110,16 +111,16 @@ void test_sync_multiple_workers() {
 }
 
 int main() {
-    std::cout << "Starting SoftPartitionWorker tests..." << std::endl
-              << std::endl;
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"stop_signal", test_stop_signal},
+        {"single_read_operation", test_single_read_operation},
+        {"single_write_operation", test_single_write_operation},
+        {"single_scan_operation", test_single_scan_operation},
+        {"sync_multiple_workers", test_sync_multiple_workers}};
 
-    test_stop_signal();
-    test_single_read_operation();
-    test_single_write_operation();
-    test_single_scan_operation();
-    test_sync_multiple_workers();
+    run_test_suite("SoftPartitionWorker", tests);
 
-    std::cout << std::endl << "Test Summary:" << std::endl;
+    std::cout << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
 

@@ -4,6 +4,7 @@
 #include <thread>
 #include <chrono>
 #include <atomic>
+#include <vector>
 
 // Test result tracking
 int tests_passed = 0;
@@ -59,14 +60,14 @@ void test_wait() {
 }
 
 int main() {
-    std::cout << "Starting DoneOperation class tests..." << std::endl
-              << std::endl;
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"constructor", test_constructor},
+        {"type_verification", test_type_verification},
+        {"status_inheritance", test_status_inheritance}};
 
-    test_constructor();
-    test_type_verification();
-    test_status_inheritance();
+    run_test_suite("DoneOperation class", tests);
 
-    std::cout << std::endl << "Test Summary:" << std::endl;
+    std::cout << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
 

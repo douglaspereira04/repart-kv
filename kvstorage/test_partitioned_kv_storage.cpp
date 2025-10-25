@@ -380,34 +380,29 @@ template <typename StorageType> void test_mixed_operations() {
 
 // Helper function to run all tests for a given storage type
 template <typename StorageType>
-void run_test_suite(const std::string &storage_name) {
-    std::cout << "\n========================================" << std::endl;
-    std::cout << "  Testing: " << storage_name << std::endl;
-    std::cout << "========================================" << std::endl;
-    std::cout << std::endl;
+void run_partitioned_kv_test_suite(const std::string &storage_name) {
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"basic_write_read", []() { test_basic_write_read<StorageType>(); }},
+        {"read_nonexistent_key",
+         []() { test_read_nonexistent_key<StorageType>(); }},
+        {"overwrite_value", []() { test_overwrite_value<StorageType>(); }},
+        {"empty_key_value", []() { test_empty_key_value<StorageType>(); }},
+        {"single_partition", []() { test_single_partition<StorageType>(); }},
+        {"multiple_partitions",
+         []() { test_multiple_partitions<StorageType>(); }},
+        {"many_partitions", []() { test_many_partitions<StorageType>(); }},
+        {"scan_basic", []() { test_scan_basic<StorageType>(); }},
+        {"scan_with_limit", []() { test_scan_with_limit<StorageType>(); }},
+        {"scan_no_matches", []() { test_scan_no_matches<StorageType>(); }},
+        {"scan_empty_prefix", []() { test_scan_empty_prefix<StorageType>(); }},
+        {"large_dataset", []() { test_large_dataset<StorageType>(); }},
+        {"special_characters",
+         []() { test_special_characters<StorageType>(); }},
+        {"repeated_operations",
+         []() { test_repeated_operations<StorageType>(); }},
+        {"mixed_operations", []() { test_mixed_operations<StorageType>(); }}};
 
-    // Basic functionality tests
-    test_basic_write_read<StorageType>();
-    test_read_nonexistent_key<StorageType>();
-    test_overwrite_value<StorageType>();
-    test_empty_key_value<StorageType>();
-
-    // Partition-specific tests
-    test_single_partition<StorageType>();
-    test_multiple_partitions<StorageType>();
-    test_many_partitions<StorageType>();
-
-    // Scan tests
-    test_scan_basic<StorageType>();
-    test_scan_with_limit<StorageType>();
-    test_scan_no_matches<StorageType>();
-    test_scan_empty_prefix<StorageType>();
-
-    // Edge cases and special scenarios
-    test_large_dataset<StorageType>();
-    test_special_characters<StorageType>();
-    test_repeated_operations<StorageType>();
-    test_mixed_operations<StorageType>();
+    run_test_suite(storage_name, tests);
 }
 
 int main() {
@@ -427,15 +422,15 @@ int main() {
                                                   MapKeyStorage>;
 
     // Test SoftRepartitioningKeyValueStorage
-    run_test_suite<SoftRepartitioningStorage>(
+    run_partitioned_kv_test_suite<SoftRepartitioningStorage>(
         "SoftRepartitioningKeyValueStorage");
 
     // Test HardRepartitioningKeyValueStorage
-    run_test_suite<HardRepartitioningStorage>(
+    run_partitioned_kv_test_suite<HardRepartitioningStorage>(
         "HardRepartitioningKeyValueStorage");
 
     // Test SoftThreadedRepartitioningKeyValueStorage
-    run_test_suite<SoftThreadedRepartitioningStorage>(
+    run_partitioned_kv_test_suite<SoftThreadedRepartitioningStorage>(
         "SoftThreadedRepartitioningKeyValueStorage");
 
     std::cout << "\n========================================" << std::endl;

@@ -3,6 +3,7 @@
 #include "../../../utils/test_assertions.h"
 #include <iostream>
 #include <string>
+#include <vector>
 
 // Test result tracking
 int tests_passed = 0;
@@ -70,15 +71,15 @@ void test_read_operation_inheritance() {
 }
 
 int main() {
-    std::cout << "Starting ReadOperation class tests..." << std::endl
-              << std::endl;
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"read_operation_constructor", test_read_operation_constructor},
+        {"read_operation_value_access", test_read_operation_value_access},
+        {"read_operation_notify", test_read_operation_notify},
+        {"read_operation_inheritance", test_read_operation_inheritance}};
 
-    test_read_operation_constructor();
-    test_read_operation_value_access();
-    test_read_operation_notify();
-    test_read_operation_inheritance();
+    run_test_suite("ReadOperation class", tests);
 
-    std::cout << std::endl << "Test Summary:" << std::endl;
+    std::cout << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
 
