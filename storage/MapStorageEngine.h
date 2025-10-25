@@ -8,11 +8,11 @@
 
 /**
  * @brief Simple std::map implementation of StorageEngine
- * 
+ *
  * Provides a key-value storage using std::map as the underlying
  * data structure. Uses CRTP for zero-overhead abstraction.
  * Requires C++20 for concepts and CRTP pattern.
- * 
+ *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
  */
@@ -25,7 +25,8 @@ public:
      * @brief Constructor
      * @param level The hierarchy level for this storage engine (default: 0)
      */
-    explicit MapStorageEngine(size_t level = 0) : StorageEngine<MapStorageEngine>(level) {}
+    explicit MapStorageEngine(size_t level = 0) :
+        StorageEngine<MapStorageEngine>(level) {}
 
     /**
      * @brief Destructor
@@ -37,7 +38,7 @@ public:
      * @param key The key to read
      * @return The value associated with the key, or empty string if not found
      */
-    Status read_impl(const std::string& key, std::string& value) const {
+    Status read_impl(const std::string &key, std::string &value) const {
         auto it = storage_.find(key);
         if (it != storage_.end()) {
             value = it->second;
@@ -51,7 +52,7 @@ public:
      * @param key The key to write
      * @param value The value to associate with the key
      */
-    Status write_impl(const std::string& key, const std::string& value) {
+    Status write_impl(const std::string &key, const std::string &value) {
         storage_[key] = value;
         return Status::SUCCESS;
     }
@@ -62,12 +63,14 @@ public:
      * @param limit Maximum number of key-value pairs to return
      * @return Vector of key-value pairs where keys >= initial_key_prefix
      */
-    Status scan_impl(const std::string& initial_key_prefix, size_t limit, std::vector<std::pair<std::string, std::string>>& results) const {
+    Status
+    scan_impl(const std::string &initial_key_prefix, size_t limit,
+              std::vector<std::pair<std::string, std::string>> &results) const {
         results.reserve(std::min(limit, storage_.size()));
 
         // Use lower_bound to find the first key >= key_prefix
         auto it = storage_.lower_bound(initial_key_prefix);
-        
+
         // Iterate and collect key-value pairs
         results.resize(limit);
         size_t i = 0;
@@ -87,4 +90,3 @@ public:
         return Status::SUCCESS;
     }
 };
-

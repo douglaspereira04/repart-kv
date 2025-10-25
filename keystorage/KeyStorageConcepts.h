@@ -6,6 +6,5 @@
 /**
  * @brief Concept for valid KeyStorage value types (integral or pointer types)
  */
-template<typename T>
+template <typename T>
 concept KeyStorageValueType = std::integral<T> || std::is_pointer_v<T>;
-

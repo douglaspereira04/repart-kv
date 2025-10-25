@@ -6,7 +6,7 @@ void test_valid_types() {
     MapKeyStorage<int> intStorage;
     MapKeyStorage<long> longStorage;
     MapKeyStorage<unsigned int> uintStorage;
-    MapKeyStorage<int*> ptrStorage;
+    MapKeyStorage<int *> ptrStorage;
     std::cout << "Valid types compile successfully!" << std::endl;
 }
 
@@ -15,10 +15,10 @@ void test_valid_types() {
 void test_invalid_types() {
     // This should fail - double is not integral or pointer
     MapKeyStorage<double> doubleStorage;
-    
+
     // This should fail - string is not integral or pointer
     MapKeyStorage<std::string> stringStorage;
-    
+
     // This should fail - vector is not integral or pointer
     MapKeyStorage<std::vector<int>> vectorStorage;
 }
@@ -27,7 +27,8 @@ void test_invalid_types() {
 int main() {
     test_valid_types();
     std::cout << "\nC++20 concepts working correctly!" << std::endl;
-    std::cout << "KeyStorageValueType concept enforces integral or pointer types only." << std::endl;
+    std::cout << "KeyStorageValueType concept enforces integral or pointer "
+                 "types only."
+              << std::endl;
     return 0;
 }
-

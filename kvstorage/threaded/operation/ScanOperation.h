@@ -14,29 +14,31 @@ private:
 
 public:
     // Constructor takes references to key and value strings
-    ScanOperation(const std::string& key, std::vector<std::pair<std::string, std::string>>& values, size_t partition_count) 
-        : Operation(const_cast<std::string*>(&key), Type::SCAN), results_(&values) {
-            pthread_barrier_init(&barrier_, NULL, partition_count);
-            pthread_barrier_init(&called_barrier_, NULL, partition_count+1); // +1 for the caller
-        }
+    ScanOperation(const std::string &key,
+                  std::vector<std::pair<std::string, std::string>> &values,
+                  size_t partition_count) :
+        Operation(const_cast<std::string *>(&key), Type::SCAN),
+        results_(&values) {
+        pthread_barrier_init(&barrier_, NULL, partition_count);
+        pthread_barrier_init(&called_barrier_, NULL,
+                             partition_count + 1); // +1 for the caller
+    }
 
     // Destructor (default)
-    ~ScanOperation() {
-        destroy_barriers();
-    }
+    ~ScanOperation() { destroy_barriers(); }
 
     // Copy constructor and assignment operator are deleted
     // to prevent copying of ScanOperation objects
-    ScanOperation(const ScanOperation&) = delete;
-    ScanOperation& operator=(const ScanOperation&) = delete;
+    ScanOperation(const ScanOperation &) = delete;
+    ScanOperation &operator=(const ScanOperation &) = delete;
 
     // Move constructor and assignment operator are deleted
     // to prevent moving of ScanOperation objects
-    ScanOperation(ScanOperation&&) = delete;
-    ScanOperation& operator=(ScanOperation&&) = delete;
+    ScanOperation(ScanOperation &&) = delete;
+    ScanOperation &operator=(ScanOperation &&) = delete;
 
     // Get value reference method
-    std::vector<std::pair<std::string, std::string>>& values() {
+    std::vector<std::pair<std::string, std::string>> &values() {
         return *results_;
     }
 
@@ -52,12 +54,8 @@ public:
     }
 
     // Get limit
-    size_t limit() {
-        return results_->size();
-    }
+    size_t limit() { return results_->size(); }
 
     // Sync workers with caller
-    void sync() {
-        pthread_barrier_wait(&called_barrier_);
-    }
+    void sync() { pthread_barrier_wait(&called_barrier_); }
 };

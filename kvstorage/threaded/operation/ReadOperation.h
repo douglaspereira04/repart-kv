@@ -10,37 +10,30 @@ private:
 
 public:
     // Constructor takes references to key and value strings
-    ReadOperation(const std::string& key, std::string& value) 
-        : Operation(const_cast<std::string*>(&key), Type::READ), future_(value) {}
-    
+    ReadOperation(const std::string &key, std::string &value) :
+        Operation(const_cast<std::string *>(&key), Type::READ), future_(value) {
+    }
+
     // Destructor (default)
     ~ReadOperation() = default;
 
     // Copy constructor and assignment operator are deleted
     // to prevent copying of ReadOperation objects
-    ReadOperation(const ReadOperation&) = delete;
-    ReadOperation& operator=(const ReadOperation&) = delete;
+    ReadOperation(const ReadOperation &) = delete;
+    ReadOperation &operator=(const ReadOperation &) = delete;
 
     // Move constructor and assignment operator are deleted
     // to prevent moving of ReadOperation objects
-    ReadOperation(ReadOperation&&) = delete;
-    ReadOperation& operator=(ReadOperation&&) = delete;
+    ReadOperation(ReadOperation &&) = delete;
+    ReadOperation &operator=(ReadOperation &&) = delete;
 
     // Get value reference method
-    std::string& value() {
-        return future_.value();
-    }
+    std::string &value() { return future_.value(); }
 
-    void value(const std::string& value) {
-        future_.value(value);
-    }
+    void value(const std::string &value) { future_.value(value); }
 
     // Notify method that invokes the future notify
-    void notify() {
-        future_.notify();
-    }
+    void notify() { future_.notify(); }
 
-    void wait() {
-        future_.wait();
-    }
+    void wait() { future_.wait(); }
 };

@@ -9,20 +9,20 @@
 
 /**
  * @brief TKRZW TreeDBM-based implementation of StorageEngine
- * 
+ *
  * Uses TKRZW's tree database (TreeDBM) for sorted key-value storage.
  * TreeDBM maintains keys in sorted order, making range queries and
  * prefix scans very efficient. TKRZW is a modern, efficient key-value
  * database library that provides excellent performance.
- * 
+ *
  * Requires C++20 and libtkrzw-dev to be installed.
- * 
+ *
  * Key differences from HashDBM:
  * - Keys are stored in sorted order (lexicographic)
  * - Efficient range queries and prefix scans
  * - Slightly slower writes than HashDBM
  * - Better for scan-heavy workloads
- * 
+ *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
  */
@@ -35,29 +35,28 @@ public:
     /**
      * @brief Constructor - creates an in-memory database
      * @param level The hierarchy level for this storage engine (default: 0)
-     * 
+     *
      * Note: TKRZW TreeDBM doesn't support true in-memory mode.
      * Uses a temporary file for in-memory-like behavior.
      */
-    explicit TkrzwTreeStorageEngine(size_t level = 0) 
-        : StorageEngine<TkrzwTreeStorageEngine>(level),
-          db_(std::make_unique<tkrzw::TreeDBM>()), 
-          is_open_(false) {
-        // TKRZW TreeDBM requires a file path, so we use /tmp for in-memory-like behavior
-        // The file will be created but can be considered temporary
-        std::string temp_path = "/tmp/tkrzw_tree_temp_" + std::to_string(time(nullptr)) + ".tkt";
-        
+    explicit TkrzwTreeStorageEngine(size_t level = 0) :
+        StorageEngine<TkrzwTreeStorageEngine>(level),
+        db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
+        // TKRZW TreeDBM requires a file path, so we use /tmp for in-memory-like
+        // behavior The file will be created but can be considered temporary
+        std::string temp_path =
+            "/tmp/tkrzw_tree_temp_" + std::to_string(time(nullptr)) + ".tkt";
+
         tkrzw::TreeDBM::TuningParameters tuning_params;
         tuning_params.max_page_size = 8192;
         tuning_params.max_branches = 256;
-        
-        tkrzw::Status status = db_->OpenAdvanced(
-            temp_path,
-            true,  // writable
-            tkrzw::File::OPEN_TRUNCATE,  // Create new
-            tuning_params
-        );
-        
+
+        tkrzw::Status status =
+            db_->OpenAdvanced(temp_path,
+                              true,                       // writable
+                              tkrzw::File::OPEN_TRUNCATE, // Create new
+                              tuning_params);
+
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;
         }
@@ -70,25 +69,23 @@ public:
      * @param max_branches Maximum number of branches per node (default: 256)
      * @param level The hierarchy level for this storage engine (default: 0)
      */
-    explicit TkrzwTreeStorageEngine(const std::string& file_path, 
-                                     int32_t max_page_size = 8192,
-                                     int32_t max_branches = 256,
-                                     size_t level = 0) 
-        : StorageEngine<TkrzwTreeStorageEngine>(level),
-          db_(std::make_unique<tkrzw::TreeDBM>()), 
-          is_open_(false) {
-        
+    explicit TkrzwTreeStorageEngine(const std::string &file_path,
+                                    int32_t max_page_size = 8192,
+                                    int32_t max_branches = 256,
+                                    size_t level = 0) :
+        StorageEngine<TkrzwTreeStorageEngine>(level),
+        db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
+
         tkrzw::TreeDBM::TuningParameters tuning_params;
         tuning_params.max_page_size = max_page_size;
         tuning_params.max_branches = max_branches;
-        
-        tkrzw::Status status = db_->OpenAdvanced(
-            file_path, 
-            true,  // writable
-            tkrzw::File::OPEN_DEFAULT,  // file opening options
-            tuning_params
-        );
-        
+
+        tkrzw::Status status =
+            db_->OpenAdvanced(file_path,
+                              true,                      // writable
+                              tkrzw::File::OPEN_DEFAULT, // file opening options
+                              tuning_params);
+
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;
         }
@@ -105,18 +102,17 @@ public:
     }
 
     // Disable copy
-    TkrzwTreeStorageEngine(const TkrzwTreeStorageEngine&) = delete;
-    TkrzwTreeStorageEngine& operator=(const TkrzwTreeStorageEngine&) = delete;
+    TkrzwTreeStorageEngine(const TkrzwTreeStorageEngine &) = delete;
+    TkrzwTreeStorageEngine &operator=(const TkrzwTreeStorageEngine &) = delete;
 
     // Enable move
-    TkrzwTreeStorageEngine(TkrzwTreeStorageEngine&& other) noexcept 
-        : StorageEngine<TkrzwTreeStorageEngine>(other.level_),
-          db_(std::move(other.db_)), 
-          is_open_(other.is_open_) {
+    TkrzwTreeStorageEngine(TkrzwTreeStorageEngine &&other) noexcept :
+        StorageEngine<TkrzwTreeStorageEngine>(other.level_),
+        db_(std::move(other.db_)), is_open_(other.is_open_) {
         other.is_open_ = false;
     }
 
-    TkrzwTreeStorageEngine& operator=(TkrzwTreeStorageEngine&& other) noexcept {
+    TkrzwTreeStorageEngine &operator=(TkrzwTreeStorageEngine &&other) noexcept {
         if (this != &other) {
             if (is_open_) {
                 db_->Close();
@@ -134,9 +130,9 @@ public:
      * @param value Reference to store the value associated with the key
      * @return Status code indicating the result of the operation
      */
-    Status read_impl(const std::string& key, std::string& value) const {
+    Status read_impl(const std::string &key, std::string &value) const {
         tkrzw::Status status = db_->Get(key, &value);
-        
+
         if (status == tkrzw::Status::SUCCESS) {
             return Status::SUCCESS;
         }
@@ -149,7 +145,7 @@ public:
      * @param value The value to associate with the key
      * @return Status code indicating the result of the operation
      */
-    Status write_impl(const std::string& key, const std::string& value) {
+    Status write_impl(const std::string &key, const std::string &value) {
         tkrzw::Status status = db_->Set(key, value);
         if (status == tkrzw::Status::SUCCESS) {
             return Status::SUCCESS;
@@ -163,16 +159,18 @@ public:
      * @param limit Maximum number of key-value pairs to return
      * @param results Reference to store the results of the scan
      * @return Status code indicating the result of the operation
-     * 
+     *
      * Note: TreeDBM maintains sorted order, making this very efficient.
      * We use Jump() to go directly to the first key >= key_prefix.
      */
-    Status scan_impl(const std::string& initial_key_prefix, size_t limit, std::vector<std::pair<std::string, std::string>>& results) const {
+    Status
+    scan_impl(const std::string &initial_key_prefix, size_t limit,
+              std::vector<std::pair<std::string, std::string>> &results) const {
         results.reserve(std::min(limit, static_cast<size_t>(1000)));
-        
+
         // Create an iterator
         auto iter = db_->MakeIterator();
-        
+
         // For empty prefix, start from beginning; otherwise jump to prefix
         if (initial_key_prefix.empty()) {
             iter->First();
@@ -180,7 +178,7 @@ public:
             // Jump to the first key >= initial_key_prefix (TreeDBM is sorted)
             iter->Jump(initial_key_prefix);
         }
-        
+
         // Collect key-value pairs (already in sorted order, no filtering)
         std::string key, value;
         results.resize(limit);
@@ -188,9 +186,9 @@ public:
         while (i < limit) {
             tkrzw::Status status = iter->Get(&key, &value);
             if (status != tkrzw::Status::SUCCESS) {
-                break;  // No more entries
+                break; // No more entries
             }
-            
+
             results[i] = {key, value};
             ++i;
             // Move to next entry
@@ -204,7 +202,7 @@ public:
                 return Status::NOT_FOUND;
             }
         }
-        
+
         // Results are already sorted (TreeDBM maintains order)
         return Status::SUCCESS;
     }
@@ -213,9 +211,7 @@ public:
      * @brief Check if the database is open
      * @return true if open, false otherwise
      */
-    bool is_open() const {
-        return is_open_;
-    }
+    bool is_open() const { return is_open_; }
 
     /**
      * @brief Get the number of records in the database
@@ -254,7 +250,7 @@ public:
      * @param key The key to remove
      * @return Status code indicating the result of the operation
      */
-    Status remove(const std::string& key) {
+    Status remove(const std::string &key) {
         tkrzw::Status status = db_->Remove(key);
         if (status == tkrzw::Status::SUCCESS) {
             return Status::SUCCESS;
@@ -262,4 +258,3 @@ public:
         return Status::ERROR;
     }
 };
-

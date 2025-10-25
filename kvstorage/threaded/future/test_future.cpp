@@ -11,129 +11,129 @@ int tests_failed = 0;
 
 void test_future_constructor() {
     TEST("future_constructor")
-        int value = 100;
-        Future<int> future(value);
-        
-        // Test that constructor locks the mutex by checking if we can get the value
-        ASSERT_EQ(100, future.value());
+    int value = 100;
+    Future<int> future(value);
+
+    // Test that constructor locks the mutex by checking if we can get the value
+    ASSERT_EQ(100, future.value());
     END_TEST("future_constructor")
 }
 
 void test_future_int_operations() {
     TEST("future_int_operations")
-        int value = 0;
-        Future<int> future(value);
-        
-        // Test basic operations
-        ASSERT_EQ(0, future.value());
-        
-        // Modify the value through the future
-        future.value() = 100;
-        ASSERT_EQ(100, future.value());
-        ASSERT_EQ(100, value); // Verify original value is modified
+    int value = 0;
+    Future<int> future(value);
+
+    // Test basic operations
+    ASSERT_EQ(0, future.value());
+
+    // Modify the value through the future
+    future.value() = 100;
+    ASSERT_EQ(100, future.value());
+    ASSERT_EQ(100, value); // Verify original value is modified
     END_TEST("future_int_operations")
 }
 
 void test_future_string_operations() {
     TEST("future_string_operations")
-        std::string value = "Hello";
-        Future<std::string> future(value);
-        
-        // Test basic operations
-        ASSERT_STR_EQ("Hello", future.value());
-        
-        // Modify the string through the future
-        future.value() += " World";
-        ASSERT_STR_EQ("Hello World", future.value());
-        ASSERT_STR_EQ("Hello World", value); // Verify original value is modified
+    std::string value = "Hello";
+    Future<std::string> future(value);
+
+    // Test basic operations
+    ASSERT_STR_EQ("Hello", future.value());
+
+    // Modify the string through the future
+    future.value() += " World";
+    ASSERT_STR_EQ("Hello World", future.value());
+    ASSERT_STR_EQ("Hello World", value); // Verify original value is modified
     END_TEST("future_string_operations")
 }
 
 void test_future_const_correctness() {
     TEST("future_const_correctness")
-        int value = 100;
-        Future<int> future(value);
-        
-        // Test that we can read the value
-        int read_value = future.value();
-        ASSERT_EQ(100, read_value);
-        
-        // Test wait and notify - start background thread to call notify
-        std::thread notify_thread([&future]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            future.notify();
-        });
-        
-        // Now wait (this will block until notify_thread calls notify)
-        future.wait();
-        ASSERT_EQ(100, future.value());
-        
-        // Clean up
-        notify_thread.join();
+    int value = 100;
+    Future<int> future(value);
+
+    // Test that we can read the value
+    int read_value = future.value();
+    ASSERT_EQ(100, read_value);
+
+    // Test wait and notify - start background thread to call notify
+    std::thread notify_thread([&future]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        future.notify();
+    });
+
+    // Now wait (this will block until notify_thread calls notify)
+    future.wait();
+    ASSERT_EQ(100, future.value());
+
+    // Clean up
+    notify_thread.join();
     END_TEST("future_const_correctness")
 }
 
 void test_future_correctness() {
     TEST("future_const_correctness")
-        int value = 0;
-        Future<int> future(value);
-        
-        // Test that we can read the value
-        int read_value = future.value();
-        ASSERT_EQ(0, read_value);
-        
-        // Test wait and notify - start background thread to call notify
-        std::thread notify_thread([&future]() {
-            std::this_thread::sleep_for(std::chrono::milliseconds(50));
-            future.value() = 100;
-            future.notify();
-        });
-        
-        // Now wait (this will block until notify_thread calls notify)
-        future.wait();
-        ASSERT_EQ(100, future.value());
-        
-        // Clean up
-        notify_thread.join();
+    int value = 0;
+    Future<int> future(value);
+
+    // Test that we can read the value
+    int read_value = future.value();
+    ASSERT_EQ(0, read_value);
+
+    // Test wait and notify - start background thread to call notify
+    std::thread notify_thread([&future]() {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        future.value() = 100;
+        future.notify();
+    });
+
+    // Now wait (this will block until notify_thread calls notify)
+    future.wait();
+    ASSERT_EQ(100, future.value());
+
+    // Clean up
+    notify_thread.join();
     END_TEST("future_const_correctness")
 }
 
 void test_future_reference_relationship() {
     TEST("future_reference_relationship")
-        std::string value = "test_value";
-        Future<std::string> future(value);
-        std::string* value_ptr = &value;
-        
-        // Test that the future holds a reference to the original data
-        ASSERT_TRUE(&future.value() == &value);
-        
-        // Modify through future and verify original changes
-        future.value() = "modified_value";
-        ASSERT_STR_EQ("modified_value", value);
-        ASSERT_STR_EQ("modified_value", future.value());
+    std::string value = "test_value";
+    Future<std::string> future(value);
+    std::string *value_ptr = &value;
 
-        future.value("new_value");
-        ASSERT_STR_EQ("new_value", value);
-        ASSERT_STR_EQ("new_value", future.value());
-        ASSERT_TRUE(&future.value() == value_ptr);
-        ASSERT_TRUE(&future.value() == &value);
+    // Test that the future holds a reference to the original data
+    ASSERT_TRUE(&future.value() == &value);
+
+    // Modify through future and verify original changes
+    future.value() = "modified_value";
+    ASSERT_STR_EQ("modified_value", value);
+    ASSERT_STR_EQ("modified_value", future.value());
+
+    future.value("new_value");
+    ASSERT_STR_EQ("new_value", value);
+    ASSERT_STR_EQ("new_value", future.value());
+    ASSERT_TRUE(&future.value() == value_ptr);
+    ASSERT_TRUE(&future.value() == &value);
     END_TEST("future_reference_relationship")
 }
 
 int main() {
     std::cout << "Starting Future class tests..." << std::endl << std::endl;
-    
+
     test_future_constructor();
     test_future_int_operations();
     test_future_string_operations();
     test_future_const_correctness();
     test_future_correctness();
     test_future_reference_relationship();
-    
+
     std::cout << std::endl << "Test Summary:" << std::endl;
     std::cout << "  Passed: " << tests_passed << std::endl;
     std::cout << "  Failed: " << tests_failed << std::endl;
-    
+
     if (tests_failed == 0) {
         std::cout << "All Future tests completed successfully!" << std::endl;
         return 0;

@@ -5,4 +5,3 @@ int main() {
     MapKeyStorage<double> doubleStorage;
     return 0;
 }
-

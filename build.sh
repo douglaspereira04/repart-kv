@@ -14,6 +14,12 @@ cd build
 echo "Configuring project with CMake..."
 cmake ..
 
+# Format code with clang-format
+echo "Formatting code with clang-format..."
+cd ..
+find . -name "*.h" -o -name "*.cpp" | grep -v build | xargs clang-format -i
+cd build
+
 # Build the project
 echo "Building project..."
 make -j$(nproc)

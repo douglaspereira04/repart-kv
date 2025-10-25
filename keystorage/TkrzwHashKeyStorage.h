@@ -13,26 +13,26 @@
 #include <algorithm>
 
 // Forward declaration
-template<KeyStorageValueType ValueType>
-class TkrzwHashKeyStorageIterator;
+template <KeyStorageValueType ValueType> class TkrzwHashKeyStorageIterator;
 
 /**
  * @brief TKRZW HashDBM implementation of KeyStorage
  * @tparam ValueType The type of values stored (integral types or pointers)
- * 
+ *
  * Uses TKRZW's hash database for high-performance key-value storage.
  * Values are serialized to strings for storage in TKRZW.
  * Requires C++20 for concepts and CRTP pattern.
  */
-template<KeyStorageValueType ValueType>
-class TkrzwHashKeyStorage : public KeyStorage<TkrzwHashKeyStorage<ValueType>, TkrzwHashKeyStorageIterator<ValueType>, ValueType> {
+template <KeyStorageValueType ValueType> class TkrzwHashKeyStorage
+    : public KeyStorage<TkrzwHashKeyStorage<ValueType>,
+                        TkrzwHashKeyStorageIterator<ValueType>, ValueType> {
 private:
     std::unique_ptr<tkrzw::HashDBM> db_;
     bool is_open_;
 
 public:
     // Helper to serialize value to string (public for iterator access)
-    std::string value_to_string(const ValueType& value) const {
+    std::string value_to_string(const ValueType &value) const {
         if constexpr (std::is_integral_v<ValueType>) {
             return std::to_string(value);
         } else if constexpr (std::is_pointer_v<ValueType>) {
@@ -43,11 +43,14 @@ public:
     }
 
     // Helper to deserialize string to value (public for iterator access)
-    ValueType string_to_value(const std::string& str) const {
+    ValueType string_to_value(const std::string &str) const {
         if constexpr (std::is_integral_v<ValueType>) {
-            if constexpr (std::is_same_v<ValueType, long> || std::is_same_v<ValueType, long long>) {
+            if constexpr (std::is_same_v<ValueType, long> ||
+                          std::is_same_v<ValueType, long long>) {
                 return static_cast<ValueType>(std::stoll(str));
-            } else if constexpr (std::is_same_v<ValueType, unsigned long> || std::is_same_v<ValueType, unsigned long long>) {
+            } else if constexpr (std::is_same_v<ValueType, unsigned long> ||
+                                 std::is_same_v<ValueType,
+                                                unsigned long long>) {
                 return static_cast<ValueType>(std::stoull(str));
             } else if constexpr (std::is_signed_v<ValueType>) {
                 return static_cast<ValueType>(std::stoi(str));
@@ -65,19 +68,17 @@ public:
     /**
      * @brief Constructor - creates an in-memory database
      */
-    TkrzwHashKeyStorage() : db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
-        std::string temp_path = "/tmp/tkrzw_hash_keystorage_" + std::to_string(time(nullptr)) + ".tkh";
-        
+    TkrzwHashKeyStorage() :
+        db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
+        std::string temp_path = "/tmp/tkrzw_hash_keystorage_" +
+                                std::to_string(time(nullptr)) + ".tkh";
+
         tkrzw::HashDBM::TuningParameters tuning_params;
         tuning_params.num_buckets = 100000;
-        
+
         tkrzw::Status status = db_->OpenAdvanced(
-            temp_path,
-            true,
-            tkrzw::File::OPEN_TRUNCATE,
-            tuning_params
-        );
-        
+            temp_path, true, tkrzw::File::OPEN_TRUNCATE, tuning_params);
+
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;
         }
@@ -99,14 +100,14 @@ public:
      * @param value Output parameter for the retrieved value
      * @return true if the key exists, false otherwise
      */
-    bool get_impl(const std::string& key, ValueType& value) const {
+    bool get_impl(const std::string &key, ValueType &value) const {
         if (!is_open_) {
             return false;
         }
 
         std::string str_value;
         tkrzw::Status status = db_->Get(key, &str_value);
-        
+
         if (status == tkrzw::Status::SUCCESS) {
             value = string_to_value(str_value);
             return true;
@@ -119,73 +120,73 @@ public:
      * @param key The key to store
      * @param value The value to associate with the key
      */
-    void put_impl(const std::string& key, const ValueType& value) {
+    void put_impl(const std::string &key, const ValueType &value) {
         if (!is_open_) {
             return;
         }
-        
+
         std::string str_value = value_to_string(value);
         db_->Set(key, str_value);
     }
 
     /**
-     * @brief Implementation: Find the first element with key not less than the given key
+     * @brief Implementation: Find the first element with key not less than the
+     * given key
      * @param key The key to search for
      * @return Iterator pointing to the found element or end
-     * 
-     * Note: HashDBM doesn't maintain sorted order, so this iterates through all keys.
+     *
+     * Note: HashDBM doesn't maintain sorted order, so this iterates through all
+     * keys.
      */
-    TkrzwHashKeyStorageIterator<ValueType> lower_bound_impl(const std::string& key);
+    TkrzwHashKeyStorageIterator<ValueType>
+    lower_bound_impl(const std::string &key);
 
     /**
      * @brief Get database reference (for iterator)
      */
-    tkrzw::HashDBM& get_db() {
-        return *db_;
-    }
+    tkrzw::HashDBM &get_db() { return *db_; }
 
     /**
      * @brief Check if database is open
      */
-    bool is_open() const {
-        return is_open_;
-    }
+    bool is_open() const { return is_open_; }
 };
 
 /**
  * @brief Iterator implementation for TkrzwHashKeyStorage
  * @tparam ValueType The type of values stored
- * 
+ *
  * Note: HashDBM doesn't maintain sorted order, so this iterator:
  * 1. Maintains a sorted list of all keys
  * 2. Iterates through them in order
  * 3. Fetches values from the database on demand
  */
-template<KeyStorageValueType ValueType>
-class TkrzwHashKeyStorageIterator : public KeyStorageIterator<TkrzwHashKeyStorageIterator<ValueType>, ValueType> {
+template <KeyStorageValueType ValueType> class TkrzwHashKeyStorageIterator
+    : public KeyStorageIterator<TkrzwHashKeyStorageIterator<ValueType>,
+                                ValueType> {
 private:
-    std::shared_ptr<std::vector<std::string>> sorted_keys_;  // Shared ownership of sorted keys
+    std::shared_ptr<std::vector<std::string>>
+        sorted_keys_; // Shared ownership of sorted keys
     size_t current_index_;
-    const TkrzwHashKeyStorage<ValueType>* storage_;
+    const TkrzwHashKeyStorage<ValueType> *storage_;
 
 public:
     /**
      * @brief Constructor with sorted keys
      */
-    TkrzwHashKeyStorageIterator(std::shared_ptr<std::vector<std::string>> sorted_keys,
-                                 size_t start_index,
-                                 const TkrzwHashKeyStorage<ValueType>* storage)
-        : sorted_keys_(sorted_keys), current_index_(start_index), storage_(storage) {
-    }
+    TkrzwHashKeyStorageIterator(
+        std::shared_ptr<std::vector<std::string>> sorted_keys,
+        size_t start_index, const TkrzwHashKeyStorage<ValueType> *storage) :
+        sorted_keys_(sorted_keys), current_index_(start_index),
+        storage_(storage) {}
 
     /**
      * @brief Constructor for end iterator
      */
-    TkrzwHashKeyStorageIterator(std::nullptr_t, 
-                                 const TkrzwHashKeyStorage<ValueType>* storage,
-                                 bool)
-        : sorted_keys_(nullptr), current_index_(0), storage_(storage) {
-    }
+    TkrzwHashKeyStorageIterator(std::nullptr_t,
+                                const TkrzwHashKeyStorage<ValueType> *storage,
+                                bool) :
+        sorted_keys_(nullptr), current_index_(0), storage_(storage) {}
 
     /**
      * @brief Implementation: Get the key at the current iterator position
@@ -203,10 +204,11 @@ public:
      * @return The value
      */
     ValueType get_value_impl() const {
-        if (!sorted_keys_ || current_index_ >= sorted_keys_->size() || !storage_) {
+        if (!sorted_keys_ || current_index_ >= sorted_keys_->size() ||
+            !storage_) {
             return ValueType();
         }
-        
+
         ValueType value;
         if (storage_->get((*sorted_keys_)[current_index_], value)) {
             return value;
@@ -237,22 +239,22 @@ private:
 };
 
 // Implementation of lower_bound_impl
-template<KeyStorageValueType ValueType>
-TkrzwHashKeyStorageIterator<ValueType> TkrzwHashKeyStorage<ValueType>::lower_bound_impl(const std::string& key) {
+template <KeyStorageValueType ValueType> TkrzwHashKeyStorageIterator<ValueType>
+TkrzwHashKeyStorage<ValueType>::lower_bound_impl(const std::string &key) {
     if (!is_open_) {
         return TkrzwHashKeyStorageIterator<ValueType>(nullptr, this, true);
     }
-    
+
     // HashDBM doesn't maintain sorted order, so we need to:
     // 1. Collect all keys
     // 2. Sort them
     // 3. Find the lower_bound position
     // 4. Create an iterator with the sorted keys starting from that position
-    
+
     auto sorted_keys = std::make_shared<std::vector<std::string>>();
     auto temp_iter = db_->MakeIterator();
     temp_iter->First();
-    
+
     std::string temp_key, temp_value;
     while (temp_iter->Get(&temp_key, &temp_value) == tkrzw::Status::SUCCESS) {
         sorted_keys->push_back(temp_key);
@@ -260,22 +262,22 @@ TkrzwHashKeyStorageIterator<ValueType> TkrzwHashKeyStorage<ValueType>::lower_bou
             break;
         }
     }
-    
+
     // Sort all keys
     std::sort(sorted_keys->begin(), sorted_keys->end());
-    
+
     // Find lower_bound position
-    auto lb_pos = std::lower_bound(sorted_keys->begin(), sorted_keys->end(), key);
-    
+    auto lb_pos =
+        std::lower_bound(sorted_keys->begin(), sorted_keys->end(), key);
+
     if (lb_pos == sorted_keys->end()) {
         // No key >= the given key, return end iterator
         return TkrzwHashKeyStorageIterator<ValueType>(nullptr, this, true);
     }
-    
+
     // Calculate the index position
     size_t index = std::distance(sorted_keys->begin(), lb_pos);
-    
+
     // Return iterator starting at the lower_bound position
     return TkrzwHashKeyStorageIterator<ValueType>(sorted_keys, index, this);
 }
-
