@@ -1,8 +1,8 @@
-#include "SoftPartitionWorker.h"
-#include "operation/ReadOperation.h"
-#include "operation/WriteOperation.h"
-#include "../../storage/MapStorageEngine.h"
-#include "../../utils/test_assertions.h"
+#include "../SoftPartitionWorker.h"
+#include "../operation/ReadOperation.h"
+#include "../operation/WriteOperation.h"
+#include "../../../storage/MapStorageEngine.h"
+#include "../../../utils/test_assertions.h"
 #include <string>
 #include <vector>
 

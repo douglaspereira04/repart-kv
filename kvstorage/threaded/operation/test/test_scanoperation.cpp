@@ -1,6 +1,6 @@
-#include "ScanOperation.h"
-#include "../../../storage/MapStorageEngine.h"
-#include "../../../utils/test_assertions.h"
+#include "../ScanOperation.h"
+#include "../../../../storage/MapStorageEngine.h"
+#include "../../../../utils/test_assertions.h"
 #include <iostream>
 #include <string>
 #include <vector>

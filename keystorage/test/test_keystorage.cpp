@@ -1,8 +1,8 @@
-#include "MapKeyStorage.h"
-#include "TkrzwHashKeyStorage.h"
-#include "TkrzwTreeKeyStorage.h"
-#include "LmdbKeyStorage.h"
-#include "../utils/test_assertions.h"
+#include "../MapKeyStorage.h"
+#include "../TkrzwHashKeyStorage.h"
+#include "../TkrzwTreeKeyStorage.h"
+#include "../LmdbKeyStorage.h"
+#include "../../utils/test_assertions.h"
 #include <iostream>
 #include <vector>
 #include <string>

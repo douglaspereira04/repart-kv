@@ -1,8 +1,8 @@
-#include "MapStorageEngine.h"
-#include "TkrzwHashStorageEngine.h"
-#include "TkrzwTreeStorageEngine.h"
-#include "LmdbStorageEngine.h"
-#include "../utils/test_assertions.h"
+#include "../MapStorageEngine.h"
+#include "../TkrzwHashStorageEngine.h"
+#include "../TkrzwTreeStorageEngine.h"
+#include "../LmdbStorageEngine.h"
+#include "../../utils/test_assertions.h"
 #include <iostream>
 #include <thread>
 #include <vector>

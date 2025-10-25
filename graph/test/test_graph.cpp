@@ -1,5 +1,5 @@
-#include "Graph.h"
-#include "../utils/test_assertions.h"
+#include "../Graph.h"
+#include "../../utils/test_assertions.h"
 #include <iostream>
 #include <chrono>
 #include <vector>

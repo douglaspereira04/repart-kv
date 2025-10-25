@@ -1,6 +1,6 @@
-#include "Graph.h"
-#include "MetisGraph.h"
-#include "../utils/test_assertions.h"
+#include "../Graph.h"
+#include "../MetisGraph.h"
+#include "../../utils/test_assertions.h"
 #include <iostream>
 #include <set>
 #include <vector>

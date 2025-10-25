@@ -93,7 +93,7 @@ target_include_directories(repart-kv PRIVATE
 
 # Optional: Build generic storage engine tests (tests all engines)
 add_executable(test_storage_engine 
-    storage/test_storage_engine.cpp
+    storage/test/test_storage_engine.cpp
 )
 
 target_link_libraries(test_storage_engine PRIVATE 
@@ -105,90 +105,6 @@ target_link_libraries(test_storage_engine PRIVATE
 target_compile_features(test_storage_engine PRIVATE cxx_std_20)
 target_compile_options(test_storage_engine PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(test_storage_engine PRIVATE 
-    ${CMAKE_SOURCE_DIR}
-    ${TKRZW_INCLUDE_DIRS}
-)
-
-# Optional: Build storage example
-add_executable(example_storage 
-    storage/example_storage.cpp
-)
-
-target_link_libraries(example_storage PRIVATE 
-    Threads::Threads
-    ${TKRZW_ALL_LIBS}
-    unordered_dense::unordered_dense
-)
-target_compile_features(example_storage PRIVATE cxx_std_20)
-target_compile_options(example_storage PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(example_storage PRIVATE 
-    ${CMAKE_SOURCE_DIR}
-    ${TKRZW_INCLUDE_DIRS}
-)
-
-# Optional: Build keystorage example (MapKeyStorage)
-add_executable(example_keystorage 
-    keystorage/example_usage.cpp
-)
-
-target_link_libraries(example_keystorage PRIVATE 
-    ${TKRZW_ALL_LIBS}
-    unordered_dense::unordered_dense
-)
-target_compile_features(example_keystorage PRIVATE cxx_std_20)
-target_compile_options(example_keystorage PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(example_keystorage PRIVATE 
-    ${CMAKE_SOURCE_DIR}
-    ${TKRZW_INCLUDE_DIRS}
-)
-
-# Optional: Build TKRZW keystorage example
-add_executable(example_tkrzw_keystorage 
-    keystorage/example_tkrzw_keystorage.cpp
-)
-
-target_link_libraries(example_tkrzw_keystorage PRIVATE 
-    Threads::Threads
-    ${TKRZW_ALL_LIBS}
-    unordered_dense::unordered_dense
-)
-target_compile_features(example_tkrzw_keystorage PRIVATE cxx_std_20)
-target_compile_options(example_tkrzw_keystorage PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(example_tkrzw_keystorage PRIVATE 
-    ${CMAKE_SOURCE_DIR}
-    ${TKRZW_INCLUDE_DIRS}
-)
-
-# Optional: Build TKRZW Hash storage example
-add_executable(example_tkrzw_storage 
-    storage/example_tkrzw_storage.cpp
-)
-
-target_link_libraries(example_tkrzw_storage PRIVATE 
-    Threads::Threads
-    ${TKRZW_ALL_LIBS}
-    unordered_dense::unordered_dense
-)
-target_compile_features(example_tkrzw_storage PRIVATE cxx_std_20)
-target_compile_options(example_tkrzw_storage PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(example_tkrzw_storage PRIVATE 
-    ${CMAKE_SOURCE_DIR}
-    ${TKRZW_INCLUDE_DIRS}
-)
-
-# Optional: Build TKRZW Tree storage example
-add_executable(example_tkrzw_tree_storage 
-    storage/example_tkrzw_tree_storage.cpp
-)
-
-target_link_libraries(example_tkrzw_tree_storage PRIVATE 
-    Threads::Threads
-    ${TKRZW_ALL_LIBS}
-    unordered_dense::unordered_dense
-)
-target_compile_features(example_tkrzw_tree_storage PRIVATE cxx_std_20)
-target_compile_options(example_tkrzw_tree_storage PRIVATE -Wall -Wextra -Wpedantic)
-target_include_directories(example_tkrzw_tree_storage PRIVATE 
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
 )
@@ -229,7 +145,7 @@ target_include_directories(interactive_keystorage_test PRIVATE
 
 # Generic keystorage tests (tests all key storage implementations)
 add_executable(test_keystorage 
-    keystorage/test_keystorage.cpp
+    keystorage/test/test_keystorage.cpp
 )
 
 target_link_libraries(test_keystorage PRIVATE 
@@ -247,7 +163,7 @@ target_include_directories(test_keystorage PRIVATE
 
 # Generic partitioned key-value storage tests
 add_executable(test_partitioned_kv_storage 
-    kvstorage/test_partitioned_kv_storage.cpp
+    kvstorage/test/test_partitioned_kv_storage.cpp
 )
 
 target_link_libraries(test_partitioned_kv_storage PRIVATE 
@@ -265,7 +181,7 @@ target_include_directories(test_partitioned_kv_storage PRIVATE
 
 # Graph tracking tests for repartitioning storage
 add_executable(test_graph_tracking 
-    kvstorage/test_graph_tracking.cpp
+    kvstorage/test/test_graph_tracking.cpp
 )
 
 target_link_libraries(test_graph_tracking PRIVATE 
@@ -284,7 +200,7 @@ target_include_directories(test_graph_tracking PRIVATE
 # Unified repartitioning tests (requires METIS)
 if(METIS_LIB)
     add_executable(test_repartitioning_storage 
-        kvstorage/test_repartitioning_storage.cpp
+        kvstorage/test/test_repartitioning_storage.cpp
     )
     
     target_link_libraries(test_repartitioning_storage PRIVATE 
@@ -304,7 +220,7 @@ endif()
 
 # Future class tests
 add_executable(test_future 
-    kvstorage/threaded/future/test_future.cpp
+    kvstorage/threaded/future/test/test_future.cpp
 )
 
 target_link_libraries(test_future PRIVATE 
@@ -319,7 +235,7 @@ target_include_directories(test_future PRIVATE
 
 # Operation class tests
 add_executable(test_operation 
-    kvstorage/threaded/operation/test_operation.cpp
+    kvstorage/threaded/operation/test/test_operation.cpp
 )
 
 target_link_libraries(test_operation PRIVATE 
@@ -334,7 +250,7 @@ target_include_directories(test_operation PRIVATE
 
 # ReadOperation class tests
 add_executable(test_readoperation 
-    kvstorage/threaded/operation/test_readoperation.cpp
+    kvstorage/threaded/operation/test/test_readoperation.cpp
 )
 
 target_link_libraries(test_readoperation PRIVATE 
@@ -350,7 +266,7 @@ target_include_directories(test_readoperation PRIVATE
 
 # Storage Operation tests
 add_executable(test_storage_operation 
-    kvstorage/threaded/operation/test_storage_operation.cpp
+    kvstorage/threaded/operation/test/test_storage_operation.cpp
 )
 
 target_link_libraries(test_storage_operation PRIVATE 
@@ -366,7 +282,7 @@ target_include_directories(test_storage_operation PRIVATE
 
 # WriteOperation class tests
 add_executable(test_writeoperation 
-    kvstorage/threaded/operation/test_writeoperation.cpp
+    kvstorage/threaded/operation/test/test_writeoperation.cpp
 )
 
 target_link_libraries(test_writeoperation PRIVATE 
@@ -382,7 +298,7 @@ target_include_directories(test_writeoperation PRIVATE
 
 # ScanOperation class tests
 add_executable(test_scanoperation 
-    kvstorage/threaded/operation/test_scanoperation.cpp
+    kvstorage/threaded/operation/test/test_scanoperation.cpp
 )
 
 target_link_libraries(test_scanoperation PRIVATE 
@@ -398,7 +314,7 @@ target_include_directories(test_scanoperation PRIVATE
 
 # DoneOperation class tests
 add_executable(test_doneoperation 
-    kvstorage/threaded/operation/test_doneoperation.cpp
+    kvstorage/threaded/operation/test/test_doneoperation.cpp
 )
 
 target_link_libraries(test_doneoperation PRIVATE 
@@ -413,7 +329,7 @@ target_include_directories(test_doneoperation PRIVATE
 
 # SyncOperation class tests
 add_executable(test_syncoperation 
-    kvstorage/threaded/operation/test_syncoperation.cpp
+    kvstorage/threaded/operation/test/test_syncoperation.cpp
 )
 
 target_link_libraries(test_syncoperation PRIVATE 
@@ -429,7 +345,7 @@ target_include_directories(test_syncoperation PRIVATE
 
 # SoftPartitionWorker class tests
 add_executable(test_soft_partition_worker 
-    kvstorage/threaded/test_soft_partition_worker.cpp
+    kvstorage/threaded/test/test_soft_partition_worker.cpp
 )
 
 target_link_libraries(test_soft_partition_worker PRIVATE 
@@ -447,7 +363,7 @@ target_include_directories(test_soft_partition_worker PRIVATE
 
 # Graph tests
 add_executable(test_graph 
-    graph/test_graph.cpp
+    graph/test/test_graph.cpp
 )
 
 target_link_libraries(test_graph PRIVATE unordered_dense::unordered_dense)
@@ -472,7 +388,7 @@ target_include_directories(example_graph PRIVATE
 if(METIS_LIB)
     # METIS graph tests
     add_executable(test_metis_graph 
-        graph/test_metis_graph.cpp
+        graph/test/test_metis_graph.cpp
     )
     
     target_link_libraries(test_metis_graph PRIVATE 
