@@ -18,6 +18,10 @@ PASSED_TESTS=0
 FAILED_TESTS=0
 SKIPPED_TESTS=0
 
+# Arrays to track test results
+FAILED_TEST_NAMES=()
+FAILED_TEST_CODES=()
+
 echo -e "${BLUE}=== Repart-KV Test Runner ===${NC}"
 echo ""
 
@@ -59,6 +63,8 @@ run_test() {
         local exit_code=$?
         echo -e "${RED}✗ $test_name FAILED (exit code: $exit_code)${NC}"
         ((FAILED_TESTS++))
+        FAILED_TEST_NAMES+=("$test_name")
+        FAILED_TEST_CODES+=("$exit_code")
     fi
     
     ((TOTAL_TESTS++))
@@ -82,6 +88,15 @@ if [ $SKIPPED_TESTS -gt 0 ]; then
 fi
 
 echo ""
+
+# Show failed tests details if any
+if [ $FAILED_TESTS -gt 0 ]; then
+    echo -e "${RED}=== Failed Tests Details ===${NC}"
+    for i in "${!FAILED_TEST_NAMES[@]}"; do
+        echo -e "${RED}✗ ${FAILED_TEST_NAMES[$i]}${NC} (exit code: ${FAILED_TEST_CODES[$i]})"
+    done
+    echo ""
+fi
 
 # Exit with appropriate code
 if [ $FAILED_TESTS -eq 0 ]; then
