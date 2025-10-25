@@ -236,6 +236,7 @@ target_link_libraries(test_keystorage PRIVATE
     Threads::Threads
     ${TKRZW_ALL_LIBS}
     unordered_dense::unordered_dense
+    ${LMDB_LIB}
 )
 target_compile_features(test_keystorage PRIVATE cxx_std_20)
 target_compile_options(test_keystorage PRIVATE -Wall -Wextra -Wpedantic)

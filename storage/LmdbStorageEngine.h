@@ -233,10 +233,16 @@ public:
         }
         
         // Set the cursor to the first key >= initial_key_prefix
-        mdb_key.mv_size = initial_key_prefix.size();
-        mdb_key.mv_data = const_cast<void*>(static_cast<const void*>(initial_key_prefix.c_str()));
-        
-        rc = mdb_cursor_get(cursor, &mdb_key, &mdb_value, MDB_SET_RANGE);
+        if (initial_key_prefix.empty()) {
+            // If prefix is empty, start from the very beginning of the database
+            rc = mdb_cursor_get(cursor, &mdb_key, &mdb_value, MDB_FIRST);
+        } else {
+            // Use MDB_SET_RANGE to find first key >= initial_key_prefix
+            mdb_key.mv_size = initial_key_prefix.size();
+            mdb_key.mv_data = const_cast<void*>(static_cast<const void*>(initial_key_prefix.c_str()));
+            
+            rc = mdb_cursor_get(cursor, &mdb_key, &mdb_value, MDB_SET_RANGE);
+        }
         if (rc == MDB_SUCCESS) {
             // Add the first result
             std::string key(reinterpret_cast<char*>(mdb_key.mv_data), mdb_key.mv_size);

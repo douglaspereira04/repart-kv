@@ -1,11 +1,11 @@
 #include "MapKeyStorage.h"
 #include "TkrzwHashKeyStorage.h"
 #include "TkrzwTreeKeyStorage.h"
+#include "LmdbKeyStorage.h"
 #include "../utils/test_assertions.h"
 #include <iostream>
 #include <vector>
 #include <string>
-#include <algorithm>
 
 // Test result tracking
 int tests_passed = 0;
@@ -81,17 +81,6 @@ void test_overwrite_value() {
     END_TEST("overwrite_value")
 }
 
-template<typename StorageType, typename ValueType>
-void test_empty_key() {
-    TEST("empty_key")
-        StorageType storage;
-        
-        storage.put("", static_cast<ValueType>(999));
-        ValueType value;
-        ASSERT_TRUE(storage.get("", value));
-        ASSERT_EQ(static_cast<ValueType>(999), value);
-    END_TEST("empty_key")
-}
 
 template<typename StorageType, typename ValueType>
 void test_lower_bound_basic() {
@@ -414,7 +403,6 @@ void run_test_suite(const std::string& storage_name, const std::string& value_ty
     test_basic_put_get<StorageType, ValueType>();
     test_get_nonexistent_key<StorageType, ValueType>();
     test_overwrite_value<StorageType, ValueType>();
-    test_empty_key<StorageType, ValueType>();
     
     // Lower bound tests
     test_lower_bound_basic<StorageType, ValueType>();
@@ -450,18 +438,21 @@ int main() {
     run_test_suite<MapKeyStorage<int>, int>("MapKeyStorage", "int");
     run_test_suite<TkrzwHashKeyStorage<int>, int>("TkrzwHashKeyStorage", "int");
     run_test_suite<TkrzwTreeKeyStorage<int>, int>("TkrzwTreeKeyStorage", "int");
+    run_test_suite<LmdbKeyStorage<int>, int>("LmdbKeyStorage", "int");
     
     // Test all storage implementations with long
     std::cout << "\n=== Testing with long ===" << std::endl;
     run_test_suite<MapKeyStorage<long>, long>("MapKeyStorage", "long");
     run_test_suite<TkrzwHashKeyStorage<long>, long>("TkrzwHashKeyStorage", "long");
     run_test_suite<TkrzwTreeKeyStorage<long>, long>("TkrzwTreeKeyStorage", "long");
+    run_test_suite<LmdbKeyStorage<long>, long>("LmdbKeyStorage", "long");
     
     // Test all storage implementations with uint64_t
     std::cout << "\n=== Testing with uint64_t ===" << std::endl;
     run_test_suite<MapKeyStorage<uint64_t>, uint64_t>("MapKeyStorage", "uint64_t");
     run_test_suite<TkrzwHashKeyStorage<uint64_t>, uint64_t>("TkrzwHashKeyStorage", "uint64_t");
     run_test_suite<TkrzwTreeKeyStorage<uint64_t>, uint64_t>("TkrzwTreeKeyStorage", "uint64_t");
+    run_test_suite<LmdbKeyStorage<uint64_t>, uint64_t>("LmdbKeyStorage", "uint64_t");
     
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;

@@ -108,6 +108,31 @@ void test_scan_with_limit() {
 }
 
 template<typename EngineType>
+void test_scan_empty_prefix() {
+    TEST("scan_empty_prefix")
+        EngineType engine;
+
+        std::vector<std::pair<std::string, std::string>> results;
+        ASSERT_STATUS_EQ(Status::NOT_FOUND, engine.scan("", 10, results));
+        ASSERT_EQ(0, results.size());
+
+
+        engine.write("key1", "value1");
+        engine.write("key2", "value2");
+        engine.write("key3", "value3");
+
+        ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan("", 10, results));
+        ASSERT_EQ(3, results.size());
+        ASSERT_STR_EQ("key1", results[0].first);
+        ASSERT_STR_EQ("value1", results[0].second);
+        ASSERT_STR_EQ("key2", results[1].first);
+        ASSERT_STR_EQ("value2", results[1].second);
+        ASSERT_STR_EQ("key3", results[2].first);
+        ASSERT_STR_EQ("value3", results[2].second);
+    END_TEST("scan_empty_prefix")
+}
+
+template<typename EngineType>
 void test_scan_no_matches() {
     TEST("scan_no_matches")
         EngineType engine;
@@ -378,7 +403,8 @@ void run_test_suite(const std::string& engine_name) {
     test_scan_exact_match<EngineType>();
     test_scan_sorted_order<EngineType>();
     test_scan_after_updates<EngineType>();
-    
+    test_scan_empty_prefix<EngineType>();
+
     // Edge cases and special scenarios
     test_large_dataset<EngineType>();
     test_special_characters<EngineType>();
