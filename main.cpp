@@ -7,6 +7,7 @@
 #include <fstream>
 #include <filesystem>
 #include <iomanip>
+#include <sstream>
 #include "keystorage/MapKeyStorage.h"
 #include "workload/Workload.h"
 #include "kvstorage/HardRepartitioningKeyValueStorage.h"
@@ -25,6 +26,82 @@ size_t PARTITION_COUNT = 4;
 size_t TEST_WORKERS = 1;
 std::string STORAGE_TYPE = "soft";         // Default to soft repartitioning
 std::string STORAGE_ENGINE = "tkrzw_tree"; // Default to TkrzwTreeStorageEngine
+
+/**
+ * @brief Format a number with thousand separators (dots)
+ * @param value The number to format
+ * @return Formatted string with thousand separators
+ */
+std::string format_with_separators(size_t value) {
+    std::string str = std::to_string(value);
+    std::string result;
+
+    // Add thousand separators from right to left
+    for (size_t i = 0; i < str.length(); ++i) {
+        if (i > 0 && (str.length() - i) % 3 == 0) {
+            result += ".";
+        }
+        result += str[i];
+    }
+
+    return result;
+}
+
+/**
+ * @brief Format a double with thousand separators (dots) and decimal places
+ * @param value The double value to format
+ * @param precision Number of decimal places (default: 2)
+ * @return Formatted string with thousand separators and comma decimal separator
+ */
+std::string format_with_separators(double value, int precision = 2) {
+    std::ostringstream oss;
+    oss << std::fixed << std::setprecision(precision) << value;
+    std::string str = oss.str();
+
+    // Find the decimal point
+    size_t decimal_pos = str.find('.');
+    if (decimal_pos == std::string::npos) {
+        decimal_pos = str.length();
+    }
+
+    std::string result;
+    std::string integer_part = str.substr(0, decimal_pos);
+    std::string decimal_part = str.substr(decimal_pos);
+
+    // Add thousand separators to integer part
+    for (size_t i = 0; i < integer_part.length(); ++i) {
+        if (i > 0 && (integer_part.length() - i) % 3 == 0) {
+            result += ".";
+        }
+        result += integer_part[i];
+    }
+
+    // Replace decimal point with comma
+    if (decimal_part.length() > 0) {
+        decimal_part[0] = ',';
+    }
+
+    return result + decimal_part;
+}
+
+/**
+ * @brief Format a long long with thousand separators (dots)
+ * @param value The long long value to format
+ * @return Formatted string with thousand separators
+ */
+std::string format_with_separators(long long value) {
+    return format_with_separators(static_cast<size_t>(value));
+}
+
+/**
+ * @brief Format a std::chrono::milliseconds::rep with thousand separators
+ * (dots)
+ * @param value The milliseconds count to format
+ * @return Formatted string with thousand separators
+ */
+template <typename Rep> std::string format_with_separators(Rep value) {
+    return format_with_separators(static_cast<size_t>(value));
+}
 
 // Simple approach: try to construct with different signatures and use SFINAE
 template <typename T>
@@ -152,8 +229,11 @@ void metrics_loop(const std::vector<size_t> &executed_counts,
         }
 
         // Write metrics to CSV
-        file << elapsed.count() << "," << count << "," << memory_kb << ","
-             << disk_kb << "," << (current_tracking_enabled ? 'o' : 'x') << ","
+        file << format_with_separators(elapsed.count()) << ","
+             << format_with_separators(count) << ","
+             << format_with_separators(memory_kb) << ","
+             << format_with_separators(disk_kb) << ","
+             << (current_tracking_enabled ? 'o' : 'x') << ","
              << repartitioning_status << std::endl;
 
         // Update previous tracking state
@@ -319,17 +399,20 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
 
     std::cout << "\n=== Results ===" << std::endl;
     std::cout << "Storage type: " << storage_type_name << std::endl;
-    std::cout << "Total operations executed: " << total_operations << std::endl;
-    std::cout << "Duration: " << duration.count() << " ms" << std::endl;
-    std::cout << "Operations per second: " << std::fixed << std::setprecision(2)
-              << operations_per_second << std::endl;
+    std::cout << "Total operations executed: "
+              << format_with_separators(total_operations) << std::endl;
+    std::cout << "Duration: " << format_with_separators(duration.count())
+              << " ms" << std::endl;
+    std::cout << "Operations per second: "
+              << format_with_separators(operations_per_second, 2) << std::endl;
     std::cout << "Metrics saved to: " << metrics_file << std::endl;
 
     // Display per-worker statistics
     std::cout << "\nPer-worker statistics:" << std::endl;
     for (size_t i = 0; i < executed_counts.size(); ++i) {
-        std::cout << "  Worker " << i << ": " << executed_counts[i]
-                  << " operations" << std::endl;
+        std::cout << "  Worker " << i << ": "
+                  << format_with_separators(executed_counts[i]) << " operations"
+                  << std::endl;
     }
 }
 
@@ -582,7 +665,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    std::cout << "Loaded " << operations.size()
+    std::cout << "Loaded " << format_with_separators(operations.size())
               << " operations from workload file" << std::endl;
 
     // Print summary of operations
@@ -602,9 +685,10 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "\nOperation summary:" << std::endl;
-    std::cout << "  READ:  " << read_count << std::endl;
-    std::cout << "  WRITE: " << write_count << std::endl;
-    std::cout << "  SCAN:  " << scan_count << std::endl;
+    std::cout << "  READ:  " << format_with_separators(read_count) << std::endl;
+    std::cout << "  WRITE: " << format_with_separators(write_count)
+              << std::endl;
+    std::cout << "  SCAN:  " << format_with_separators(scan_count) << std::endl;
 
     // Execute workload with the selected storage type and engine
     execute_with_storage_config(operations);
