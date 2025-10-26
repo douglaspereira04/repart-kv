@@ -8,21 +8,42 @@
 #include <filesystem>
 #include <iomanip>
 #include "keystorage/MapKeyStorage.h"
-#include "storage/LmdbStorageEngine.h"
-#include "storage/MapStorageEngine.h"
 #include "workload/Workload.h"
 #include "kvstorage/HardRepartitioningKeyValueStorage.h"
 #include "kvstorage/SoftRepartitioningKeyValueStorage.h"
 #include "kvstorage/threaded/SoftThreadedRepartitioningKeyValueStorage.h"
-#include "storage/TkrzwHashStorageEngine.h"
 #include "storage/TkrzwTreeStorageEngine.h"
-#include "keystorage/TkrzwHashKeyStorage.h"
+#include "storage/TkrzwHashStorageEngine.h"
+#include "storage/LmdbStorageEngine.h"
+#include "storage/MapStorageEngine.h"
 #include "keystorage/TkrzwTreeKeyStorage.h"
+#include "keystorage/TkrzwHashKeyStorage.h"
+#include "keystorage/LmdbKeyStorage.h"
 
 // Global parameters
 size_t PARTITION_COUNT = 4;
 size_t TEST_WORKERS = 1;
-std::string STORAGE_TYPE = "soft"; // Default to soft repartitioning
+std::string STORAGE_TYPE = "soft";         // Default to soft repartitioning
+std::string STORAGE_ENGINE = "tkrzw_tree"; // Default to TkrzwTreeStorageEngine
+
+// Simple approach: try to construct with different signatures and use SFINAE
+template <typename T>
+auto try_construct_repartitioning(T *, size_t partition_count)
+    -> decltype(T(partition_count, std::hash<std::string>(),
+                  std::chrono::milliseconds(1000),
+                  std::chrono::milliseconds(1000))) {
+    return T(partition_count, std::hash<std::string>(),
+             std::chrono::milliseconds(1000), std::chrono::milliseconds(1000));
+}
+
+template <typename T>
+auto try_construct_storage_engine(T *, size_t level) -> decltype(T(level)) {
+    return T(level);
+}
+
+template <typename T> auto try_construct_default(T *) -> decltype(T()) {
+    return T();
+}
 
 /**
  * @brief Get current memory usage in KB
@@ -107,8 +128,20 @@ void metrics_loop(const std::vector<size_t> &executed_counts,
         size_t disk_kb = get_disk_usage_kb();
 
         // Get current tracking and repartitioning status
-        bool current_tracking_enabled = storage.enable_tracking();
-        bool current_repartitioning = storage.is_repartitioning();
+        bool current_tracking_enabled = false;
+        bool current_repartitioning = false;
+
+        // Check if storage has repartitioning methods
+        // (RepartitioningKeyValueStorage)
+        if constexpr (requires {
+                          storage.enable_tracking();
+                          storage.is_repartitioning();
+                      }) {
+            current_tracking_enabled = storage.enable_tracking();
+            current_repartitioning = storage.is_repartitioning();
+        }
+        // For StorageEngine types, tracking and repartitioning are not
+        // applicable
 
         // Determine repartitioning status: "o" if repartitioning flag is set OR
         // tracking was disabled
@@ -202,13 +235,40 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
                           const std::string &storage_type_name) {
     // Create storage instance
     std::cout << "\n=== Initializing Storage ===" << std::endl;
-    StorageType storage(partition_count, std::hash<std::string>(),
-                        std::chrono::milliseconds(1000),
-                        std::chrono::milliseconds(1000));
-    std::cout << "Created " << storage_type_name << " with " << partition_count
-              << " partitions (Tkrzw)" << std::endl;
-    std::cout << "Tracking duration: 1000ms, Repartition interval: 1000ms"
-              << std::endl;
+
+    StorageType storage = [&]() -> StorageType {
+        // Try RepartitioningKeyValueStorage constructor first
+        if constexpr (requires {
+                          try_construct_repartitioning(
+                              static_cast<StorageType *>(nullptr),
+                              partition_count);
+                      }) {
+            std::cout << "Created " << storage_type_name << " with "
+                      << partition_count << " partitions (Tkrzw)" << std::endl;
+            std::cout
+                << "Tracking duration: 1000ms, Repartition interval: 1000ms"
+                << std::endl;
+            return try_construct_repartitioning(
+                static_cast<StorageType *>(nullptr), partition_count);
+        }
+        // Try StorageEngine constructor
+        else if constexpr (requires {
+                               try_construct_storage_engine(
+                                   static_cast<StorageType *>(nullptr), 0);
+                           }) {
+            std::cout << "Created " << storage_type_name << " (StorageEngine)"
+                      << std::endl;
+            return try_construct_storage_engine(
+                static_cast<StorageType *>(nullptr), 0);
+        }
+        // Fallback to default constructor
+        else {
+            std::cout << "Created " << storage_type_name
+                      << " (other type - using default constructor)"
+                      << std::endl;
+            return try_construct_default(static_cast<StorageType *>(nullptr));
+        }
+    }();
 
     // Setup metrics tracking
     std::vector<size_t> executed_counts(test_workers,
@@ -274,13 +334,131 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
 }
 
 /**
+ * @brief Helper function to execute workload with storage engine configuration
+ */
+void execute_with_storage_config(
+    const std::vector<workload::Operation> &operations) {
+    if (STORAGE_ENGINE == "tkrzw_tree") {
+        if (STORAGE_TYPE == "hard") {
+            using StorageType =
+                HardRepartitioningKeyValueStorage<TkrzwTreeStorageEngine,
+                                                  TkrzwTreeKeyStorage,
+                                                  TkrzwHashKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "HardRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "soft") {
+            using StorageType =
+                SoftRepartitioningKeyValueStorage<TkrzwTreeStorageEngine,
+                                                  TkrzwTreeKeyStorage,
+                                                  TkrzwHashKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "SoftRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "threaded") {
+            using StorageType = SoftThreadedRepartitioningKeyValueStorage<
+                TkrzwTreeStorageEngine, MapKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "SoftThreadedRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "engine") {
+            using StorageType = TkrzwTreeStorageEngine;
+            run_workload_with_storage<StorageType>(operations, PARTITION_COUNT,
+                                                   TEST_WORKERS,
+                                                   "TkrzwTreeStorageEngine");
+        }
+    } else if (STORAGE_ENGINE == "tkrzw_hash") {
+        if (STORAGE_TYPE == "hard") {
+            using StorageType =
+                HardRepartitioningKeyValueStorage<TkrzwHashStorageEngine,
+                                                  TkrzwHashKeyStorage,
+                                                  TkrzwTreeKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "HardRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "soft") {
+            using StorageType =
+                SoftRepartitioningKeyValueStorage<TkrzwHashStorageEngine,
+                                                  TkrzwHashKeyStorage,
+                                                  TkrzwTreeKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "SoftRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "threaded") {
+            using StorageType = SoftThreadedRepartitioningKeyValueStorage<
+                TkrzwHashStorageEngine, MapKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "SoftThreadedRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "engine") {
+            using StorageType = TkrzwHashStorageEngine;
+            run_workload_with_storage<StorageType>(operations, PARTITION_COUNT,
+                                                   TEST_WORKERS,
+                                                   "TkrzwHashStorageEngine");
+        }
+    } else if (STORAGE_ENGINE == "lmdb") {
+        if (STORAGE_TYPE == "hard") {
+            using StorageType = HardRepartitioningKeyValueStorage<
+                LmdbStorageEngine, LmdbKeyStorage, MapKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "HardRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "soft") {
+            using StorageType = SoftRepartitioningKeyValueStorage<
+                LmdbStorageEngine, LmdbKeyStorage, MapKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "SoftRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "threaded") {
+            using StorageType =
+                SoftThreadedRepartitioningKeyValueStorage<LmdbStorageEngine,
+                                                          MapKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "SoftThreadedRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "engine") {
+            using StorageType = LmdbStorageEngine;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS, "LmdbStorageEngine");
+        }
+    } else if (STORAGE_ENGINE == "map") {
+        if (STORAGE_TYPE == "hard") {
+            using StorageType =
+                HardRepartitioningKeyValueStorage<MapStorageEngine,
+                                                  MapKeyStorage, MapKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "HardRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "soft") {
+            using StorageType =
+                SoftRepartitioningKeyValueStorage<MapStorageEngine,
+                                                  MapKeyStorage, MapKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "SoftRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "threaded") {
+            using StorageType =
+                SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine,
+                                                          MapKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "SoftThreadedRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "engine") {
+            using StorageType = MapStorageEngine;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS, "MapStorageEngine");
+        }
+    }
+}
+
+/**
  * @brief Print usage information
  */
 void print_usage(const char *program_name) {
-    std::cout
-        << "Usage: " << program_name
-        << " <workload_file> [partition_count] [test_workers] [storage_type]"
-        << std::endl;
+    std::cout << "Usage: " << program_name
+              << " <workload_file> [partition_count] [test_workers] "
+                 "[storage_type] [storage_engine]"
+              << std::endl;
     std::cout << "\nArguments:" << std::endl;
     std::cout << "  workload_file    Path to the workload file" << std::endl;
     std::cout << "  partition_count  Number of partitions (default: 4)"
@@ -288,7 +466,11 @@ void print_usage(const char *program_name) {
     std::cout << "  test_workers     Number of worker threads (default: 1)"
               << std::endl;
     std::cout << "  storage_type     Storage implementation: 'hard', 'soft', "
-                 "or 'threaded' (default: soft)"
+                 "'threaded', or 'engine' (default: soft)"
+              << std::endl;
+    std::cout << "  storage_engine   Storage engine backend: 'tkrzw_tree', "
+                 "'tkrzw_hash', "
+                 "'lmdb', or 'map' (default: tkrzw_tree)"
               << std::endl;
     std::cout << "\nStorage Types:" << std::endl;
     std::cout << "  hard            HardRepartitioningKeyValueStorage (creates "
@@ -300,6 +482,20 @@ void print_usage(const char *program_name) {
     std::cout << "  threaded        SoftThreadedRepartitioningKeyValueStorage "
                  "(threaded soft repartitioning)"
               << std::endl;
+    std::cout
+        << "  engine          Direct StorageEngine usage (no repartitioning)"
+        << std::endl;
+    std::cout << "\nStorage Engines:" << std::endl;
+    std::cout
+        << "  tkrzw_tree      TkrzwTreeStorageEngine (sorted key-value storage)"
+        << std::endl;
+    std::cout << "  tkrzw_hash      TkrzwHashStorageEngine (hash-based storage)"
+              << std::endl;
+    std::cout << "  lmdb            LmdbStorageEngine (LMDB-based storage)"
+              << std::endl;
+    std::cout
+        << "  map             MapStorageEngine (in-memory std::map storage)"
+        << std::endl;
     std::cout << "\nWorkload file format:" << std::endl;
     std::cout << "  0,<key>         : READ operation" << std::endl;
     std::cout << "  1,<key>         : WRITE operation (uses 1KB default value)"
@@ -349,10 +545,22 @@ int main(int argc, char *argv[]) {
     if (argc >= 5) {
         STORAGE_TYPE = argv[4];
         if (STORAGE_TYPE != "hard" && STORAGE_TYPE != "soft" &&
-            STORAGE_TYPE != "threaded") {
-            std::cerr << "Error: storage_type must be 'hard', 'soft', or "
-                         "'threaded', got: "
+            STORAGE_TYPE != "threaded" && STORAGE_TYPE != "engine") {
+            std::cerr << "Error: storage_type must be 'hard', 'soft', "
+                         "'threaded', or 'engine', got: "
                       << STORAGE_TYPE << std::endl;
+            return 1;
+        }
+    }
+
+    if (argc >= 6) {
+        STORAGE_ENGINE = argv[5];
+        if (STORAGE_ENGINE != "tkrzw_tree" && STORAGE_ENGINE != "tkrzw_hash" &&
+            STORAGE_ENGINE != "lmdb" && STORAGE_ENGINE != "map") {
+            std::cerr
+                << "Error: storage_engine must be 'tkrzw_tree', 'tkrzw_hash', "
+                   "'lmdb', or 'map', got: "
+                << STORAGE_ENGINE << std::endl;
             return 1;
         }
     }
@@ -362,6 +570,7 @@ int main(int argc, char *argv[]) {
     std::cout << "Partition count: " << PARTITION_COUNT << std::endl;
     std::cout << "Test workers: " << TEST_WORKERS << std::endl;
     std::cout << "Storage type: " << STORAGE_TYPE << std::endl;
+    std::cout << "Storage engine: " << STORAGE_ENGINE << std::endl;
     std::cout << std::endl;
 
     // Read workload
@@ -397,31 +606,8 @@ int main(int argc, char *argv[]) {
     std::cout << "  WRITE: " << write_count << std::endl;
     std::cout << "  SCAN:  " << scan_count << std::endl;
 
-    // Execute workload with the selected storage type
-    if (STORAGE_TYPE == "hard") {
-        using StorageType = HardRepartitioningKeyValueStorage<
-            TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>;
-        run_workload_with_storage<StorageType>(
-            operations, PARTITION_COUNT, TEST_WORKERS,
-            "HardRepartitioningKeyValueStorage");
-    } else if (STORAGE_TYPE == "soft") {
-        using StorageType = SoftRepartitioningKeyValueStorage<
-            TkrzwTreeStorageEngine, TkrzwTreeKeyStorage, TkrzwHashKeyStorage>;
-        run_workload_with_storage<StorageType>(
-            operations, PARTITION_COUNT, TEST_WORKERS,
-            "SoftRepartitioningKeyValueStorage");
-    } else if (STORAGE_TYPE == "threaded") {
-        using StorageType =
-            SoftThreadedRepartitioningKeyValueStorage<TkrzwTreeStorageEngine,
-                                                      MapKeyStorage>;
-        run_workload_with_storage<StorageType>(
-            operations, PARTITION_COUNT, TEST_WORKERS,
-            "SoftThreadedRepartitioningKeyValueStorage");
-    } else {
-        std::cerr << "Error: Unknown storage type: " << STORAGE_TYPE
-                  << std::endl;
-        return 1;
-    }
+    // Execute workload with the selected storage type and engine
+    execute_with_storage_config(operations);
 
     return 0;
 }
