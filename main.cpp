@@ -277,7 +277,6 @@ void worker_function(size_t worker_id,
                 if (status != Status::SUCCESS) {
                     std::cerr << "Error: Failed to read key: " << op.key
                               << std::endl;
-                    return;
                 }
                 executed_counts[worker_id]++;
                 break;
@@ -285,9 +284,8 @@ void worker_function(size_t worker_id,
             case workload::OperationType::WRITE: {
                 Status status = storage.write(op.key, op.value);
                 if (status != Status::SUCCESS) {
-                    std::cerr << "Error: Failed to read key: " << op.key
+                    std::cerr << "Error: Failed to write key: " << op.key
                               << std::endl;
-                    return;
                 }
                 executed_counts[worker_id]++;
                 break;
@@ -298,7 +296,6 @@ void worker_function(size_t worker_id,
                 if (status != Status::SUCCESS) {
                     std::cerr << "Error: Failed to scan key: " << op.key
                               << std::endl;
-                    return;
                 }
                 executed_counts[worker_id]++;
                 break;
