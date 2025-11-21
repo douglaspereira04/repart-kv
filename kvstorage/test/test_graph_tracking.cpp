@@ -10,6 +10,8 @@
 int tests_passed = 0;
 int tests_failed = 0;
 
+const std::chrono::milliseconds sleep_time = std::chrono::milliseconds(10);
+
 template <typename StorageType>
 void test_tracking_disabled(const std::string &storage_name) {
     TEST("tracking_disabled_" + storage_name)
@@ -59,6 +61,7 @@ void test_tracking_enabled(const std::string &storage_name) {
     status = storage.write("key3", "value3");
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
 
+    std::this_thread::sleep_for(sleep_time);
     const Graph &graph = storage.graph();
 
     // Each write should create a vertex with weight 1
@@ -74,6 +77,7 @@ void test_tracking_enabled(const std::string &storage_name) {
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
     status = storage.read("key1", value);
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
+    std::this_thread::sleep_for(sleep_time);
 
     ASSERT_EQ(3, graph.get_vertex_weight("key1")); // 1 write + 2 reads
     ASSERT_EQ(1, graph.get_vertex_weight("key2")); // Still 1
@@ -82,6 +86,7 @@ void test_tracking_enabled(const std::string &storage_name) {
     // Write to key1 again (should increment by 1)
     status = storage.write("key1", "updated_value1");
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
+    std::this_thread::sleep_for(sleep_time);
 
     ASSERT_EQ(4, graph.get_vertex_weight("key1"));
     std::cout << "  ✓ key1 weight is now 4 after another write" << std::endl;
@@ -119,6 +124,7 @@ void test_access_frequency_tracking(const std::string &storage_name) {
     // Don't access cold_key at all after writing
 
     const Graph &graph = storage.graph();
+    std::this_thread::sleep_for(sleep_time);
 
     // Check weights reflect access patterns
     int hot_weight = graph.get_vertex_weight("hot_key");
@@ -140,40 +146,6 @@ void test_access_frequency_tracking(const std::string &storage_name) {
 }
 
 template <typename StorageType>
-void test_clear_graph(const std::string &storage_name) {
-    TEST("clear_graph_" + storage_name)
-    StorageType storage(4);
-    storage.enable_tracking(true);
-
-    // Add some tracked data
-    Status status = storage.write("key1", "value1");
-    ASSERT_STATUS_EQ(Status::SUCCESS, status);
-    status = storage.write("key2", "value2");
-    ASSERT_STATUS_EQ(Status::SUCCESS, status);
-    status = storage.write("key2", "value2");
-    ASSERT_STATUS_EQ(Status::SUCCESS, status);
-    std::string value;
-    status = storage.read("key1", value);
-    ASSERT_STATUS_EQ(Status::SUCCESS, status);
-
-    const Graph &graph = storage.graph();
-    ASSERT_EQ(2, graph.get_vertex_count());
-    std::cout << "  ✓ Graph has 2 vertices" << std::endl;
-
-    // Clear the graph
-    storage.clear_graph();
-
-    ASSERT_EQ(0, graph.get_vertex_count());
-    std::cout << "  ✓ Graph cleared successfully" << std::endl;
-
-    // New accesses should start fresh
-    storage.write("key1", "new_value");
-    ASSERT_EQ(1, graph.get_vertex_weight("key1"));
-    std::cout << "  ✓ New accesses tracked from fresh state" << std::endl;
-    END_TEST("clear_graph_" + storage_name)
-}
-
-template <typename StorageType>
 void test_toggle_tracking(const std::string &storage_name) {
     TEST("toggle_tracking_" + storage_name)
     StorageType storage(4);
@@ -188,6 +160,7 @@ void test_toggle_tracking(const std::string &storage_name) {
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
 
     const Graph &graph = storage.graph();
+    std::this_thread::sleep_for(sleep_time);
     ASSERT_EQ(2, graph.get_vertex_weight("key1"));
     std::cout << "  ✓ key1 tracked with weight 2" << std::endl;
 
@@ -198,6 +171,7 @@ void test_toggle_tracking(const std::string &storage_name) {
     status = storage.read("key1", value);
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
 
+    std::this_thread::sleep_for(sleep_time);
     // Weight should remain the same (no tracking)
     ASSERT_EQ(2, graph.get_vertex_weight("key1"));
     std::cout << "  ✓ Weight unchanged while tracking disabled" << std::endl;
@@ -207,6 +181,7 @@ void test_toggle_tracking(const std::string &storage_name) {
     status = storage.read("key1", value);
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
 
+    std::this_thread::sleep_for(sleep_time);
     // Weight should now increase
     ASSERT_EQ(3, graph.get_vertex_weight("key1"));
     std::cout << "  ✓ Tracking resumed after re-enabling" << std::endl;
@@ -229,6 +204,7 @@ void test_scan_with_graph_tracking(const std::string &storage_name) {
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
 
     const Graph &graph = storage.graph();
+    std::this_thread::sleep_for(sleep_time);
 
     // After writes, each vertex should have weight 1
     ASSERT_EQ(1, graph.get_vertex_weight("user:001"));
@@ -250,6 +226,7 @@ void test_scan_with_graph_tracking(const std::string &storage_name) {
     ASSERT_EQ(3, results.size());
     std::cout << "  ✓ Scan returned 3 results" << std::endl;
 
+    std::this_thread::sleep_for(sleep_time);
     // After scan, the 3 scanned keys should have weight 2 (1 write + 1 scan)
     // We need to check which keys were returned by the scan
     std::vector<std::string> scanned_keys;
@@ -308,6 +285,7 @@ void test_repeated_scans(const std::string &storage_name) {
     std::string key1 = first_scan[0].first;
     std::string key2 = first_scan[1].first;
 
+    std::this_thread::sleep_for(sleep_time);
     // Each key should have weight 7 (1 write + 6 scans)
     ASSERT_EQ(7, graph.get_vertex_weight(key1));
     ASSERT_EQ(7, graph.get_vertex_weight(key2));
@@ -363,6 +341,8 @@ void test_co_access_patterns(const std::string &storage_name) {
     std::vector<std::pair<std::string, std::string>> group2_keys;
     status = storage.scan("group2:", 3, group2_keys);
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
+
+    std::this_thread::sleep_for(sleep_time);
 
     // Check that keys within the same group have strong edges
     if (group1_keys.size() >= 2) {
@@ -421,7 +401,6 @@ void run_all_tests_for_storage(const std::string &storage_name) {
     test_tracking_disabled<StorageType>(storage_name);
     test_tracking_enabled<StorageType>(storage_name);
     test_access_frequency_tracking<StorageType>(storage_name);
-    test_clear_graph<StorageType>(storage_name);
     test_toggle_tracking<StorageType>(storage_name);
     test_scan_with_graph_tracking<StorageType>(storage_name);
     test_repeated_scans<StorageType>(storage_name);

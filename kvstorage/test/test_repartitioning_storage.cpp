@@ -14,6 +14,8 @@
 int tests_passed = 0;
 int tests_failed = 0;
 
+const std::chrono::milliseconds sleep_time = std::chrono::milliseconds(10);
+
 // Generic test functions that work with any RepartitioningKeyValueStorage
 // implementation
 template <typename StorageType> void test_basic_operations() {
@@ -63,6 +65,7 @@ template <typename StorageType> void test_enable_tracking() {
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
     ASSERT_STR_EQ("value1", value);
 
+    std::this_thread::sleep_for(sleep_time);
     // Check that graph has been populated
     const auto &graph = storage.graph();
     ASSERT_TRUE(graph.get_vertex_count() > 0);
@@ -180,6 +183,7 @@ template <typename StorageType> void test_co_access_patterns() {
         ASSERT_STR_EQ("value5", results[1].second);
     }
 
+    std::this_thread::sleep_for(sleep_time);
     const Graph &graph = storage.graph();
     // Verify graph has been populated
     ASSERT_TRUE(graph.get_vertex_count() > 0);

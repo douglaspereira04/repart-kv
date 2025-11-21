@@ -412,12 +412,6 @@ public:
 
     const Graph &graph_impl() const { return graph_; }
 
-    void clear_graph_impl() {
-        graph_lock_.lock();
-        graph_.clear();
-        graph_lock_.unlock();
-    }
-
 private:
     /**
      * @brief Update graph structure for a single key

@@ -96,11 +96,6 @@ public:
         return static_cast<const Derived *>(this)->graph_impl();
     }
 
-    /**
-     * @brief Clear all tracking data from the graph
-     */
-    void clear_graph() { static_cast<Derived *>(this)->clear_graph_impl(); }
-
 protected:
     /**
      * @brief Protected destructor (CRTP pattern)
