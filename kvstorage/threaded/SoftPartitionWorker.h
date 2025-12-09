@@ -181,4 +181,6 @@ public:
             }
         }
     }
+
+    size_t operation_count() const { return storage_.operation_count(); }
 };

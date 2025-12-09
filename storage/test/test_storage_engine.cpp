@@ -8,6 +8,7 @@
 #include <vector>
 #include <string>
 #include <memory>
+#include <chrono>
 
 // Test result tracking
 int tests_passed = 0;
@@ -382,6 +383,43 @@ template <typename EngineType> void test_scan_after_updates() {
     END_TEST("scan_after_updates")
 }
 
+template <typename EngineType> void test_operation_count() {
+    TEST("operation_count")
+    EngineType engine;
+
+    // Initial count should be 0
+    ASSERT_EQ(0, engine.operation_count());
+
+    // Perform an arbitrary number of operations
+    const size_t num_operations = 50;
+    for (size_t i = 0; i < num_operations; ++i) {
+        std::string key = "key:" + std::to_string(i);
+        std::string value = "value:" + std::to_string(i);
+        engine.write(key, value);
+    }
+
+    // Perform some read operations
+    for (size_t i = 0; i < 20; ++i) {
+        std::string key = "key:" + std::to_string(i);
+        std::string value;
+        engine.read(key, value);
+    }
+
+    // Perform some scan operations
+    for (size_t i = 0; i < 5; ++i) {
+        std::vector<std::pair<std::string, std::string>> results;
+        engine.scan("key:", 10, results);
+    }
+
+    // Sleep for 1 second
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    // Check the count: 50 writes + 20 reads + 5 scans = 75 operations
+    size_t expected_count = 50 + 20 + 5;
+    ASSERT_EQ(expected_count, engine.operation_count());
+    END_TEST("operation_count")
+}
+
 // Helper function to run all tests for a given engine type
 template <typename EngineType>
 void run_storage_engine_test_suite(const std::string &engine_name) {
@@ -402,7 +440,8 @@ void run_storage_engine_test_suite(const std::string &engine_name) {
         {"manual_locking", []() { test_manual_locking<EngineType>(); }},
         {"concurrent_writes", []() { test_concurrent_writes<EngineType>(); }},
         {"concurrent_reads_writes",
-         []() { test_concurrent_reads_writes<EngineType>(); }}};
+         []() { test_concurrent_reads_writes<EngineType>(); }},
+        {"operation_count", []() { test_operation_count<EngineType>(); }}};
 
     run_test_suite(engine_name, tests);
 }

@@ -9,8 +9,8 @@
 
 namespace workload {
 
-// Default value for write operations (1024 bytes)
-inline const std::string DEFAULT_VALUE_1KB(1024, 'x');
+// Default value for write operations (4 KB)
+inline const std::string DEFAULT_VALUE_4KB(1024 * 4, 'x');
 
 /**
  * @brief Operation types for the workload
@@ -31,7 +31,7 @@ struct Operation {
     size_t limit;      // For scans
 
     Operation(OperationType t, const std::string &k,
-              const std::string &v = DEFAULT_VALUE_1KB, size_t l = 0) :
+              const std::string &v = DEFAULT_VALUE_4KB, size_t l = 0) :
         type(t), key(k), value(v), limit(l) {}
 };
 
@@ -91,7 +91,7 @@ inline std::vector<Operation> read_workload(const std::string &filepath) {
             case 1: // WRITE
                 // Use fixed 1KB default value for writes
                 operations.emplace_back(OperationType::WRITE, key,
-                                        DEFAULT_VALUE_1KB);
+                                        DEFAULT_VALUE_4KB);
                 break;
 
             case 2: // SCAN

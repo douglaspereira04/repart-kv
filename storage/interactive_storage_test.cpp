@@ -15,10 +15,10 @@
 class StorageEngineWrapper {
 public:
     virtual ~StorageEngineWrapper() = default;
-    virtual std::string read(const std::string &key) const = 0;
+    virtual std::string read(const std::string &key) = 0;
     virtual void write(const std::string &key, const std::string &value) = 0;
     virtual std::vector<std::pair<std::string, std::string>>
-    scan(const std::string &prefix, size_t limit) const = 0;
+    scan(const std::string &prefix, size_t limit) = 0;
     virtual std::string get_name() const = 0;
 };
 
@@ -31,7 +31,7 @@ private:
 public:
     StorageEngineWrapperImpl(const std::string &name) : name_(name) {}
 
-    std::string read(const std::string &key) const override {
+    std::string read(const std::string &key) override {
         std::string value;
         Status status = engine_.read(key, value);
         if (status != Status::SUCCESS) {
@@ -48,7 +48,7 @@ public:
     }
 
     std::vector<std::pair<std::string, std::string>>
-    scan(const std::string &prefix, size_t limit) const override {
+    scan(const std::string &prefix, size_t limit) override {
         std::vector<std::pair<std::string, std::string>> results;
         Status status = engine_.scan(prefix, limit, results);
         if (status != Status::SUCCESS) {

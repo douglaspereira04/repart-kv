@@ -27,13 +27,14 @@ template <typename Derived> class StorageEngine {
 protected:
     mutable std::shared_mutex _lock; // Mutex for thread-safe operations
     size_t level_;                   // Hierarchy level of this storage engine
-
+    size_t operation_count_; // Number of operations performed on this storage
+                             // engine
 public:
     /**
      * @brief Constructor
      * @param level The hierarchy level for this storage engine
      */
-    explicit StorageEngine(size_t level) : level_(level) {}
+    explicit StorageEngine(size_t level) : level_(level), operation_count_(0) {}
 
     /**
      * @brief Default destructor
@@ -46,8 +47,10 @@ public:
      * @param value Reference to store the value associated with the key
      * @return Status code indicating the result of the operation
      */
-    Status read(const std::string &key, std::string &value) const {
-        return static_cast<const Derived *>(this)->read_impl(key, value);
+    Status read(const std::string &key, std::string &value) {
+        Derived *derived = static_cast<Derived *>(this);
+        derived->operation_count_++;
+        return derived->read_impl(key, value);
     }
 
     /**
@@ -57,7 +60,9 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status write(const std::string &key, const std::string &value) {
-        return static_cast<Derived *>(this)->write_impl(key, value);
+        Derived *derived = static_cast<Derived *>(this);
+        derived->operation_count_++;
+        return derived->write_impl(key, value);
     }
 
     /**
@@ -67,11 +72,11 @@ public:
      * @param results Reference to store the results of the scan
      * @return Status code indicating the result of the operation
      */
-    Status
-    scan(const std::string &key_start, size_t limit,
-         std::vector<std::pair<std::string, std::string>> &results) const {
-        return static_cast<const Derived *>(this)->scan_impl(key_start, limit,
-                                                             results);
+    Status scan(const std::string &key_start, size_t limit,
+                std::vector<std::pair<std::string, std::string>> &results) {
+        Derived *derived = static_cast<Derived *>(this);
+        derived->operation_count_++;
+        return derived->scan_impl(key_start, limit, results);
     }
 
     /**
@@ -109,4 +114,6 @@ public:
      * @param level The new level value
      */
     void level(size_t level) { level_ = level; }
+
+    size_t operation_count() const { return operation_count_; }
 };

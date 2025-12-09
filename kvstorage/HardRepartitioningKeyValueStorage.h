@@ -412,6 +412,14 @@ public:
 
     const Graph &graph_impl() const { return graph_; }
 
+    size_t operation_count_impl() const {
+        size_t operation_count = 0;
+        for (auto *storage : storages_) {
+            operation_count += storage->operation_count();
+        }
+        return operation_count;
+    }
+
 private:
     /**
      * @brief Update graph structure for a single key

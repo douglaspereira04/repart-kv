@@ -406,6 +406,8 @@ public:
 
     const Graph &graph_impl() const { return graph_; }
 
+    size_t operation_count_impl() const { return storage_.operation_count(); }
+
 private:
     /**
      * @brief Update graph structure for a single key

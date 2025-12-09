@@ -9,6 +9,8 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <thread>
+#include <chrono>
 
 // Test result tracking
 int tests_passed = 0;
@@ -566,6 +568,36 @@ template <typename StorageType> void test_partition_map_consistency() {
     END_TEST("partition_map_consistency")
 }
 
+template <typename StorageType> void test_operation_count() {
+    TEST("operation_count")
+    StorageType storage(4);
+
+    // Initial count should be 0
+    ASSERT_EQ(0, storage.operation_count());
+
+    // Perform an arbitrary number of operations
+    const size_t num_operations = 50;
+    for (size_t i = 0; i < num_operations; ++i) {
+        std::string key = "key:" + std::to_string(i);
+        std::string value = "value:" + std::to_string(i);
+        storage.write(key, value);
+    }
+
+    // Perform some read operations
+    for (size_t i = 0; i < 20; ++i) {
+        std::string key = "key:" + std::to_string(i);
+        std::string value;
+        storage.read(key, value);
+    }
+    // Sleep for 1 second
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    // Check the count: 50 writes + 20 reads = 70 operations
+    size_t expected_count = 50 + 20;
+    ASSERT_EQ(expected_count, storage.operation_count());
+    END_TEST("operation_count")
+}
+
 // Test suite runner for a specific storage type
 template <typename StorageType>
 void run_repartitioning_test_suite(const std::string &storage_name) {
@@ -587,7 +619,8 @@ void run_repartitioning_test_suite(const std::string &storage_name) {
         {"untracked_keys_preservation",
          []() { test_untracked_keys_preservation<StorageType>(); }},
         {"partition_map_consistency",
-         []() { test_partition_map_consistency<StorageType>(); }}};
+         []() { test_partition_map_consistency<StorageType>(); }},
+        {"operation_count", []() { test_operation_count<StorageType>(); }}};
 
     run_test_suite(storage_name, tests);
 }

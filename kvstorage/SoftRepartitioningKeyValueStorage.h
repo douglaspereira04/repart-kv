@@ -333,6 +333,8 @@ public:
 
     const Graph &graph_impl() const { return tracker_.graph(); }
 
+    size_t operation_count_impl() const { return storage_.operation_count(); }
+
 private:
     /**
      * @brief Background thread loop for automatic repartitioning

@@ -60,6 +60,10 @@ public:
                                                        limit, results);
     }
 
+    size_t operation_count() const {
+        return static_cast<const Derived *>(this)->operation_count_impl();
+    }
+
 protected:
     /**
      * @brief Protected destructor (CRTP pattern)
