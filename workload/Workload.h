@@ -10,7 +10,7 @@
 namespace workload {
 
 // Default value for write operations (4 KB)
-inline const std::string DEFAULT_VALUE_4KB(1024 * 4, 'x');
+inline const std::string DEFAULT_VALUE(4 * 1024, '*');
 
 /**
  * @brief Operation types for the workload
@@ -30,9 +30,8 @@ struct Operation {
     std::string value; // For writes (1024-byte value if not specified)
     size_t limit;      // For scans
 
-    Operation(OperationType t, const std::string &k,
-              const std::string &v = DEFAULT_VALUE_4KB, size_t l = 0) :
-        type(t), key(k), value(v), limit(l) {}
+    Operation(OperationType t, const std::string &k, size_t l = 0) :
+        type(t), key(k), limit(l) {}
 };
 
 /**
@@ -90,8 +89,7 @@ inline std::vector<Operation> read_workload(const std::string &filepath) {
 
             case 1: // WRITE
                 // Use fixed 1KB default value for writes
-                operations.emplace_back(OperationType::WRITE, key,
-                                        DEFAULT_VALUE_4KB);
+                operations.emplace_back(OperationType::WRITE, key);
                 break;
 
             case 2: // SCAN
@@ -103,8 +101,7 @@ inline std::vector<Operation> read_workload(const std::string &filepath) {
                 }
                 try {
                     size_t limit = std::stoull(limit_str);
-                    operations.emplace_back(OperationType::SCAN, key, "",
-                                            limit);
+                    operations.emplace_back(OperationType::SCAN, key, limit);
                 } catch (const std::exception &e) {
                     std::cerr << "Warning: Skipping line " << line_number
                               << " (invalid limit): " << line << std::endl;

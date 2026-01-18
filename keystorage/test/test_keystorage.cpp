@@ -2,6 +2,7 @@
 #include "../TkrzwHashKeyStorage.h"
 #include "../TkrzwTreeKeyStorage.h"
 #include "../LmdbKeyStorage.h"
+#include "../UnorderedDenseKeyStorage.h"
 #include "../../utils/test_assertions.h"
 #include <iostream>
 #include <vector>
@@ -447,6 +448,8 @@ int main() {
     run_storage_test_suite<TkrzwTreeKeyStorage<int>, int>("TkrzwTreeKeyStorage",
                                                           "int");
     run_storage_test_suite<LmdbKeyStorage<int>, int>("LmdbKeyStorage", "int");
+    run_storage_test_suite<UnorderedDenseKeyStorage<int>, int>(
+        "UnorderedDenseKeyStorage", "int");
 
     // Test all storage implementations with long
     std::cout << "\n=== Testing with long ===" << std::endl;
@@ -457,6 +460,8 @@ int main() {
         "TkrzwTreeKeyStorage", "long");
     run_storage_test_suite<LmdbKeyStorage<long>, long>("LmdbKeyStorage",
                                                        "long");
+    run_storage_test_suite<UnorderedDenseKeyStorage<long>, long>(
+        "UnorderedDenseKeyStorage", "long");
 
     // Test all storage implementations with uint64_t
     std::cout << "\n=== Testing with uint64_t ===" << std::endl;
@@ -468,6 +473,8 @@ int main() {
         "TkrzwTreeKeyStorage", "uint64_t");
     run_storage_test_suite<LmdbKeyStorage<uint64_t>, uint64_t>("LmdbKeyStorage",
                                                                "uint64_t");
+    run_storage_test_suite<UnorderedDenseKeyStorage<uint64_t>, uint64_t>(
+        "UnorderedDenseKeyStorage", "uint64_t");
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;
