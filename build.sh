@@ -47,7 +47,7 @@ cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE ..
 # Format code with clang-format
 echo "Formatting code with clang-format..."
 cd ..
-find . -name "*.h" -o -name "*.cpp" | grep -v build | xargs clang-format -i
+find . \( -name "*.h" -o -name "*.cpp" \) ! -path "./build/*" ! -path "./.git/*" -type f -print0 | xargs -0 -r clang-format -i
 cd build
 
 # Build the project
