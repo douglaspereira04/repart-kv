@@ -284,6 +284,8 @@ template <typename StorageType> void test_multiple_repartitions() {
         ASSERT_STR_EQ("value2", value);
     }
 
+    std::this_thread::sleep_for(sleep_time);
+
     const Graph &graph1 = storage.graph();
     ASSERT_EQ(3, graph1.get_vertex_count());
     std::cout << "    First tracking period: 3 vertices" << std::endl;
@@ -308,6 +310,8 @@ template <typename StorageType> void test_multiple_repartitions() {
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_STR_EQ("value5", value);
     }
+
+    std::this_thread::sleep_for(sleep_time);
 
     const Graph &graph2 = storage.graph();
     ASSERT_EQ(2, graph2.get_vertex_count());

@@ -112,8 +112,10 @@ public:
         }
 
         // Start repartitioning thread if both durations are set
-        if (tracking_duration_.has_value() &&
-            repartition_interval_.has_value()) {
+        if (partition_count_ > 1 && tracking_duration_.has_value() &&
+            repartition_interval_.has_value() &&
+            tracking_duration_.value().count() > 0 &&
+            repartition_interval_.value().count() > 0) {
             repartitioning_thread_ = std::thread(
                 &SoftRepartitioningKeyValueStorage::repartition_loop, this);
         }

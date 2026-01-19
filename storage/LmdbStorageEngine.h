@@ -41,8 +41,8 @@ private:
     bool is_open_;
     std::string db_path_;
 
-    static std::atomic_int db_counter;
-    static std::string id;
+    static std::atomic_int db_counter_;
+    static std::string id_;
 
 public:
     /**
@@ -386,8 +386,8 @@ private:
      */
     void init() {
         db_path_ =
-            std::string("/tmp/repart_kv_storage/") + id + std::string("/") +
-            std::to_string(db_counter.fetch_add(1, std::memory_order_relaxed));
+            std::string("/tmp/repart_kv_storage/") + id_ + std::string("/") +
+            std::to_string(db_counter_.fetch_add(1, std::memory_order_relaxed));
         std::filesystem::create_directories(db_path_);
 
         init_with_path(db_path_, 50ULL * 1024 * 1024 * 1024);
@@ -441,8 +441,8 @@ private:
 };
 
 // Static member definitions
-inline std::atomic_int LmdbStorageEngine::db_counter = 0;
-inline std::string LmdbStorageEngine::id = std::to_string(
+inline std::atomic_int LmdbStorageEngine::db_counter_ = 0;
+inline std::string LmdbStorageEngine::id_ = std::to_string(
     std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch())
         .count());

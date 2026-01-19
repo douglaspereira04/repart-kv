@@ -5,6 +5,7 @@
 #include "../storage/StorageEngine.h"
 #include "../graph/Graph.h"
 #include "../graph/MetisGraph.h"
+#include "Tracker.h"
 #include <string>
 #include <vector>
 #include <cstddef>
@@ -70,10 +71,8 @@ private:
         storages_;       // Vector of storage engine instances
     size_t level_;       // Current level (tree depth or hierarchy level)
     HashFunc hash_func_; // Hash function for key hashing
-    Graph graph_; // Graph for tracking key access patterns and relationships
-    MetisGraph metis_graph_; // METIS graph for partitioning
-
-    std::mutex graph_lock_; // Mutex for thread-safe access to graph
+    Tracker<PartitionMapType<size_t>>
+        tracker_; // Tracker for tracking key access patterns
 
     // Threading attributes for automatic repartitioning
     std::thread repartitioning_thread_; // Background thread for automatic
@@ -115,8 +114,10 @@ public:
         }
 
         // Start repartitioning thread if both durations are set
-        if (tracking_duration_.has_value() &&
-            repartition_interval_.has_value()) {
+        if (partition_count_ > 1 && tracking_duration_.has_value() &&
+            repartition_interval_.has_value() &&
+            tracking_duration_.value().count() > 0 &&
+            repartition_interval_.value().count() > 0) {
             repartitioning_thread_ = std::thread(
                 &HardRepartitioningKeyValueStorage::repartition_loop, this);
         }
@@ -155,7 +156,7 @@ public:
 
         // Track key access if enabled
         if (enable_tracking_) {
-            single_key_graph_update(key);
+            tracker_.update(key);
         }
 
         // Look up which storage owns this key
@@ -193,7 +194,7 @@ public:
 
         // Track key access if enabled
         if (enable_tracking_) {
-            single_key_graph_update(key);
+            tracker_.update(key);
         }
 
         // Look up or assign storage for this key
@@ -273,7 +274,7 @@ public:
 
         // Track key access patterns if enabled
         if (enable_tracking_) {
-            multi_key_graph_update(key_array);
+            tracker_.multi_update(key_array);
         }
 
         // Lock all unique storages in sorted order (by pointer address)
@@ -327,31 +328,13 @@ public:
      * will occur lazily as keys are accessed and reassigned to new partitions.
      */
     void repartition_impl() {
-        // Step 1: Set repartitioning flag and disable tracking temporarily
+        // Set repartitioning flag and disable tracking temporarily
         is_repartitioning_ = true;
-        key_map_lock_.lock();
         enable_tracking_ = false;
-        key_map_lock_.unlock();
 
-        // Step 2: Partition the graph using METIS
-        std::unordered_map<std::string, size_t> new_partition_map;
-        std::vector<idx_t> metis_partitions;
+        bool success =
+            tracker_.prepare_for_partition_map_update(partition_count_);
 
-        // Lock graph for reading and processing
-        graph_lock_.lock();
-
-        bool success = false;
-        if (graph_.get_vertex_count() > 0) {
-            try {
-                metis_graph_.prepare_from_graph(graph_);
-                metis_graph_.partition(partition_count_);
-                metis_partitions = metis_graph_.get_partition_result();
-                success = true;
-            } catch (const std::exception &e) {
-                // If METIS fails, keep the old partition map
-                // This can happen if the graph is too small or has other issues
-            }
-        }
         if (success) {
             // Step 3: Lock and update partition assignments
             key_map_lock_.lock();
@@ -369,11 +352,7 @@ public:
             }
 
             // Update partition_map with new assignments
-            const auto &idx_to_vertex = metis_graph_.get_idx_to_vertex();
-            for (size_t i = 0; i < metis_partitions.size(); ++i) {
-                partition_map_.put(idx_to_vertex[i],
-                                   static_cast<size_t>(metis_partitions[i]));
-            }
+            tracker_.update_partition_map(partition_map_);
 
             // Create new storage engines
             storages_.clear();
@@ -393,13 +372,7 @@ public:
             key_map_lock_.unlock();
         }
 
-        // Step 4: Clear the graph for fresh tracking
-        graph_.clear();
-
-        // Unlock graph after processing
-        graph_lock_.unlock();
-
-        // Step 5: Clear repartitioning flag
+        // Clear repartitioning flag
         is_repartitioning_ = false;
     }
 
@@ -410,7 +383,7 @@ public:
 
     bool is_repartitioning_impl() const { return is_repartitioning_.load(); }
 
-    const Graph &graph_impl() const { return graph_; }
+    const Graph &graph_impl() const { return tracker_.graph(); }
 
     size_t operation_count_impl() const {
         size_t operation_count = 0;
@@ -421,50 +394,6 @@ public:
     }
 
 private:
-    /**
-     * @brief Update graph structure for a single key
-     * @param key The key whose graph relationships need to be updated
-     *
-     * This method increments the vertex weight for the given key in the graph,
-     * tracking its access frequency. If the vertex doesn't exist, it's created
-     * with weight 1.
-     */
-    void single_key_graph_update(const std::string &key) {
-        graph_lock_.lock();
-        graph_.increment_vertex_weight(key);
-        graph_lock_.unlock();
-    }
-
-    /**
-     * @brief Update graph structure for multiple keys
-     * @param keys Vector of keys whose graph relationships need to be updated
-     *
-     * This method updates the graph structure for multiple keys accessed
-     * together (e.g., during a scan operation). It:
-     * 1. Increments vertex weight for each key (tracking access frequency)
-     * 2. Creates edges between all pairs of keys (tracking co-access patterns)
-     *
-     * This helps identify keys that are frequently accessed together, which
-     * should ideally be placed in the same partition for optimal performance.
-     */
-    void multi_key_graph_update(const std::vector<std::string> &keys) {
-        graph_lock_.lock();
-
-        // Add or increment vertex for each key
-        for (const auto &key : keys) {
-            graph_.increment_vertex_weight(key);
-        }
-
-        // Add or increment edges between all pairs of keys
-        for (size_t i = 0; i < keys.size(); ++i) {
-            for (size_t j = i + 1; j < keys.size(); ++j) {
-                graph_.increment_edge_weight(keys[i], keys[j]);
-            }
-        }
-
-        graph_lock_.unlock();
-    }
-
     /**
      * @brief Background thread loop for automatic repartitioning
      *

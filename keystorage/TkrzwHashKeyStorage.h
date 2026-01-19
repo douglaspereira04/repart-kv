@@ -11,6 +11,9 @@
 #include <ctime>
 #include <vector>
 #include <algorithm>
+#include <atomic>
+#include <chrono>
+#include <filesystem>
 
 // Forward declaration
 template <KeyStorageValueType ValueType> class TkrzwHashKeyStorageIterator;
@@ -29,6 +32,8 @@ template <KeyStorageValueType ValueType> class TkrzwHashKeyStorage
 private:
     std::unique_ptr<tkrzw::HashDBM> db_;
     bool is_open_;
+    static std::atomic_int db_counter_;
+    static std::string id_;
 
 public:
     // Helper to serialize value to string (public for iterator access)
@@ -70,8 +75,13 @@ public:
      */
     TkrzwHashKeyStorage() :
         db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
-        std::string temp_path = "/tmp/tkrzw_hash_keystorage_" +
-                                std::to_string(time(nullptr)) + ".tkh";
+        std::string temp_path = std::string("/tmp/repart_kv_keystorage/") +
+                                id_ + std::string("/tkrzw_hash_keystorage_") +
+                                std::to_string(db_counter_.fetch_add(
+                                    1, std::memory_order_relaxed)) +
+                                ".tkh";
+        std::filesystem::create_directories(
+            std::string("/tmp/repart_kv_keystorage/") + id_);
 
         tkrzw::HashDBM::TuningParameters tuning_params;
         tuning_params.num_buckets = 100000;
@@ -281,3 +291,13 @@ TkrzwHashKeyStorage<ValueType>::lower_bound_impl(const std::string &key) {
     // Return iterator starting at the lower_bound position
     return TkrzwHashKeyStorageIterator<ValueType>(sorted_keys, index, this);
 }
+
+// Static member definitions
+template <KeyStorageValueType ValueType>
+inline std::atomic_int TkrzwHashKeyStorage<ValueType>::db_counter_ = 0;
+
+template <KeyStorageValueType ValueType>
+inline std::string TkrzwHashKeyStorage<ValueType>::id_ = std::to_string(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch())
+        .count());

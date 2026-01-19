@@ -1,12 +1,15 @@
 #pragma once
 
 #include "StorageEngine.h"
+#include <atomic>
 #include <tkrzw_dbm_hash.h>
 #include <string>
 #include <vector>
 #include <memory>
 #include <ctime>
 #include <algorithm>
+#include <chrono>
+#include <filesystem>
 
 /**
  * @brief TKRZW HashDBM-based implementation of StorageEngine
@@ -24,6 +27,8 @@ class TkrzwHashStorageEngine : public StorageEngine<TkrzwHashStorageEngine> {
 private:
     std::unique_ptr<tkrzw::HashDBM> db_;
     bool is_open_;
+    static std::atomic_int db_counter_;
+    static std::string id_;
 
 public:
     /**
@@ -39,8 +44,13 @@ public:
         db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
         // TKRZW HashDBM requires a file path, so we use /tmp for in-memory-like
         // behavior The file will be created but can be considered temporary
-        std::string temp_path =
-            "/tmp/tkrzw_temp_" + std::to_string(time(nullptr)) + ".tkh";
+        std::string temp_path = std::string("/tmp/repart_kv_storage/") + id_ +
+                                std::string("/tkrzw_hash_temp_") +
+                                std::to_string(db_counter_.fetch_add(
+                                    1, std::memory_order_relaxed)) +
+                                ".tkh";
+        std::filesystem::create_directories(
+            std::string("/tmp/repart_kv_storage/") + id_);
 
         tkrzw::Status status = db_->OpenAdvanced(temp_path,
                                                  true, // writable
@@ -245,3 +255,10 @@ public:
         return Status::ERROR;
     }
 };
+
+// Static member definitions
+inline std::atomic_int TkrzwHashStorageEngine::db_counter_ = 0;
+inline std::string TkrzwHashStorageEngine::id_ = std::to_string(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch())
+        .count());

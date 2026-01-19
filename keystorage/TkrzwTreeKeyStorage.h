@@ -9,6 +9,9 @@
 #include <iomanip>
 #include <type_traits>
 #include <ctime>
+#include <atomic>
+#include <chrono>
+#include <filesystem>
 
 // Forward declaration
 template <KeyStorageValueType ValueType> class TkrzwTreeKeyStorageIterator;
@@ -28,6 +31,8 @@ template <KeyStorageValueType ValueType> class TkrzwTreeKeyStorage
 private:
     std::unique_ptr<tkrzw::TreeDBM> db_;
     bool is_open_;
+    static std::atomic_int db_counter_;
+    static std::string id_;
 
 public:
     // Helper to serialize value to string (public for iterator access)
@@ -69,8 +74,13 @@ public:
      */
     TkrzwTreeKeyStorage() :
         db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
-        std::string temp_path = "/tmp/tkrzw_tree_keystorage_" +
-                                std::to_string(time(nullptr)) + ".tkt";
+        std::string temp_path = std::string("/tmp/repart_kv_keystorage/") +
+                                id_ + std::string("/tkrzw_tree_keystorage_") +
+                                std::to_string(db_counter_.fetch_add(
+                                    1, std::memory_order_relaxed)) +
+                                ".tkt";
+        std::filesystem::create_directories(
+            std::string("/tmp/repart_kv_keystorage/") + id_);
 
         tkrzw::TreeDBM::TuningParameters tuning_params;
         tuning_params.max_page_size = 8192;
@@ -257,3 +267,13 @@ TkrzwTreeKeyStorage<ValueType>::lower_bound_impl(const std::string &key) {
 
     return TkrzwTreeKeyStorageIterator<ValueType>(std::move(iter), this);
 }
+
+// Static member definitions
+template <KeyStorageValueType ValueType>
+inline std::atomic_int TkrzwTreeKeyStorage<ValueType>::db_counter_ = 0;
+
+template <KeyStorageValueType ValueType>
+inline std::string TkrzwTreeKeyStorage<ValueType>::id_ = std::to_string(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch())
+        .count());

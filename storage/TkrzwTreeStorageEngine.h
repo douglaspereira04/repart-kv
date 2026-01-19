@@ -6,6 +6,9 @@
 #include <vector>
 #include <memory>
 #include <ctime>
+#include <atomic>
+#include <chrono>
+#include <filesystem>
 
 /**
  * @brief TKRZW TreeDBM-based implementation of StorageEngine
@@ -30,6 +33,8 @@ class TkrzwTreeStorageEngine : public StorageEngine<TkrzwTreeStorageEngine> {
 private:
     std::unique_ptr<tkrzw::TreeDBM> db_;
     bool is_open_;
+    static std::atomic_int db_counter_;
+    static std::string id_;
 
 public:
     /**
@@ -44,8 +49,13 @@ public:
         db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
         // TKRZW TreeDBM requires a file path, so we use /tmp for in-memory-like
         // behavior The file will be created but can be considered temporary
-        std::string temp_path =
-            "/tmp/tkrzw_tree_temp_" + std::to_string(time(nullptr)) + ".tkt";
+        std::string temp_path = std::string("/tmp/repart_kv_storage/") + id_ +
+                                std::string("/tkrzw_tree_temp_") +
+                                std::to_string(db_counter_.fetch_add(
+                                    1, std::memory_order_relaxed)) +
+                                ".tkt";
+        std::filesystem::create_directories(
+            std::string("/tmp/repart_kv_storage/") + id_);
 
         tkrzw::TreeDBM::TuningParameters tuning_params;
         tuning_params.max_page_size = 8192;
@@ -258,3 +268,10 @@ public:
         return Status::ERROR;
     }
 };
+
+// Static member definitions
+inline std::atomic_int TkrzwTreeStorageEngine::db_counter_ = 0;
+inline std::string TkrzwTreeStorageEngine::id_ = std::to_string(
+    std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::high_resolution_clock::now().time_since_epoch())
+        .count());

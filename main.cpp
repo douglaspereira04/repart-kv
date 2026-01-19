@@ -28,6 +28,11 @@ size_t TEST_WORKERS = 1;
 size_t WARMUP_OPERATIONS = 0;              // Default to no warmup
 std::string STORAGE_TYPE = "soft";         // Default to soft repartitioning
 std::string STORAGE_ENGINE = "tkrzw_tree"; // Default to TkrzwTreeStorageEngine
+// Repartitioning parameters
+const std::chrono::milliseconds TRACKING_DURATION(
+    0); // Duration to track key accesses before repartitioning
+const std::chrono::milliseconds
+    REPARTITION_INTERVAL(0); // Interval between repartitioning cycles
 
 /**
  * @brief Format a number with thousand separators (dots)
@@ -108,11 +113,10 @@ template <typename Rep> std::string format_with_separators(Rep value) {
 // Simple approach: try to construct with different signatures and use SFINAE
 template <typename T>
 auto try_construct_repartitioning(T *, size_t partition_count)
-    -> decltype(T(partition_count, std::hash<std::string>(),
-                  std::chrono::milliseconds(1000),
-                  std::chrono::milliseconds(1000))) {
-    return T(partition_count, std::hash<std::string>(),
-             std::chrono::milliseconds(1000), std::chrono::milliseconds(1000));
+    -> decltype(T(partition_count, std::hash<std::string>(), TRACKING_DURATION,
+                  REPARTITION_INTERVAL)) {
+    return T(partition_count, std::hash<std::string>(), TRACKING_DURATION,
+             REPARTITION_INTERVAL);
 }
 
 template <typename T>
@@ -329,9 +333,9 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
                       }) {
             std::cout << "Created " << storage_type_name << " with "
                       << partition_count << " partitions (Tkrzw)" << std::endl;
-            std::cout
-                << "Tracking duration: 1000ms, Repartition interval: 1000ms"
-                << std::endl;
+            std::cout << "Tracking duration: " << TRACKING_DURATION.count()
+                      << "ms, Repartition interval: "
+                      << REPARTITION_INTERVAL.count() << "ms" << std::endl;
             return try_construct_repartitioning(
                 static_cast<StorageType *>(nullptr), partition_count);
         }
@@ -454,7 +458,7 @@ void execute_with_storage_config(
             using StorageType =
                 HardRepartitioningKeyValueStorage<TkrzwTreeStorageEngine,
                                                   TkrzwTreeKeyStorage,
-                                                  TkrzwHashKeyStorage>;
+                                                  TkrzwTreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 operations, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage", warmup_operations);
