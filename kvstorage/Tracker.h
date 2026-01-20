@@ -2,51 +2,48 @@
 
 #include "../graph/Graph.h"
 #include "../graph/MetisGraph.h"
+#include <tbb/concurrent_queue.h>
 #include <string>
 #include <vector>
-#include <queue>
 #include <thread>
 #include <mutex>
-#include <semaphore>
 #include <utility>
 
 /**
  * @brief Tracker class for tracking key access patterns
  *
  * This class manages a queue of key-value pairs and processes them in a
- * background thread. It uses a semaphore to coordinate between the producer
- * (update method) and consumer (tracking_loop method).
+ * background thread. It uses TBB's concurrent_bounded_queue which provides
+ * built-in blocking behavior for coordination between the producer (update
+ * method) and consumer (tracking_loop method).
  */
 template <typename PartitionMapType> class Tracker {
 private:
-    std::queue<std::vector<std::string>>
-        queue_;   // Queue of pairs (keys vector and size)
-    Graph graph_; // Graph for tracking access patterns
-    std::counting_semaphore<10000>
-        semaphore_;               // Semaphore for queue coordination
-    bool running_;                // Flag to control the tracking loop
+    tbb::concurrent_bounded_queue<std::vector<std::string>>
+        queue_;    // High-performance thread-safe bounded queue from TBB with
+                   // blocking pop
+    Graph graph_;  // Graph for tracking access patterns
+    bool running_; // Flag to control the tracking loop
     std::thread tracking_thread_; // Background thread for tracking loop
-    std::mutex queue_mutex_;      // Mutex for thread-safe queue access
     MetisGraph metis_graph_;      // METIS graph for partitioning
     std::mutex graph_lock_;       // Mutex to lock the graph
 
     /**
      * @brief Tracking loop that processes items from the queue
      *
-     * Continuously waits for items in the queue, processes them, and removes
-     * them. The loop ends when running_ is set to false and the queue is empty.
+     * Continuously waits for items in the queue using blocking pop(), processes
+     * them, and removes them. The loop ends when running_ is set to false and
+     * the queue is empty.
      */
     void tracking_loop() {
+        std::vector<std::string> keys;
         while (running_) {
-            semaphore_.acquire();
-            std::vector<std::string> keys;
-            {
-                std::lock_guard<std::mutex> lock(queue_mutex_);
-                if (queue_.empty()) {
-                    continue;
-                }
-                keys = std::move(queue_.front());
-                queue_.pop();
+            // Blocking pop: waits until an item is available
+            queue_.pop(keys);
+
+            // Check if we should stop after getting the item
+            if (!running_) {
+                break;
             }
 
             // Lock the graph
@@ -76,30 +73,27 @@ public:
     /**
      * @brief Constructor
      *
-     * Initializes the tracker and starts the background tracking thread.
+     * Initializes the tracker with a bounded queue of capacity 1000000 and
+     * starts the background tracking thread.
      */
     Tracker() :
-        semaphore_(0), running_(true),
-        tracking_thread_(std::thread(&Tracker::tracking_loop, this)) {}
+        running_(true),
+        tracking_thread_(std::thread(&Tracker::tracking_loop, this)) {
+        queue_.set_capacity(1000000);
+    }
 
     /**
      * @brief Release method to stop the tracking loop
      *
-     * Sets running to false, inserts a dummy vector with length 0 into the
-     * queue, and releases the semaphore to wake up the tracking thread.
+     * Sets running to false and inserts a dummy vector into the queue to wake
+     * up the blocking pop() in the tracking thread.
      */
     void release() {
         // Set the ending flag
         running_ = false;
 
-        // Insert a dummy vector with length 0 (empty vector) as sentinel
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            queue_.emplace(); // Empty vector
-        }
-
-        // Release semaphore to wake up the tracking thread
-        semaphore_.release();
+        // Insert a dummy vector to wake up the blocking pop() in tracking_loop
+        queue_.push(std::vector<std::string>()); // Empty vector
     }
 
     /**
@@ -127,14 +121,9 @@ public:
         std::vector<std::string> keys;
         keys.push_back(key);
 
-        // Insert into queue
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            queue_.emplace(std::move(keys));
-        }
-
-        // Release semaphore to signal that an item is available
-        semaphore_.release();
+        // Insert into queue (thread-safe, blocking pop() will wake up
+        // automatically)
+        queue_.push(std::move(keys));
     }
 
     /**
@@ -147,14 +136,9 @@ public:
         // Copy the vector of keys
         std::vector<std::string> keys_copy = keys;
 
-        // Insert into queue
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            queue_.emplace(std::move(keys_copy));
-        }
-
-        // Release semaphore to signal that an item is available
-        semaphore_.release();
+        // Insert into queue (thread-safe, blocking pop() will wake up
+        // automatically)
+        queue_.push(std::move(keys_copy));
     }
 
     /**
@@ -164,20 +148,16 @@ public:
      * Moves the vector of keys into the queue without copying.
      */
     void multi_move_update(std::vector<std::string> &&keys) {
-        // Insert into queue by moving (no copy)
-        {
-            std::lock_guard<std::mutex> lock(queue_mutex_);
-            queue_.emplace(std::move(keys));
-        }
-
-        // Release semaphore to signal that an item is available
-        semaphore_.release();
+        // Insert into queue by moving (no copy, thread-safe, blocking pop()
+        // will wake up automatically)
+        queue_.push(std::move(keys));
     }
 
     void clear_graph() {
-        std::lock_guard<std::mutex> lock(queue_mutex_);
-        while (!queue_.empty()) {
-            queue_.pop();
+        // Drain the queue (thread-safe, no mutex needed)
+        std::vector<std::string> dummy;
+        while (queue_.try_pop(dummy)) {
+            // Keep popping until empty
         }
         graph_.clear();
     }
@@ -200,9 +180,14 @@ public:
         // Wait for the queue to be empty
         // This allows already submitted keys not to be considered for the
         // current repartioning
-        while (queue_.size() > 0) {
-            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        // Note: concurrent_bounded_queue.size() is approximate, so we use
+        // try_pop to check
+        std::vector<std::string> dummy;
+        while (queue_.try_pop(dummy)) {
+            // Keep popping until empty
         }
+        // Give a small delay to ensure all items are processed
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
 
         // Lock the graph
         std::lock_guard<std::mutex> lock(graph_lock_);

@@ -3,15 +3,19 @@
 #include "../RepartitioningKeyValueStorage.h"
 #include "../../keystorage/KeyStorage.h"
 #include "../../storage/StorageEngine.h"
-#include "../../graph/Graph.h"
-#include "../../graph/MetisGraph.h"
-#include "SoftPartitionWorker.h"
+#include "../Tracker.h"
+#include "HardPartitionWorker.h"
+#include "operation/HardReadOperation.h"
+#include "operation/HardWriteOperation.h"
+#include "operation/HardScanOperation.h"
+#include "operation/SyncOperation.h"
 #include <string>
 #include <vector>
 #include <cstddef>
 #include <shared_mutex>
 #include <functional>
 #include <set>
+#include <map>
 #include <algorithm>
 #include <thread>
 #include <chrono>
@@ -19,20 +23,22 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include <memory>
 
 /**
- * @brief Soft repartitioning key-value storage implementation
+ * @brief Hard threaded repartitioning key-value storage implementation
  *
  * This class manages partitioned storage with dynamic repartitioning
- * capabilities. Uses a single storage engine with partition-level locking for
- * soft repartitioning.
+ * capabilities. Uses separate storage engines for each partition and
+ * worker threads for asynchronous operation processing.
  *
- * This implementation uses a single storage engine and partition-level locks
- * to provide non-disruptive repartitioning that preserves existing data access.
+ * This implementation combines features from HardRepartitioningKeyValueStorage
+ * (separate storage engines per partition) with SoftThreadedRepartitioningKeyValueStorage
+ * (worker threads for async processing).
  *
  * @tparam StorageEngineType The storage engine type (must derive from
  * StorageEngine)
- * @tparam StorageMapType Template for key storage type for partition->engine
+ * @tparam StorageMapType Template for key storage type for key->engine
  * mapping (e.g., MapKeyStorage). Will be instantiated with StorageEngineType*
  * as value type.
  * @tparam PartitionMapType Template for key storage type for key->partition
@@ -40,43 +46,41 @@
  * type.
  * @tparam HashFunc Hash function type for key hashing (defaults to
  * std::hash<std::string>)
- *
- * Usage example:
- *   SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage,
- * MapKeyStorage> Instead of:
- *   SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine,
- * MapKeyStorage<MapStorageEngine*>, MapKeyStorage<size_t>>
+ * @tparam Q Maximum queue size for worker operations
  */
 template <typename StorageEngineType,
+          template <typename> typename StorageMapType,
           template <typename> typename PartitionMapType,
           typename HashFunc = std::hash<std::string>, size_t Q = 1024 * 1024>
-class SoftThreadedRepartitioningKeyValueStorage
+class HardThreadedRepartitioningKeyValueStorage
     : public RepartitioningKeyValueStorage<
-          SoftThreadedRepartitioningKeyValueStorage<StorageEngineType,
+          HardThreadedRepartitioningKeyValueStorage<StorageEngineType,
+                                                    StorageMapType,
                                                     PartitionMapType, HashFunc>,
           StorageEngineType> {
 private:
-    PartitionMapType<size_t> key_map_; // Maps key ranges to partition IDs
+    StorageMapType<StorageEngineType *>
+        storage_map_; // Maps keys to storage engine instances
+    PartitionMapType<size_t> partition_map_; // Maps keys to partition IDs
+    std::shared_mutex
+        key_map_lock_;     // Mutex for thread-safe access to key mappers
     std::atomic_bool update_key_map_;  // Flag indicating if the partition map
                                        // should be updated
-    std::shared_mutex
-        key_map_lock_; // Mutex for thread-safe access to key mappers
     std::atomic_bool
         enable_tracking_; // Enable/disable tracking of key access patterns
-
-    size_t partition_count_;    // Number of partitions
-    StorageEngineType storage_; // Storage engine instance for the storage
-    HashFunc hash_func_;        // Hash function for key hashing
-    Graph graph_; // Graph for tracking key access patterns and relationships
-    MetisGraph metis_graph_; // METIS graph for partitioning
-
-    std::mutex graph_lock_; // Mutex for thread-safe access to graph
+    std::atomic<bool>
+        is_repartitioning_;  // Flag indicating if repartitioning is in progress
+    size_t partition_count_; // Number of partitions
+    std::vector<StorageEngineType *>
+        storages_;       // Vector of storage engine instances
+    size_t level_;       // Current level (tree depth or hierarchy level)
+    HashFunc hash_func_; // Hash function for key hashing
+    Tracker<PartitionMapType<size_t>>
+        tracker_; // Tracker for tracking key access patterns
 
     // Threading attributes for automatic repartitioning
     std::thread repartitioning_thread_; // Background thread for automatic
                                         // repartitioning
-    std::atomic<bool>
-        is_repartitioning_; // Flag indicating if repartitioning is in progress
     std::counting_semaphore<2> repartitioning_semaphore_;
     // Semaphore for repartitioning max of 2 because there might be already one
     // permit while calling the destructor
@@ -87,7 +91,7 @@ private:
     std::atomic<bool> running_;  // Flag to control the repartitioning loop
     std::condition_variable cv_; // Condition variable to wake the thread
     std::mutex cv_mutex_;        // Mutex for condition variable
-    std::vector<std::unique_ptr<SoftPartitionWorker<StorageEngineType, Q>>>
+    std::vector<std::unique_ptr<HardPartitionWorker<StorageEngineType, Q>>>
         workers_; // Workers for each partition
 
     std::atomic<bool> auto_repartitioning_; // Flag indicating if auto
@@ -104,26 +108,32 @@ public:
      * @param repartition_interval Optional interval between repartitioning
      * cycles
      */
-    SoftThreadedRepartitioningKeyValueStorage(
+    HardThreadedRepartitioningKeyValueStorage(
         size_t partition_count, const HashFunc &hash_func = HashFunc(),
         std::optional<std::chrono::milliseconds> tracking_duration =
             std::nullopt,
         std::optional<std::chrono::milliseconds> repartition_interval =
             std::nullopt) :
-        key_map_(PartitionMapType<size_t>()), update_key_map_(false),
-        enable_tracking_(false), partition_count_(partition_count),
-        storage_(StorageEngineType(0)), hash_func_(hash_func),
-        is_repartitioning_(false), repartitioning_semaphore_(1),
+        update_key_map_(false), enable_tracking_(false),
+        is_repartitioning_(false), partition_count_(partition_count),
+        level_(0), hash_func_(hash_func),
+        repartitioning_semaphore_(1),
         tracking_duration_(tracking_duration),
         repartition_interval_(repartition_interval), running_(true), workers_(),
         auto_repartitioning_(false) {
+
+        // Create partition_count storage engine instances
+        storages_.reserve(partition_count_);
+        for (size_t i = 0; i < partition_count_; ++i) {
+            storages_.push_back(new StorageEngineType(
+                level_ + 1)); // Child storages at level + 1
+        }
 
         // Create workers
         workers_.reserve(partition_count_);
         for (size_t i = 0; i < partition_count_; ++i) {
             workers_.emplace_back(
-                std::make_unique<SoftPartitionWorker<StorageEngineType, Q>>(
-                    storage_));
+                std::make_unique<HardPartitionWorker<StorageEngineType, Q>>(i));
         }
 
         // Start repartitioning thread if both durations are set
@@ -133,15 +143,15 @@ public:
             repartition_interval_.value().count() > 0) {
             auto_repartitioning_ = true;
             repartitioning_thread_ = std::thread(
-                &SoftThreadedRepartitioningKeyValueStorage::repartition_loop,
+                &HardThreadedRepartitioningKeyValueStorage::repartition_loop,
                 this);
         }
     }
 
     /**
-     * @brief Destructor - cleans up the storage engine
+     * @brief Destructor - cleans up dynamically allocated storage engines
      */
-    ~SoftThreadedRepartitioningKeyValueStorage() {
+    ~HardThreadedRepartitioningKeyValueStorage() {
         // Stop the repartitioning thread if it's running
         running_ = false;
 
@@ -152,6 +162,11 @@ public:
         // Join the thread if it was started
         if (repartitioning_thread_.joinable()) {
             repartitioning_thread_.join();
+        }
+
+        // Clean up storage engines
+        for (auto *storage : storages_) {
+            delete storage;
         }
     }
 
@@ -168,19 +183,27 @@ public:
 
         // Track key access if enabled
         if (enable_tracking_.load(std::memory_order_relaxed)) {
-            single_key_graph_update(key);
+            tracker_.update(key);
         }
 
-        // Look up which partition owns this key
-        size_t partition_idx;
-        bool found = key_map_.get(key, partition_idx);
+        // Look up which storage owns this key
+        StorageEngineType *storage;
+        bool found = storage_map_.get(key, storage);
         if (!found) {
-            // If the key is not mapped it is not stored
+            // Key not found in any storage
             key_map_lock_.unlock_shared();
             return Status::NOT_FOUND;
         }
 
-        ReadOperation read_operation(key, value);
+        // Get partition index for this storage
+        size_t partition_idx;
+        bool partition_found = partition_map_.get(key, partition_idx);
+        if (!partition_found) {
+            // Fallback: use hash function to determine partition
+            partition_idx = hash_func_(key) % partition_count_;
+        }
+
+        HardReadOperation<StorageEngineType> read_operation(key, value, storage);
         workers_[partition_idx]->enqueue(&read_operation);
 
         // Unlock key map (we have the storage lock now)
@@ -204,19 +227,37 @@ public:
 
         // Track key access if enabled
         if (enable_tracking_.load(std::memory_order_relaxed)) {
-            single_key_graph_update(key);
+            tracker_.update(key);
         }
 
-        // Look up or assign partition for this key
+        // Look up or assign storage for this key
+        StorageEngineType *storage;
+        bool found = storage_map_.get(key, storage);
         size_t partition_idx;
-        bool found = key_map_.get(key, partition_idx);
         if (!found) {
-            // Key not mapped yet - fall back to hash partitioning
+            // Key not mapped yet - assign to a partition using hash function
             partition_idx = hash_func_(key) % partition_count_;
-            key_map_.put(key, partition_idx);
+            storage = storages_[partition_idx];
+            storage_map_.put(key, storage);
+            partition_map_.put(key, partition_idx);
+        } else {
+            // Get partition index
+            bool partition_found = partition_map_.get(key, partition_idx);
+            if (!partition_found) {
+                // Fallback: use hash function to determine partition
+                partition_idx = hash_func_(key) % partition_count_;
+                partition_map_.put(key, partition_idx);
+            } else if (storage->level() != level_) {
+                // Storage is from a different level - reassign to current level
+                partition_idx = hash_func_(key) % partition_count_;
+                storage = storages_[partition_idx];
+                storage_map_.put(key, storage);
+                partition_map_.put(key, partition_idx);
+            }
         }
 
-        WriteOperation *write_operation = new WriteOperation(key, value);
+        HardWriteOperation<StorageEngineType> *write_operation =
+            new HardWriteOperation<StorageEngineType>(key, value, storage);
         workers_[partition_idx]->enqueue(write_operation);
 
         // Unlock key map (we have the partition lock now)
@@ -239,13 +280,15 @@ public:
         verify_and_update_key_map();
 
         std::set<size_t> partition_set;
+        std::vector<size_t> partition_array;
         std::vector<std::string> key_array;
+        std::vector<StorageEngineType *> storage_array;
 
         // Lock key map for reading
         key_map_lock_.lock_shared();
 
         // Get iterator starting from initial_key
-        auto it = key_map_.lower_bound(initial_key_prefix);
+        auto it = storage_map_.lower_bound(initial_key_prefix);
 
         size_t count = 0;
         // Collect storage pointers and keys up to limit
@@ -258,8 +301,16 @@ public:
                 break;
             }
 
-            size_t partition_idx = it.get_value();
+            StorageEngineType *storage = it.get_value();
+            size_t partition_idx;
+            bool partition_found = partition_map_.get(it.get_key(), partition_idx);
+            if (!partition_found) {
+                // Fallback: use hash function to determine partition
+                partition_idx = hash_func_(it.get_key()) % partition_count_;
+            }
             partition_set.insert(partition_idx);
+            partition_array.push_back(partition_idx);
+            storage_array.push_back(storage);
             key_array.push_back(it.get_key());
 
             ++it;
@@ -268,12 +319,19 @@ public:
 
         // Track key access patterns if enabled
         if (enable_tracking_.load(std::memory_order_relaxed)) {
-            multi_key_graph_update(key_array);
+            tracker_.multi_update(key_array);
         }
 
-        results.resize(limit);
-        ScanOperation scan_operation(initial_key_prefix, results,
-                                     partition_set.size());
+        // Pre-populate results with pairs containing keys from key_array
+        results.reserve(key_array.size());
+        for (const auto &key : key_array) {
+            results.push_back({key, ""}); // Empty value, will be filled by scan operation
+        }
+
+        // Create a single scan operation with all storages and partition array
+        // Each worker will scan the storage corresponding to its partition index
+        HardScanOperation<StorageEngineType> scan_operation(
+            initial_key_prefix, results, partition_set.size(), storage_array, partition_array);
         for (size_t partition_idx : partition_set) {
             workers_[partition_idx]->enqueue(&scan_operation);
         }
@@ -331,13 +389,10 @@ public:
      * @brief Update the key map with the new partition assignments
      */
     void update_key_map() {
-        const auto &idx_to_vertex = metis_graph_.get_idx_to_vertex();
-        std::vector<idx_t> metis_partitions =
-            metis_graph_.get_partition_result();
-        for (size_t i = 0; i < metis_partitions.size(); ++i) {
-            key_map_.put(idx_to_vertex[i],
-                         static_cast<size_t>(metis_partitions[i]));
-        }
+        // The tracker already prepared the partition map in prepare_for_partition_map_update
+        // We just need to update our partition_map_ with the new assignments
+        // This is done by the tracker in update_partition_map, which we call
+        // during repartition_impl
     }
 
     /**
@@ -352,109 +407,79 @@ public:
      * 1. Disable tracking
      * 2. Use METIS to partition the access pattern graph
      * 3. Clear the graph for fresh tracking
-     * 4. Update partition_map with new assignments
+     * 4. Create new storage engines
+     * 5. Update partition_map with new assignments
      *
      * Note: This implementation does not migrate existing data. Data migration
      * will occur lazily as keys are accessed and reassigned to new partitions.
      */
     void repartition_impl() {
-        // Set repartitioning flag to true (this flag is for testing purposes)
+        // Set repartitioning flag and disable tracking temporarily
         is_repartitioning_ = true;
+        enable_tracking_ = false;
 
-        // Tracking is disabled during repartitioning
-        // and during the tracking_duration_ interval
-        // Will be re-enabled before waiting for the next
-        // repartitioning interval
-        this->enable_tracking(false);
+        bool success =
+            tracker_.prepare_for_partition_map_update(partition_count_);
 
-        // Step 1: Partition the graph using METIS
-        std::unordered_map<std::string, size_t> new_partition_map;
-        std::vector<idx_t> metis_partitions;
+        if (success) {
+            // Step 3: Lock and update partition assignments
+            key_map_lock_.lock();
 
-        // Lock graph for reading and processing
-        graph_lock_.lock();
+            // Save old storages
+            auto old_storages = storages_;
 
-        if (graph_.get_vertex_count() > 0) {
-            try {
-                metis_graph_.prepare_from_graph(graph_);
-                metis_graph_.partition(partition_count_);
-                update_key_map_ = true;
-            } catch (const std::exception &e) {
-                // If METIS fails, keep the old partition map
-                // This can happen if the graph is too small or has other issues
+            // Lock all old storages in sorted order (by pointer address) to
+            // avoid deadlocks
+            std::vector<StorageEngineType *> sorted_storages = old_storages;
+            std::sort(sorted_storages.begin(), sorted_storages.end());
+
+            for (auto *storage : sorted_storages) {
+                storage->lock_shared();
             }
 
-            // Now metis_graph is available with improved key to partition
-            // assignments. The next operation call will update the key map,
-            // with the new assignments and re-start the repartitioning cycle.
+            // Update partition_map with new assignments
+            tracker_.update_partition_map(partition_map_);
+
+            // Create new storage engines
+            storages_.clear();
+            storages_.reserve(partition_count_);
+            // Increment level for new storage engines
+            level_++;
+            for (size_t i = 0; i < partition_count_; ++i) {
+                storages_.push_back(new StorageEngineType(level_));
+            }
+
+            // Unlock all old storages
+            for (auto *storage : sorted_storages) {
+                storage->unlock_shared();
+            }
+
+            // Unlock key map
+            key_map_lock_.unlock();
         }
 
-        // Step 2: Clear the graph for fresh tracking
-        graph_.clear();
-
-        // Unlock graph after processing
-        graph_lock_.unlock();
-
-        // Clear repartitioning flag (this flag is for testing purposes)
+        // Clear repartitioning flag
         is_repartitioning_ = false;
     }
 
     // Interface methods required by the abstract base class
     void enable_tracking_impl(bool enable) { enable_tracking_ = enable; }
 
-    bool enable_tracking_impl() const { return enable_tracking_; }
+    bool enable_tracking_impl() const { return enable_tracking_.load(); }
 
     bool is_repartitioning_impl() const { return is_repartitioning_.load(); }
 
-    const Graph &graph_impl() const { return graph_; }
+    const Graph &graph_impl() const { return tracker_.graph(); }
 
-    size_t operation_count_impl() const { return storage_.operation_count(); }
+    size_t operation_count_impl() const {
+        size_t operation_count = 0;
+        for (auto *storage : storages_) {
+            operation_count += storage->operation_count();
+        }
+        return operation_count;
+    }
 
 private:
-    /**
-     * @brief Update graph structure for a single key
-     * @param key The key whose graph relationships need to be updated
-     *
-     * This method increments the vertex weight for the given key in the graph,
-     * tracking its access frequency. If the vertex doesn't exist, it's created
-     * with weight 1.
-     */
-    void single_key_graph_update(const std::string &key) {
-        graph_lock_.lock();
-        graph_.increment_vertex_weight(key);
-        graph_lock_.unlock();
-    }
-
-    /**
-     * @brief Update graph structure for multiple keys
-     * @param keys Vector of keys whose graph relationships need to be updated
-     *
-     * This method updates the graph structure for multiple keys accessed
-     * together (e.g., during a scan operation). It:
-     * 1. Increments vertex weight for each key (tracking access frequency)
-     * 2. Creates edges between all pairs of keys (tracking co-access patterns)
-     *
-     * This helps identify keys that are frequently accessed together, which
-     * should ideally be placed in the same partition for optimal performance.
-     */
-    void multi_key_graph_update(const std::vector<std::string> &keys) {
-        graph_lock_.lock();
-
-        // Add or increment vertex for each key
-        for (const auto &key : keys) {
-            graph_.increment_vertex_weight(key);
-        }
-
-        // Add or increment edges between all pairs of keys
-        for (size_t i = 0; i < keys.size(); ++i) {
-            for (size_t j = i + 1; j < keys.size(); ++j) {
-                graph_.increment_edge_weight(keys[i], keys[j]);
-            }
-        }
-
-        graph_lock_.unlock();
-    }
-
     /**
      * @brief Background thread loop for automatic repartitioning
      *
