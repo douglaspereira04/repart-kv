@@ -3,8 +3,7 @@
 #include "../RepartitioningKeyValueStorage.h"
 #include "../../keystorage/KeyStorage.h"
 #include "../../storage/StorageEngine.h"
-#include "../../graph/Graph.h"
-#include "../../graph/MetisGraph.h"
+#include "../Tracker.h"
 #include "SoftPartitionWorker.h"
 #include <string>
 #include <vector>
@@ -67,18 +66,14 @@ private:
     size_t partition_count_;    // Number of partitions
     StorageEngineType storage_; // Storage engine instance for the storage
     HashFunc hash_func_;        // Hash function for key hashing
-    Graph graph_; // Graph for tracking key access patterns and relationships
-    MetisGraph metis_graph_; // METIS graph for partitioning
-
-    std::mutex graph_lock_; // Mutex for thread-safe access to graph
+    Tracker<PartitionMapType<size_t>>
+        tracker_; // Tracker for tracking key access patterns
 
     // Threading attributes for automatic repartitioning
     std::thread repartitioning_thread_; // Background thread for automatic
                                         // repartitioning
     std::atomic<bool>
         is_repartitioning_; // Flag indicating if repartitioning is in progress
-    std::counting_semaphore<2> repartitioning_semaphore_;
-    // Semaphore for repartitioning max of 2 because there might be already one
     // permit while calling the destructor
     std::optional<std::chrono::milliseconds>
         tracking_duration_; // Duration to track key accesses
@@ -112,9 +107,8 @@ public:
             std::nullopt) :
         key_map_(PartitionMapType<size_t>()), update_key_map_(false),
         enable_tracking_(false), partition_count_(partition_count),
-        storage_(StorageEngineType(0)), hash_func_(hash_func),
-        is_repartitioning_(false), repartitioning_semaphore_(1),
-        tracking_duration_(tracking_duration),
+        storage_(StorageEngineType(0)), hash_func_(hash_func), tracker_(),
+        is_repartitioning_(false), tracking_duration_(tracking_duration),
         repartition_interval_(repartition_interval), running_(true), workers_(),
         auto_repartitioning_(false) {
 
@@ -145,8 +139,6 @@ public:
         // Stop the repartitioning thread if it's running
         running_ = false;
 
-        // Wake up threads
-        repartitioning_semaphore_.release();
         cv_.notify_all();
 
         // Join the thread if it was started
@@ -162,13 +154,12 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status read_impl(const std::string &key, std::string &value) {
-        verify_and_update_key_map();
         // Lock key map for reading
         key_map_lock_.lock_shared();
 
         // Track key access if enabled
         if (enable_tracking_.load(std::memory_order_relaxed)) {
-            single_key_graph_update(key);
+            tracker_.update(key);
         }
 
         // Look up which partition owns this key
@@ -198,13 +189,12 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status write_impl(const std::string &key, const std::string &value) {
-        verify_and_update_key_map();
         // Lock key map for writing
         key_map_lock_.lock();
 
         // Track key access if enabled
         if (enable_tracking_.load(std::memory_order_relaxed)) {
-            single_key_graph_update(key);
+            tracker_.update(key);
         }
 
         // Look up or assign partition for this key
@@ -236,8 +226,6 @@ public:
     scan_impl(const std::string &initial_key_prefix, size_t limit,
               std::vector<std::pair<std::string, std::string>> &results) {
 
-        verify_and_update_key_map();
-
         std::set<size_t> partition_set;
         std::vector<std::string> key_array;
 
@@ -268,7 +256,7 @@ public:
 
         // Track key access patterns if enabled
         if (enable_tracking_.load(std::memory_order_relaxed)) {
-            multi_key_graph_update(key_array);
+            tracker_.multi_update(key_array);
         }
 
         results.resize(limit);
@@ -282,62 +270,6 @@ public:
         scan_operation.sync();
 
         return scan_operation.status();
-    }
-
-    /**
-     * @brief Verify and update the key map
-     *
-     * This method verifies if the key map should be updated and updates it if
-     * needed. It also releases the semaphore to allow the repartitioning thread
-     * to proceed to the next repartitioning cycle.
-     */
-    void verify_and_update_key_map() {
-        // We take a look at the update_key_map_ flag in a relaxed manner
-        // if seems enabled, we verify with stronger memory order
-        if (update_key_map_.load(std::memory_order_relaxed)) {
-            if (update_key_map_) {
-
-                // Lock key map so it can be changed safely
-                key_map_lock_.lock();
-                if (update_key_map_) {
-                    update_key_map();
-                    update_key_map_ = false;
-
-                    // We release the semaphore to allow the repartitioning
-                    // thread to proceed to the next repartitioning cycle
-                    if (auto_repartitioning_) {
-                        repartitioning_semaphore_.release();
-                    }
-                }
-
-                // Submit Sync operation to all workers
-                // This way, future enqueued operations will
-                // be processed only after every previously
-                // enqueued operations, to any worker, are processed
-                // This voids multiple workers acting in the same partition
-                SyncOperation *sync_operation =
-                    new SyncOperation(partition_count_);
-                for (size_t i = 0; i < partition_count_; ++i) {
-                    workers_[i]->enqueue(sync_operation);
-                }
-
-                // Unlock key map
-                key_map_lock_.unlock();
-            }
-        }
-    }
-
-    /**
-     * @brief Update the key map with the new partition assignments
-     */
-    void update_key_map() {
-        const auto &idx_to_vertex = metis_graph_.get_idx_to_vertex();
-        std::vector<idx_t> metis_partitions =
-            metis_graph_.get_partition_result();
-        for (size_t i = 0; i < metis_partitions.size(); ++i) {
-            key_map_.put(idx_to_vertex[i],
-                         static_cast<size_t>(metis_partitions[i]));
-        }
     }
 
     /**
@@ -368,32 +300,32 @@ public:
         this->enable_tracking(false);
 
         // Step 1: Partition the graph using METIS
-        std::unordered_map<std::string, size_t> new_partition_map;
-        std::vector<idx_t> metis_partitions;
+        bool success =
+            tracker_.prepare_for_partition_map_update(partition_count_);
 
-        // Lock graph for reading and processing
-        graph_lock_.lock();
+        if (success) {
+            // Lock key map so it can be changed safely
+            key_map_lock_.lock();
 
-        if (graph_.get_vertex_count() > 0) {
-            try {
-                metis_graph_.prepare_from_graph(graph_);
-                metis_graph_.partition(partition_count_);
-                update_key_map_ = true;
-            } catch (const std::exception &e) {
-                // If METIS fails, keep the old partition map
-                // This can happen if the graph is too small or has other issues
+            // Update partition_map with new assignments
+            tracker_.update_partition_map(key_map_);
+
+            // Submit Sync operation to all workers
+            // This way, future enqueued operations will
+            // be processed only after every previously
+            // enqueued operations, to any worker, are processed
+            // This voids multiple workers acting in the same partition
+            SyncOperation *sync_operation = new SyncOperation(partition_count_);
+            for (size_t i = 0; i < partition_count_; ++i) {
+                workers_[i]->enqueue(sync_operation);
             }
 
-            // Now metis_graph is available with improved key to partition
-            // assignments. The next operation call will update the key map,
-            // with the new assignments and re-start the repartitioning cycle.
+            // Unlock key map
+            key_map_lock_.unlock();
+
+            // We release the semaphore to allow the repartitioning
+            // thread to proceed to the next repartitioning cycle
         }
-
-        // Step 2: Clear the graph for fresh tracking
-        graph_.clear();
-
-        // Unlock graph after processing
-        graph_lock_.unlock();
 
         // Clear repartitioning flag (this flag is for testing purposes)
         is_repartitioning_ = false;
@@ -406,55 +338,11 @@ public:
 
     bool is_repartitioning_impl() const { return is_repartitioning_.load(); }
 
-    const Graph &graph_impl() const { return graph_; }
+    const Graph &graph_impl() const { return tracker_.graph(); }
 
     size_t operation_count_impl() const { return storage_.operation_count(); }
 
 private:
-    /**
-     * @brief Update graph structure for a single key
-     * @param key The key whose graph relationships need to be updated
-     *
-     * This method increments the vertex weight for the given key in the graph,
-     * tracking its access frequency. If the vertex doesn't exist, it's created
-     * with weight 1.
-     */
-    void single_key_graph_update(const std::string &key) {
-        graph_lock_.lock();
-        graph_.increment_vertex_weight(key);
-        graph_lock_.unlock();
-    }
-
-    /**
-     * @brief Update graph structure for multiple keys
-     * @param keys Vector of keys whose graph relationships need to be updated
-     *
-     * This method updates the graph structure for multiple keys accessed
-     * together (e.g., during a scan operation). It:
-     * 1. Increments vertex weight for each key (tracking access frequency)
-     * 2. Creates edges between all pairs of keys (tracking co-access patterns)
-     *
-     * This helps identify keys that are frequently accessed together, which
-     * should ideally be placed in the same partition for optimal performance.
-     */
-    void multi_key_graph_update(const std::vector<std::string> &keys) {
-        graph_lock_.lock();
-
-        // Add or increment vertex for each key
-        for (const auto &key : keys) {
-            graph_.increment_vertex_weight(key);
-        }
-
-        // Add or increment edges between all pairs of keys
-        for (size_t i = 0; i < keys.size(); ++i) {
-            for (size_t j = i + 1; j < keys.size(); ++j) {
-                graph_.increment_edge_weight(keys[i], keys[j]);
-            }
-        }
-
-        graph_lock_.unlock();
-    }
-
     /**
      * @brief Background thread loop for automatic repartitioning
      *
@@ -474,7 +362,6 @@ private:
             // a new key map is available and one thread making an
             // operation detecting that the new key map is available,
             // effectively completing the repartitioning
-            repartitioning_semaphore_.acquire();
 
             // Sleep for the repartition interval
             std::unique_lock<std::mutex> lock(cv_mutex_);

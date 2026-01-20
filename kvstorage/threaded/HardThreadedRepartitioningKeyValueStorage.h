@@ -33,8 +33,9 @@
  * worker threads for asynchronous operation processing.
  *
  * This implementation combines features from HardRepartitioningKeyValueStorage
- * (separate storage engines per partition) with SoftThreadedRepartitioningKeyValueStorage
- * (worker threads for async processing).
+ * (separate storage engines per partition) with
+ * SoftThreadedRepartitioningKeyValueStorage (worker threads for async
+ * processing).
  *
  * @tparam StorageEngineType The storage engine type (must derive from
  * StorageEngine)
@@ -54,18 +55,17 @@ template <typename StorageEngineType,
           typename HashFunc = std::hash<std::string>, size_t Q = 1024 * 1024>
 class HardThreadedRepartitioningKeyValueStorage
     : public RepartitioningKeyValueStorage<
-          HardThreadedRepartitioningKeyValueStorage<StorageEngineType,
-                                                    StorageMapType,
-                                                    PartitionMapType, HashFunc>,
+          HardThreadedRepartitioningKeyValueStorage<
+              StorageEngineType, StorageMapType, PartitionMapType, HashFunc>,
           StorageEngineType> {
 private:
     StorageMapType<StorageEngineType *>
         storage_map_; // Maps keys to storage engine instances
     PartitionMapType<size_t> partition_map_; // Maps keys to partition IDs
     std::shared_mutex
-        key_map_lock_;     // Mutex for thread-safe access to key mappers
-    std::atomic_bool update_key_map_;  // Flag indicating if the partition map
-                                       // should be updated
+        key_map_lock_; // Mutex for thread-safe access to key mappers
+    std::atomic_bool update_key_map_; // Flag indicating if the partition map
+                                      // should be updated
     std::atomic_bool
         enable_tracking_; // Enable/disable tracking of key access patterns
     std::atomic<bool>
@@ -115,9 +115,8 @@ public:
         std::optional<std::chrono::milliseconds> repartition_interval =
             std::nullopt) :
         update_key_map_(false), enable_tracking_(false),
-        is_repartitioning_(false), partition_count_(partition_count),
-        level_(0), hash_func_(hash_func),
-        repartitioning_semaphore_(1),
+        is_repartitioning_(false), partition_count_(partition_count), level_(0),
+        hash_func_(hash_func), repartitioning_semaphore_(1),
         tracking_duration_(tracking_duration),
         repartition_interval_(repartition_interval), running_(true), workers_(),
         auto_repartitioning_(false) {
@@ -203,7 +202,8 @@ public:
             partition_idx = hash_func_(key) % partition_count_;
         }
 
-        HardReadOperation<StorageEngineType> read_operation(key, value, storage);
+        HardReadOperation<StorageEngineType> read_operation(key, value,
+                                                            storage);
         workers_[partition_idx]->enqueue(&read_operation);
 
         // Unlock key map (we have the storage lock now)
@@ -303,7 +303,8 @@ public:
 
             StorageEngineType *storage = it.get_value();
             size_t partition_idx;
-            bool partition_found = partition_map_.get(it.get_key(), partition_idx);
+            bool partition_found =
+                partition_map_.get(it.get_key(), partition_idx);
             if (!partition_found) {
                 // Fallback: use hash function to determine partition
                 partition_idx = hash_func_(it.get_key()) % partition_count_;
@@ -325,13 +326,16 @@ public:
         // Pre-populate results with pairs containing keys from key_array
         results.reserve(key_array.size());
         for (const auto &key : key_array) {
-            results.push_back({key, ""}); // Empty value, will be filled by scan operation
+            results.push_back(
+                {key, ""}); // Empty value, will be filled by scan operation
         }
 
         // Create a single scan operation with all storages and partition array
-        // Each worker will scan the storage corresponding to its partition index
+        // Each worker will scan the storage corresponding to its partition
+        // index
         HardScanOperation<StorageEngineType> scan_operation(
-            initial_key_prefix, results, partition_set.size(), storage_array, partition_array);
+            initial_key_prefix, results, partition_set.size(), storage_array,
+            partition_array);
         for (size_t partition_idx : partition_set) {
             workers_[partition_idx]->enqueue(&scan_operation);
         }
@@ -389,10 +393,10 @@ public:
      * @brief Update the key map with the new partition assignments
      */
     void update_key_map() {
-        // The tracker already prepared the partition map in prepare_for_partition_map_update
-        // We just need to update our partition_map_ with the new assignments
-        // This is done by the tracker in update_partition_map, which we call
-        // during repartition_impl
+        // The tracker already prepared the partition map in
+        // prepare_for_partition_map_update We just need to update our
+        // partition_map_ with the new assignments This is done by the tracker
+        // in update_partition_map, which we call during repartition_impl
     }
 
     /**
@@ -428,15 +432,6 @@ public:
             // Save old storages
             auto old_storages = storages_;
 
-            // Lock all old storages in sorted order (by pointer address) to
-            // avoid deadlocks
-            std::vector<StorageEngineType *> sorted_storages = old_storages;
-            std::sort(sorted_storages.begin(), sorted_storages.end());
-
-            for (auto *storage : sorted_storages) {
-                storage->lock_shared();
-            }
-
             // Update partition_map with new assignments
             tracker_.update_partition_map(partition_map_);
 
@@ -447,11 +442,6 @@ public:
             level_++;
             for (size_t i = 0; i < partition_count_; ++i) {
                 storages_.push_back(new StorageEngineType(level_));
-            }
-
-            // Unlock all old storages
-            for (auto *storage : sorted_storages) {
-                storage->unlock_shared();
             }
 
             // Unlock key map

@@ -5,6 +5,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <shared_mutex>
 
 /**
  * @brief Simple std::map implementation of StorageEngine
@@ -19,6 +20,7 @@
 class MapStorageEngine : public StorageEngine<MapStorageEngine> {
 private:
     std::map<std::string, std::string> storage_;
+    mutable std::shared_mutex lock_;
 
 public:
     /**
@@ -39,11 +41,14 @@ public:
      * @return The value associated with the key, or empty string if not found
      */
     Status read_impl(const std::string &key, std::string &value) const {
+        lock_.lock_shared();
         auto it = storage_.find(key);
         if (it != storage_.end()) {
             value = it->second;
+            lock_.unlock_shared();
             return Status::SUCCESS;
         }
+        lock_.unlock_shared();
         return Status::NOT_FOUND;
     }
 
@@ -53,7 +58,9 @@ public:
      * @param value The value to associate with the key
      */
     Status write_impl(const std::string &key, const std::string &value) {
+        lock_.lock();
         storage_[key] = value;
+        lock_.unlock();
         return Status::SUCCESS;
     }
 
@@ -66,6 +73,7 @@ public:
     Status
     scan_impl(const std::string &initial_key_prefix, size_t limit,
               std::vector<std::pair<std::string, std::string>> &results) const {
+        lock_.lock_shared();
         results.reserve(std::min(limit, storage_.size()));
 
         // Use lower_bound to find the first key >= key_prefix
@@ -83,10 +91,12 @@ public:
         if (i < limit) {
             results.resize(i);
             if (i == 0) {
+                lock_.unlock_shared();
                 return Status::NOT_FOUND;
             }
         }
 
+        lock_.unlock_shared();
         return Status::SUCCESS;
     }
 };

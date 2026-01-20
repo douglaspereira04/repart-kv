@@ -13,6 +13,7 @@
 // Test result tracking
 int tests_passed = 0;
 int tests_failed = 0;
+const std::chrono::milliseconds sleep_time = std::chrono::milliseconds(10);
 
 // Generic test functions that work with any PartitionedKeyValueStorage
 // implementation
@@ -156,6 +157,9 @@ template <typename StorageType> void test_many_partitions() {
         std::string expected_value = "data:" + std::to_string(i);
         std::string value;
         Status status = storage.read(key, value);
+        if (status != Status::SUCCESS) {
+            std::cout << "Key not found: " << key << std::endl;
+        }
         ASSERT_STATUS_EQ(Status::SUCCESS, status);
         ASSERT_STR_EQ(expected_value, value);
     }
@@ -399,11 +403,12 @@ template <typename StorageType> void test_operation_count() {
     for (size_t i = 0; i < 20; ++i) {
         std::string key = "key:" + std::to_string(i);
         std::string value;
-        storage.read(key, value);
+        Status status = storage.read(key, value);
+        ASSERT_STATUS_EQ(Status::SUCCESS, status);
     }
 
-    // Sleep for 1 second
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    // Sleep
+    std::this_thread::sleep_for(sleep_time);
 
     // Check the count: 50 writes + 20 reads = 70 operations
     size_t expected_count = 50 + 20;

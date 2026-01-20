@@ -61,17 +61,42 @@ else()
     message(WARNING "METIS library not found. Install METIS to enable repartitioning features.")
 endif()
 
+# Find TBB library for concurrent queues
+set(TBB_LIBRARIES "")
+# Try pkg-config first (most reliable on Linux)
+pkg_check_modules(TBB_PKG QUIET tbb)
+if(TBB_PKG_FOUND)
+    message(STATUS "TBB library found via pkg-config: ${TBB_PKG_LIBRARIES}")
+    set(TBB_LIBRARIES ${TBB_PKG_LIBRARIES})
+else()
+    # Try find_package
+    find_package(TBB QUIET)
+    if(TBB_FOUND AND TBB_LIBRARIES)
+        message(STATUS "TBB library found via find_package: ${TBB_LIBRARIES}")
+    else()
+        # Fallback: find library manually
+        find_library(TBB_LIB NAMES tbb)
+        if(TBB_LIB)
+            message(STATUS "TBB library found manually: ${TBB_LIB}")
+            set(TBB_LIBRARIES ${TBB_LIB})
+        else()
+            message(WARNING "TBB library not found. Install libtbb-dev to enable TBB concurrent queues.")
+        endif()
+    endif()
+endif()
+
 # Create main executable
 add_executable(repart-kv 
     main.cpp
 )
 
-# Link pthread, TKRZW, METIS, LMDB, and unordered_dense
+# Link pthread, TKRZW, METIS, LMDB, TBB, and unordered_dense
 target_link_libraries(repart-kv PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
     ${METIS_LIB}
     ${LMDB_LIB}
+    ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
 )
 
@@ -100,6 +125,7 @@ target_link_libraries(test_storage_engine PRIVATE
     Threads::Threads
     ${TKRZW_ALL_LIBS}
     ${LMDB_LIB}
+    ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
 )
 target_compile_features(test_storage_engine PRIVATE cxx_std_20)
@@ -117,6 +143,7 @@ add_executable(interactive_storage_test
 target_link_libraries(interactive_storage_test PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
+    ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
 )
 target_compile_features(interactive_storage_test PRIVATE cxx_std_20)
@@ -134,6 +161,7 @@ add_executable(interactive_keystorage_test
 target_link_libraries(interactive_keystorage_test PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
+    ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
 )
 target_compile_features(interactive_keystorage_test PRIVATE cxx_std_20)
@@ -151,6 +179,7 @@ add_executable(test_keystorage
 target_link_libraries(test_keystorage PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
+    ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     ${LMDB_LIB}
 )
@@ -170,6 +199,7 @@ target_link_libraries(test_partitioned_kv_storage PRIVATE
     Threads::Threads
     ${TKRZW_ALL_LIBS}
     ${METIS_LIB}
+    ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
 )
 target_compile_features(test_partitioned_kv_storage PRIVATE cxx_std_20)
@@ -188,6 +218,7 @@ target_link_libraries(test_graph_tracking PRIVATE
     Threads::Threads
     ${TKRZW_ALL_LIBS}
     ${METIS_LIB}
+    ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
 )
 target_compile_features(test_graph_tracking PRIVATE cxx_std_20)
@@ -208,6 +239,7 @@ if(METIS_LIB)
         ${TKRZW_ALL_LIBS}
         ${METIS_LIB}
         ${LMDB_LIB}
+        ${TBB_LIBRARIES}
         unordered_dense::unordered_dense
     )
     target_compile_features(test_repartitioning_storage PRIVATE cxx_std_20)
@@ -225,6 +257,7 @@ add_executable(test_future
 
 target_link_libraries(test_future PRIVATE 
     Threads::Threads
+    ${TBB_LIBRARIES}
 )
 target_compile_features(test_future PRIVATE cxx_std_20)
 target_compile_options(test_future PRIVATE -Wall -Wextra -Wpedantic)
@@ -240,6 +273,7 @@ add_executable(test_operation
 
 target_link_libraries(test_operation PRIVATE 
     Threads::Threads
+    ${TBB_LIBRARIES}
 )
 target_compile_features(test_operation PRIVATE cxx_std_20)
 target_compile_options(test_operation PRIVATE -Wall -Wextra -Wpedantic)
@@ -255,6 +289,7 @@ add_executable(test_readoperation
 
 target_link_libraries(test_readoperation PRIVATE 
     Threads::Threads
+    ${TBB_LIBRARIES}
 )
 target_compile_features(test_readoperation PRIVATE cxx_std_20)
 target_compile_options(test_readoperation PRIVATE -Wall -Wextra -Wpedantic)
@@ -271,6 +306,7 @@ add_executable(test_storage_operation
 
 target_link_libraries(test_storage_operation PRIVATE 
     Threads::Threads
+    ${TBB_LIBRARIES}
 )
 target_compile_features(test_storage_operation PRIVATE cxx_std_20)
 target_compile_options(test_storage_operation PRIVATE -Wall -Wextra -Wpedantic)
@@ -287,6 +323,7 @@ add_executable(test_writeoperation
 
 target_link_libraries(test_writeoperation PRIVATE 
     Threads::Threads
+    ${TBB_LIBRARIES}
 )
 target_compile_features(test_writeoperation PRIVATE cxx_std_20)
 target_compile_options(test_writeoperation PRIVATE -Wall -Wextra -Wpedantic)
@@ -303,6 +340,7 @@ add_executable(test_scanoperation
 
 target_link_libraries(test_scanoperation PRIVATE 
     Threads::Threads
+    ${TBB_LIBRARIES}
 )
 target_compile_features(test_scanoperation PRIVATE cxx_std_20)
 target_compile_options(test_scanoperation PRIVATE -Wall -Wextra -Wpedantic)
@@ -319,6 +357,7 @@ add_executable(test_doneoperation
 
 target_link_libraries(test_doneoperation PRIVATE 
     Threads::Threads
+    ${TBB_LIBRARIES}
 )
 target_compile_features(test_doneoperation PRIVATE cxx_std_20)
 target_compile_options(test_doneoperation PRIVATE -Wall -Wextra -Wpedantic)
@@ -334,6 +373,7 @@ add_executable(test_syncoperation
 
 target_link_libraries(test_syncoperation PRIVATE 
     Threads::Threads
+    ${TBB_LIBRARIES}
 )
 target_compile_features(test_syncoperation PRIVATE cxx_std_20)
 target_compile_options(test_syncoperation PRIVATE -Wall -Wextra -Wpedantic)
@@ -352,6 +392,7 @@ target_link_libraries(test_soft_partition_worker PRIVATE
     Threads::Threads
     ${TKRZW_ALL_LIBS}
     ${METIS_LIB}
+    ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
 )
 target_compile_features(test_soft_partition_worker PRIVATE cxx_std_20)
@@ -366,7 +407,10 @@ add_executable(test_graph
     graph/test/test_graph.cpp
 )
 
-target_link_libraries(test_graph PRIVATE unordered_dense::unordered_dense)
+target_link_libraries(test_graph PRIVATE 
+    ${TBB_LIBRARIES}
+    unordered_dense::unordered_dense
+)
 target_compile_features(test_graph PRIVATE cxx_std_20)
 target_compile_options(test_graph PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(test_graph PRIVATE 
@@ -378,7 +422,10 @@ add_executable(example_graph
     graph/example_graph.cpp
 )
 
-target_link_libraries(example_graph PRIVATE unordered_dense::unordered_dense)
+target_link_libraries(example_graph PRIVATE 
+    ${TBB_LIBRARIES}
+    unordered_dense::unordered_dense
+)
 target_compile_features(example_graph PRIVATE cxx_std_20)
 target_compile_options(example_graph PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(example_graph PRIVATE 
@@ -393,6 +440,7 @@ if(METIS_LIB)
     
     target_link_libraries(test_metis_graph PRIVATE 
         ${METIS_LIB}
+        ${TBB_LIBRARIES}
         unordered_dense::unordered_dense
     )
     target_compile_features(test_metis_graph PRIVATE cxx_std_20)
@@ -408,6 +456,7 @@ if(METIS_LIB)
     
     target_link_libraries(example_metis_graph PRIVATE 
         ${METIS_LIB}
+        ${TBB_LIBRARIES}
         unordered_dense::unordered_dense
     )
     target_compile_features(example_metis_graph PRIVATE cxx_std_20)

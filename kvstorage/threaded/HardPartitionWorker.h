@@ -23,7 +23,7 @@
  */
 template <typename StorageEngineType, size_t Q> class HardPartitionWorker {
 private:
-    size_t partition_idx_;     // Partition index for this worker
+    size_t partition_idx_; // Partition index for this worker
     boost::lockfree::spsc_queue<Operation *>
         queue_; // Lock-free SPSC queue of operations with capacity Q
     std::counting_semaphore<Q>
@@ -39,9 +39,9 @@ public:
      */
     explicit HardPartitionWorker(size_t partition_idx) :
         partition_idx_(partition_idx),
-        queue_(Q),              // Initialize SPSC queue with capacity Q
-        available_sem_(0),      // Initially no operations available
-        free_sem_(Q),           // Initially Q free spaces available
+        queue_(Q),         // Initialize SPSC queue with capacity Q
+        available_sem_(0), // Initially no operations available
+        free_sem_(Q),      // Initially Q free spaces available
         worker_thread_(std::thread(&HardPartitionWorker::worker_loop, this)) {}
 
     /**
@@ -84,7 +84,7 @@ public:
         const auto &storages = operation->storages();
         const auto &partition_array = operation->partition_array();
         auto &results = operation->values();
-        
+
         // Iterate over each index in partition_array
         for (size_t i = 0; i < partition_array.size(); ++i) {
             // Check if this key belongs to this worker's partition
@@ -92,11 +92,11 @@ public:
                 // Get the storage for this partition
                 StorageEngineType *storage = storages[i];
                 const std::string &key = results[i].first;
-                
+
                 // Read the value for this key
                 std::string value;
                 Status read_status = storage->read(key, value);
-                
+
                 // Update the result with the value
                 if (read_status == Status::SUCCESS) {
                     results[i].second = value;
@@ -106,17 +106,17 @@ public:
                 }
             }
         }
-        
+
         // Call is_coordinator (barrier wait)
         bool is_coordinator = operation->is_coordinator();
-        
+
         // If coordinator, check status and set to SUCCESS if still PENDING
         if (is_coordinator) {
             if (operation->status() == Status::PENDING) {
                 operation->status(Status::SUCCESS);
             }
         }
-        
+
         // Sync with caller
         operation->sync();
     }
@@ -195,13 +195,16 @@ public:
             // Process the operation based on its type
             switch (operation->type()) {
                 case Type::READ:
-                    read(static_cast<HardReadOperation<StorageEngineType> *>(operation));
+                    read(static_cast<HardReadOperation<StorageEngineType> *>(
+                        operation));
                     break;
                 case Type::WRITE:
-                    write(static_cast<HardWriteOperation<StorageEngineType> *>(operation));
+                    write(static_cast<HardWriteOperation<StorageEngineType> *>(
+                        operation));
                     break;
                 case Type::SCAN:
-                    scan(static_cast<HardScanOperation<StorageEngineType> *>(operation));
+                    scan(static_cast<HardScanOperation<StorageEngineType> *>(
+                        operation));
                     break;
                 case Type::SYNC:
                     sync(static_cast<SyncOperation *>(operation));

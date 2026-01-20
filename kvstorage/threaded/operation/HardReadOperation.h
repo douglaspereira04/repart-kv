@@ -3,7 +3,8 @@
 #include "ReadOperation.h"
 #include "../../storage/StorageEngine.h"
 
-template <typename StorageEngineType> class HardReadOperation : public ReadOperation {
+template <typename StorageEngineType> class HardReadOperation
+    : public ReadOperation {
 private:
     StorageEngineType *storage_;
 

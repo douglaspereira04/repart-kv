@@ -3,7 +3,8 @@
 #include "WriteOperation.h"
 #include "../../storage/StorageEngine.h"
 
-template <typename StorageEngineType> class HardWriteOperation : public WriteOperation {
+template <typename StorageEngineType> class HardWriteOperation
+    : public WriteOperation {
 private:
     StorageEngineType *storage_;
 

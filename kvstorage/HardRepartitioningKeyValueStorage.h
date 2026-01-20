@@ -348,7 +348,7 @@ public:
             std::sort(sorted_storages.begin(), sorted_storages.end());
 
             for (auto *storage : sorted_storages) {
-                storage->lock_shared();
+                storage->lock();
             }
 
             // Update partition_map with new assignments
@@ -365,7 +365,7 @@ public:
 
             // Unlock all old storages
             for (auto *storage : sorted_storages) {
-                storage->unlock_shared();
+                storage->unlock();
             }
 
             // Unlock key map

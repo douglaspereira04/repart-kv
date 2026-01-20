@@ -108,6 +108,7 @@ template <typename StorageType> void test_basic_repartition() {
         ASSERT_STR_EQ("value4", value);
     }
 
+    std::this_thread::sleep_for(sleep_time);
     const Graph &graph_before = storage.graph();
     ASSERT_EQ(4, graph_before.get_vertex_count());
     ASSERT_EQ(11, graph_before.get_vertex_weight("key1")); // 1 write + 10 reads
@@ -472,6 +473,7 @@ template <typename StorageType> void test_untracked_keys_preservation() {
         tracked_keys.push_back({key, value});
     }
     std::cout << "    Written 10 tracked keys" << std::endl;
+    std::this_thread::sleep_for(sleep_time);
 
     // Verify graph has tracked keys
     const Graph &graph_before = storage.graph();
@@ -593,8 +595,8 @@ template <typename StorageType> void test_operation_count() {
         std::string value;
         storage.read(key, value);
     }
-    // Sleep for 1 second
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    // Sleep
+    std::this_thread::sleep_for(sleep_time);
 
     // Check the count: 50 writes + 20 reads = 70 operations
     size_t expected_count = 50 + 20;
