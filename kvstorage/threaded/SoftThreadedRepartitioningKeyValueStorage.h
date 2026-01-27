@@ -157,11 +157,6 @@ public:
         // Lock key map for reading
         key_map_lock_.lock_shared();
 
-        // Track key access if enabled
-        if (enable_tracking_.load(std::memory_order_relaxed)) {
-            tracker_.update(key);
-        }
-
         // Look up which partition owns this key
         size_t partition_idx;
         bool found = key_map_.get(key, partition_idx);
@@ -176,6 +171,11 @@ public:
 
         // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock_shared();
+
+        // Track key access if enabled
+        if (enable_tracking_.load(std::memory_order_relaxed)) {
+            tracker_.update(key);
+        }
 
         // Read value from storage
         read_operation.wait();
@@ -192,11 +192,6 @@ public:
         // Lock key map for writing
         key_map_lock_.lock();
 
-        // Track key access if enabled
-        if (enable_tracking_.load(std::memory_order_relaxed)) {
-            tracker_.update(key);
-        }
-
         // Look up or assign partition for this key
         size_t partition_idx;
         bool found = key_map_.get(key, partition_idx);
@@ -211,6 +206,11 @@ public:
 
         // Unlock key map (we have the partition lock now)
         key_map_lock_.unlock();
+
+        // Track key access if enabled
+        if (enable_tracking_.load(std::memory_order_relaxed)) {
+            tracker_.update(key);
+        }
 
         return Status::SUCCESS;
     }
@@ -254,11 +254,6 @@ public:
             ++count;
         }
 
-        // Track key access patterns if enabled
-        if (enable_tracking_.load(std::memory_order_relaxed)) {
-            tracker_.multi_update(key_array);
-        }
-
         results.resize(limit);
         ScanOperation scan_operation(initial_key_prefix, results,
                                      partition_set.size());
@@ -267,6 +262,12 @@ public:
         }
         // Unlock key map
         key_map_lock_.unlock_shared();
+
+        // Track key access patterns if enabled
+        if (enable_tracking_.load(std::memory_order_relaxed)) {
+            tracker_.multi_update(key_array);
+        }
+
         scan_operation.sync();
 
         return scan_operation.status();

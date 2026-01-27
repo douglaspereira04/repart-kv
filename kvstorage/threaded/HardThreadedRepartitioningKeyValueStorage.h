@@ -176,14 +176,8 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status read_impl(const std::string &key, std::string &value) {
-        verify_and_update_key_map();
         // Lock key map for reading
         key_map_lock_.lock_shared();
-
-        // Track key access if enabled
-        if (enable_tracking_.load(std::memory_order_relaxed)) {
-            tracker_.update(key);
-        }
 
         // Look up which storage owns this key
         StorageEngineType *storage;
@@ -209,6 +203,11 @@ public:
         // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock_shared();
 
+        // Track key access if enabled
+        if (enable_tracking_.load(std::memory_order_relaxed)) {
+            tracker_.update(key);
+        }
+
         // Read value from storage
         read_operation.wait();
         return read_operation.status();
@@ -221,14 +220,8 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status write_impl(const std::string &key, const std::string &value) {
-        verify_and_update_key_map();
         // Lock key map for writing
         key_map_lock_.lock();
-
-        // Track key access if enabled
-        if (enable_tracking_.load(std::memory_order_relaxed)) {
-            tracker_.update(key);
-        }
 
         // Look up or assign storage for this key
         StorageEngineType *storage;
@@ -263,6 +256,11 @@ public:
         // Unlock key map (we have the partition lock now)
         key_map_lock_.unlock();
 
+        // Track key access if enabled
+        if (enable_tracking_.load(std::memory_order_relaxed)) {
+            tracker_.update(key);
+        }
+
         return Status::SUCCESS;
     }
 
@@ -276,8 +274,6 @@ public:
     Status
     scan_impl(const std::string &initial_key_prefix, size_t limit,
               std::vector<std::pair<std::string, std::string>> &results) {
-
-        verify_and_update_key_map();
 
         std::set<size_t> partition_set;
         std::vector<size_t> partition_array;
@@ -318,11 +314,6 @@ public:
             ++count;
         }
 
-        // Track key access patterns if enabled
-        if (enable_tracking_.load(std::memory_order_relaxed)) {
-            tracker_.multi_update(key_array);
-        }
-
         // Pre-populate results with pairs containing keys from key_array
         results.reserve(key_array.size());
         for (const auto &key : key_array) {
@@ -341,62 +332,15 @@ public:
         }
         // Unlock key map
         key_map_lock_.unlock_shared();
+
+        // Track key access patterns if enabled
+        if (enable_tracking_.load(std::memory_order_relaxed)) {
+            tracker_.multi_update(key_array);
+        }
+
         scan_operation.sync();
 
         return scan_operation.status();
-    }
-
-    /**
-     * @brief Verify and update the key map
-     *
-     * This method verifies if the key map should be updated and updates it if
-     * needed. It also releases the semaphore to allow the repartitioning thread
-     * to proceed to the next repartitioning cycle.
-     */
-    void verify_and_update_key_map() {
-        // We take a look at the update_key_map_ flag in a relaxed manner
-        // if seems enabled, we verify with stronger memory order
-        if (update_key_map_.load(std::memory_order_relaxed)) {
-            if (update_key_map_) {
-
-                // Lock key map so it can be changed safely
-                key_map_lock_.lock();
-                if (update_key_map_) {
-                    update_key_map();
-                    update_key_map_ = false;
-
-                    // We release the semaphore to allow the repartitioning
-                    // thread to proceed to the next repartitioning cycle
-                    if (auto_repartitioning_) {
-                        repartitioning_semaphore_.release();
-                    }
-                }
-
-                // Submit Sync operation to all workers
-                // This way, future enqueued operations will
-                // be processed only after every previously
-                // enqueued operations, to any worker, are processed
-                // This voids multiple workers acting in the same partition
-                SyncOperation *sync_operation =
-                    new SyncOperation(partition_count_);
-                for (size_t i = 0; i < partition_count_; ++i) {
-                    workers_[i]->enqueue(sync_operation);
-                }
-
-                // Unlock key map
-                key_map_lock_.unlock();
-            }
-        }
-    }
-
-    /**
-     * @brief Update the key map with the new partition assignments
-     */
-    void update_key_map() {
-        // The tracker already prepared the partition map in
-        // prepare_for_partition_map_update We just need to update our
-        // partition_map_ with the new assignments This is done by the tracker
-        // in update_partition_map, which we call during repartition_impl
     }
 
     /**

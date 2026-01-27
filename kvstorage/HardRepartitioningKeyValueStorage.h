@@ -154,11 +154,6 @@ public:
         // Lock key map for reading
         key_map_lock_.lock_shared();
 
-        // Track key access if enabled
-        if (enable_tracking_) {
-            tracker_.update(key);
-        }
-
         // Look up which storage owns this key
         StorageEngineType *storage;
         bool found = storage_map_.get(key, storage);
@@ -173,6 +168,11 @@ public:
 
         // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock_shared();
+
+        // Track key access if enabled
+        if (enable_tracking_) {
+            tracker_.update(key);
+        }
 
         // Read value from storage
         Status status = storage->read(key, value);
@@ -191,11 +191,6 @@ public:
     Status write_impl(const std::string &key, const std::string &value) {
         // Lock key map for writing
         key_map_lock_.lock();
-
-        // Track key access if enabled
-        if (enable_tracking_) {
-            tracker_.update(key);
-        }
 
         // Look up or assign storage for this key
         StorageEngineType *storage;
@@ -223,6 +218,11 @@ public:
 
         // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock();
+
+        // Track key access if enabled
+        if (enable_tracking_) {
+            tracker_.update(key);
+        }
 
         // Write value to storage
         Status status = storage->write(key, value);
@@ -272,11 +272,6 @@ public:
             ++count;
         }
 
-        // Track key access patterns if enabled
-        if (enable_tracking_) {
-            tracker_.multi_update(key_array);
-        }
-
         // Lock all unique storages in sorted order (by pointer address)
         std::vector<StorageEngineType *> sorted_storages(storage_set.begin(),
                                                          storage_set.end());
@@ -304,6 +299,11 @@ public:
         // Unlock all storages
         for (auto *storage : sorted_storages) {
             storage->unlock_shared();
+        }
+
+        // Track key access patterns if enabled
+        if (enable_tracking_) {
+            tracker_.multi_update(key_array);
         }
 
         return status;

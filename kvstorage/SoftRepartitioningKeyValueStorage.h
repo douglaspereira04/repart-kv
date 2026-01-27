@@ -144,12 +144,6 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status read_impl(const std::string &key, std::string &value) {
-
-        // Track key access if enabled
-        if (enable_tracking_) {
-            tracker_.update(key);
-        }
-
         // Lock key map for reading
         key_map_lock_.lock_shared();
 
@@ -167,6 +161,11 @@ public:
         // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock_shared();
 
+        // Track key access if enabled
+        if (enable_tracking_) {
+            tracker_.update(key);
+        }
+
         // Read value from storage
         Status status = storage_.read(key, value);
 
@@ -182,12 +181,6 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status write_impl(const std::string &key, const std::string &value) {
-
-        // Track key access if enabled
-        if (enable_tracking_) {
-            tracker_.update(key);
-        }
-
         // Lock key map for writing
         key_map_lock_.lock();
 
@@ -204,6 +197,11 @@ public:
 
         // Unlock key map (we have the partition lock now)
         key_map_lock_.unlock();
+
+        // Track key access if enabled
+        if (enable_tracking_) {
+            tracker_.update(key);
+        }
 
         // Write value to storage
         Status status = storage_.write(key, value);
