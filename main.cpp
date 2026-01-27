@@ -13,6 +13,7 @@
 #include "kvstorage/HardRepartitioningKeyValueStorage.h"
 #include "kvstorage/SoftRepartitioningKeyValueStorage.h"
 #include "kvstorage/threaded/SoftThreadedRepartitioningKeyValueStorage.h"
+#include "kvstorage/threaded/HardThreadedRepartitioningKeyValueStorage.h"
 #include "storage/TkrzwTreeStorageEngine.h"
 #include "storage/TkrzwHashStorageEngine.h"
 #include "storage/LmdbStorageEngine.h"
@@ -476,6 +477,13 @@ void execute_with_storage_config(
             run_workload_with_storage<StorageType>(
                 operations, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
+        } else if (STORAGE_TYPE == "hard_threaded") {
+            using StorageType = HardThreadedRepartitioningKeyValueStorage<
+                TkrzwTreeStorageEngine, TkrzwTreeKeyStorage,
+                TkrzwTreeKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "HardThreadedRepartitioningKeyValueStorage", warmup_operations);
         } else if (STORAGE_TYPE == "engine") {
             using StorageType = TkrzwTreeStorageEngine;
             run_workload_with_storage<StorageType>(
@@ -505,6 +513,13 @@ void execute_with_storage_config(
             run_workload_with_storage<StorageType>(
                 operations, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
+        } else if (STORAGE_TYPE == "hard_threaded") {
+            using StorageType = HardThreadedRepartitioningKeyValueStorage<
+                TkrzwHashStorageEngine, TkrzwTreeKeyStorage,
+                TkrzwHashKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "HardThreadedRepartitioningKeyValueStorage", warmup_operations);
         } else if (STORAGE_TYPE == "engine") {
             using StorageType = TkrzwHashStorageEngine;
             run_workload_with_storage<StorageType>(
@@ -530,6 +545,12 @@ void execute_with_storage_config(
             run_workload_with_storage<StorageType>(
                 operations, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
+        } else if (STORAGE_TYPE == "hard_threaded") {
+            using StorageType = HardThreadedRepartitioningKeyValueStorage<
+                LmdbStorageEngine, LmdbKeyStorage, LmdbKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "HardThreadedRepartitioningKeyValueStorage", warmup_operations);
         } else if (STORAGE_TYPE == "engine") {
             using StorageType = LmdbStorageEngine;
             run_workload_with_storage<StorageType>(
@@ -558,6 +579,12 @@ void execute_with_storage_config(
             run_workload_with_storage<StorageType>(
                 operations, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
+        } else if (STORAGE_TYPE == "hard_threaded") {
+            using StorageType = HardThreadedRepartitioningKeyValueStorage<
+                MapStorageEngine, MapKeyStorage, MapKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                operations, PARTITION_COUNT, TEST_WORKERS,
+                "HardThreadedRepartitioningKeyValueStorage", warmup_operations);
         } else if (STORAGE_TYPE == "engine") {
             using StorageType = MapStorageEngine;
             run_workload_with_storage<StorageType>(
@@ -582,7 +609,7 @@ void print_usage(const char *program_name) {
     std::cout << "  test_workers     Number of worker threads (default: 1)"
               << std::endl;
     std::cout << "  storage_type     Storage implementation: 'hard', 'soft', "
-                 "'threaded', or 'engine' (default: soft)"
+                 "'threaded', 'hard_threaded', or 'engine' (default: soft)"
               << std::endl;
     std::cout << "  storage_engine   Storage engine backend: 'tkrzw_tree', "
                  "'tkrzw_hash', "
@@ -600,6 +627,9 @@ void print_usage(const char *program_name) {
               << std::endl;
     std::cout << "  threaded        SoftThreadedRepartitioningKeyValueStorage "
                  "(threaded soft repartitioning)"
+              << std::endl;
+    std::cout << "  hard_threaded   HardThreadedRepartitioningKeyValueStorage "
+                 "(hard repartitioning with worker threads)"
               << std::endl;
     std::cout
         << "  engine          Direct StorageEngine usage (no repartitioning)"
@@ -664,9 +694,10 @@ int main(int argc, char *argv[]) {
     if (argc >= 5) {
         STORAGE_TYPE = argv[4];
         if (STORAGE_TYPE != "hard" && STORAGE_TYPE != "soft" &&
-            STORAGE_TYPE != "threaded" && STORAGE_TYPE != "engine") {
+            STORAGE_TYPE != "threaded" && STORAGE_TYPE != "hard_threaded" &&
+            STORAGE_TYPE != "engine") {
             std::cerr << "Error: storage_type must be 'hard', 'soft', "
-                         "'threaded', or 'engine', got: "
+                         "'threaded', 'hard_threaded', or 'engine', got: "
                       << STORAGE_TYPE << std::endl;
             return 1;
         }
