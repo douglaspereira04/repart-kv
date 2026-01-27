@@ -1,6 +1,7 @@
 #pragma once
 
 #include "StorageEngineConcepts.h"
+#include <atomic>
 #include <string>
 #include <shared_mutex>
 #include <vector>
@@ -27,8 +28,8 @@ template <typename Derived> class StorageEngine {
 protected:
     mutable std::shared_mutex _lock; // Mutex for thread-safe operations
     size_t level_;                   // Hierarchy level of this storage engine
-    size_t operation_count_; // Number of operations performed on this storage
-                             // engine
+    std::atomic_size_t operation_count_; // Number of operations performed on
+                                         // this storage engine
 public:
     /**
      * @brief Constructor
@@ -49,7 +50,7 @@ public:
      */
     Status read(const std::string &key, std::string &value) {
         Derived *derived = static_cast<Derived *>(this);
-        derived->operation_count_++;
+        derived->operation_count_.fetch_add(1, std::memory_order_relaxed);
         return derived->read_impl(key, value);
     }
 
@@ -61,7 +62,7 @@ public:
      */
     Status write(const std::string &key, const std::string &value) {
         Derived *derived = static_cast<Derived *>(this);
-        derived->operation_count_++;
+        derived->operation_count_.fetch_add(1, std::memory_order_relaxed);
         return derived->write_impl(key, value);
     }
 
@@ -75,7 +76,7 @@ public:
     Status scan(const std::string &key_start, size_t limit,
                 std::vector<std::pair<std::string, std::string>> &results) {
         Derived *derived = static_cast<Derived *>(this);
-        derived->operation_count_++;
+        derived->operation_count_.fetch_add(1, std::memory_order_relaxed);
         return derived->scan_impl(key_start, limit, results);
     }
 
