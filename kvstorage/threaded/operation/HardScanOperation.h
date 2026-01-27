@@ -1,7 +1,7 @@
 #pragma once
 
 #include "ScanOperation.h"
-#include "../../storage/StorageEngine.h"
+#include "../../../storage/StorageEngine.h"
 #include <vector>
 
 template <typename StorageEngineType> class HardScanOperation

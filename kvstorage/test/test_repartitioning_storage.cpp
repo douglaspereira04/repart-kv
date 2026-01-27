@@ -5,6 +5,7 @@
 #include "../../storage/MapStorageEngine.h"
 #include "../../utils/test_assertions.h"
 #include "../threaded/SoftThreadedRepartitioningKeyValueStorage.h"
+#include "../threaded/HardThreadedRepartitioningKeyValueStorage.h"
 #include "../../storage/LmdbStorageEngine.h"
 #include <iostream>
 #include <vector>
@@ -651,6 +652,11 @@ int main() {
         run_repartitioning_test_suite<SoftThreadedRepartitioningKeyValueStorage<
             LmdbStorageEngine, MapKeyStorage>>(
             "SoftThreadedRepartitioningKeyValueStorage");
+
+        // Test HardThreadedRepartitioningKeyValueStorage
+        run_repartitioning_test_suite<HardThreadedRepartitioningKeyValueStorage<
+            LmdbStorageEngine, MapKeyStorage, MapKeyStorage>>(
+            "HardThreadedRepartitioningKeyValueStorage");
 
         std::cout << "\n========================================\n";
         std::cout << "  All Repartitioning Tests PASSED!\n";
