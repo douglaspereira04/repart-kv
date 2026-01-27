@@ -48,12 +48,15 @@ public:
     /**
      * @brief Constructor - creates an in-memory database
      * @param level The hierarchy level for this storage engine (default: 0)
+     * @param path Optional path for database files (default: /tmp)
      *
-     * Creates a temporary LMDB database in /tmp for in-memory-like behavior.
+     * Creates a temporary LMDB database in the provided path for in-memory-like
+     * behavior.
      */
-    explicit LmdbStorageEngine(size_t level = 0) :
-        StorageEngine<LmdbStorageEngine>(level), env_(nullptr), dbi_(MDB_dbi{}),
-        is_open_(false) {
+    explicit LmdbStorageEngine(size_t level = 0,
+                               const std::string &path = "/tmp") :
+        StorageEngine<LmdbStorageEngine>(level, path), env_(nullptr),
+        dbi_(MDB_dbi{}), is_open_(false) {
 
         init();
     }
@@ -63,12 +66,14 @@ public:
      * @param file_path Path to the database directory
      * @param map_size Maximum size of the memory map in bytes (default: 50GB)
      * @param level The hierarchy level for this storage engine (default: 0)
+     * @param path Optional path for database files (default: /tmp)
      */
     explicit LmdbStorageEngine(const std::string &file_path,
                                size_t map_size = 50ULL * 1024 * 1024 * 1024,
-                               size_t level = 0) :
-        StorageEngine<LmdbStorageEngine>(level), env_(nullptr), dbi_(MDB_dbi{}),
-        is_open_(false), db_path_(file_path) {
+                               size_t level = 0,
+                               const std::string &path = "/tmp") :
+        StorageEngine<LmdbStorageEngine>(level, path), env_(nullptr),
+        dbi_(MDB_dbi{}), is_open_(false), db_path_(file_path) {
 
         init_with_path(file_path, map_size);
     }
@@ -83,7 +88,8 @@ public:
             is_open_ = false;
 
             // Clean up temporary directory if it was created
-            if (db_path_.find("/tmp/repart_kv_storage/") == 0) {
+            std::string temp_prefix = path_ + "/repart_kv_storage/";
+            if (db_path_.find(temp_prefix) == 0) {
                 std::filesystem::remove_all(db_path_);
             }
         }
@@ -95,8 +101,8 @@ public:
 
     // Enable move
     LmdbStorageEngine(LmdbStorageEngine &&other) noexcept :
-        StorageEngine<LmdbStorageEngine>(other.level_), env_(other.env_),
-        dbi_(other.dbi_), is_open_(other.is_open_),
+        StorageEngine<LmdbStorageEngine>(other.level_, other.path_),
+        env_(other.env_), dbi_(other.dbi_), is_open_(other.is_open_),
         db_path_(std::move(other.db_path_)) {
         other.env_ = nullptr;
         other.is_open_ = false;
@@ -386,7 +392,8 @@ private:
      */
     void init() {
         db_path_ =
-            std::string("/tmp/repart_kv_storage/") + id_ + std::string("/") +
+            path_ + std::string("/repart_kv_storage/") + id_ +
+            std::string("/") +
             std::to_string(db_counter_.fetch_add(1, std::memory_order_relaxed));
         std::filesystem::create_directories(db_path_);
 

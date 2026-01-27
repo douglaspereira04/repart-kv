@@ -40,32 +40,30 @@ public:
     /**
      * @brief Constructor - creates an in-memory database
      * @param level The hierarchy level for this storage engine (default: 0)
+     * @param path Optional path for database files (default: /tmp)
      *
      * Note: TKRZW TreeDBM doesn't support true in-memory mode.
      * Uses a temporary file for in-memory-like behavior.
      */
-    explicit TkrzwTreeStorageEngine(size_t level = 0) :
-        StorageEngine<TkrzwTreeStorageEngine>(level),
+    explicit TkrzwTreeStorageEngine(size_t level = 0,
+                                    const std::string &path = "/tmp") :
+        StorageEngine<TkrzwTreeStorageEngine>(level, path),
         db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
-        // TKRZW TreeDBM requires a file path, so we use /tmp for in-memory-like
-        // behavior The file will be created but can be considered temporary
-        std::string temp_path = std::string("/tmp/repart_kv_storage/") + id_ +
-                                std::string("/tkrzw_tree_temp_") +
+        // TKRZW TreeDBM requires a file path, so we use the provided path
+        // The file will be created but can be considered temporary
+        std::string temp_path = path_ + std::string("/repart_kv_storage/") +
+                                id_ + std::string("/tkrzw_tree_temp_") +
                                 std::to_string(db_counter_.fetch_add(
                                     1, std::memory_order_relaxed)) +
                                 ".tkt";
         std::filesystem::create_directories(
-            std::string("/tmp/repart_kv_storage/") + id_);
-
-        tkrzw::TreeDBM::TuningParameters tuning_params;
-        tuning_params.max_page_size = 8192;
-        tuning_params.max_branches = 256;
+            path_ + std::string("/repart_kv_storage/") + id_);
 
         tkrzw::Status status =
             db_->OpenAdvanced(temp_path,
-                              true,                       // writable
-                              tkrzw::File::OPEN_TRUNCATE, // Create new
-                              tuning_params);
+                              true,                      // writable
+                              tkrzw::File::OPEN_TRUNCATE // Create new
+            );
 
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;
@@ -78,12 +76,14 @@ public:
      * @param max_page_size Maximum page size in bytes (default: 8192)
      * @param max_branches Maximum number of branches per node (default: 256)
      * @param level The hierarchy level for this storage engine (default: 0)
+     * @param path Optional path for database files (default: /tmp)
      */
     explicit TkrzwTreeStorageEngine(const std::string &file_path,
                                     int32_t max_page_size = 8192,
                                     int32_t max_branches = 256,
-                                    size_t level = 0) :
-        StorageEngine<TkrzwTreeStorageEngine>(level),
+                                    size_t level = 0,
+                                    const std::string &path = "/tmp") :
+        StorageEngine<TkrzwTreeStorageEngine>(level, path),
         db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
 
         tkrzw::TreeDBM::TuningParameters tuning_params;
@@ -117,7 +117,7 @@ public:
 
     // Enable move
     TkrzwTreeStorageEngine(TkrzwTreeStorageEngine &&other) noexcept :
-        StorageEngine<TkrzwTreeStorageEngine>(other.level_),
+        StorageEngine<TkrzwTreeStorageEngine>(other.level_, other.path_),
         db_(std::move(other.db_)), is_open_(other.is_open_) {
         other.is_open_ = false;
     }

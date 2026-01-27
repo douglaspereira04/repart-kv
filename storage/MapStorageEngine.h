@@ -26,9 +26,14 @@ public:
     /**
      * @brief Constructor
      * @param level The hierarchy level for this storage engine (default: 0)
+     * @param path Optional path for embedded database files (default: /tmp)
+     *              Note: This parameter is ignored for MapStorageEngine as it
+     *              doesn't use files, but is included for interface
+     * consistency.
      */
-    explicit MapStorageEngine(size_t level = 0) :
-        StorageEngine<MapStorageEngine>(level) {}
+    explicit MapStorageEngine(size_t level = 0,
+                              const std::string &path = "/tmp") :
+        StorageEngine<MapStorageEngine>(level, path) {}
 
     /**
      * @brief Destructor

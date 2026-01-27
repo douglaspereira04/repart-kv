@@ -9,8 +9,8 @@
 
 namespace workload {
 
-// Default value for write operations (4 KB)
-inline const std::string DEFAULT_VALUE(4 * 1024, '*');
+// Default value for write operations (1 KB)
+inline const std::string DEFAULT_VALUE(1 * 1024, '*');
 
 /**
  * @brief Operation types for the workload

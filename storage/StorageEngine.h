@@ -30,12 +30,15 @@ protected:
     size_t level_;                   // Hierarchy level of this storage engine
     std::atomic_size_t operation_count_; // Number of operations performed on
                                          // this storage engine
+    std::string path_; // Path for embedded database files (default: /tmp)
 public:
     /**
      * @brief Constructor
      * @param level The hierarchy level for this storage engine
+     * @param path Optional path for embedded database files (default: /tmp)
      */
-    explicit StorageEngine(size_t level) : level_(level), operation_count_(0) {}
+    explicit StorageEngine(size_t level, const std::string &path = "/tmp") :
+        level_(level), operation_count_(0), path_(path) {}
 
     /**
      * @brief Default destructor
@@ -117,4 +120,16 @@ public:
     void level(size_t level) { level_ = level; }
 
     size_t operation_count() const { return operation_count_; }
+
+    /**
+     * @brief Get the path for embedded database files
+     * @return The path string
+     */
+    const std::string &path() const { return path_; }
+
+    /**
+     * @brief Set the path for embedded database files
+     * @param path The new path value
+     */
+    void path(const std::string &path) { path_ = path; }
 };

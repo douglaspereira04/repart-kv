@@ -34,23 +34,25 @@ public:
     /**
      * @brief Constructor - creates an in-memory database
      * @param level The hierarchy level for this storage engine (default: 0)
+     * @param path Optional path for database files (default: /tmp)
      *
      * Note: TKRZW HashDBM doesn't support true in-memory mode.
      * For in-memory storage, consider using tkrzw::BabyDBM or
      * a temporary file that gets deleted.
      */
-    explicit TkrzwHashStorageEngine(size_t level = 0) :
-        StorageEngine<TkrzwHashStorageEngine>(level),
+    explicit TkrzwHashStorageEngine(size_t level = 0,
+                                    const std::string &path = "/tmp") :
+        StorageEngine<TkrzwHashStorageEngine>(level, path),
         db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
-        // TKRZW HashDBM requires a file path, so we use /tmp for in-memory-like
-        // behavior The file will be created but can be considered temporary
-        std::string temp_path = std::string("/tmp/repart_kv_storage/") + id_ +
-                                std::string("/tkrzw_hash_temp_") +
+        // TKRZW HashDBM requires a file path, so we use the provided path
+        // The file will be created but can be considered temporary
+        std::string temp_path = path_ + std::string("/repart_kv_storage/") +
+                                id_ + std::string("/tkrzw_hash_temp_") +
                                 std::to_string(db_counter_.fetch_add(
                                     1, std::memory_order_relaxed)) +
                                 ".tkh";
         std::filesystem::create_directories(
-            std::string("/tmp/repart_kv_storage/") + id_);
+            path_ + std::string("/repart_kv_storage/") + id_);
 
         tkrzw::Status status = db_->OpenAdvanced(temp_path,
                                                  true, // writable
@@ -66,11 +68,13 @@ public:
      * @param file_path Path to the database file
      * @param num_buckets Number of hash buckets (default: 1000000)
      * @param level The hierarchy level for this storage engine (default: 0)
+     * @param path Optional path for database files (default: /tmp)
      */
     explicit TkrzwHashStorageEngine(const std::string &file_path,
                                     int64_t num_buckets = 1000000,
-                                    size_t level = 0) :
-        StorageEngine<TkrzwHashStorageEngine>(level),
+                                    size_t level = 0,
+                                    const std::string &path = "/tmp") :
+        StorageEngine<TkrzwHashStorageEngine>(level, path),
         db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
 
         tkrzw::HashDBM::TuningParameters tuning_params;
@@ -103,7 +107,7 @@ public:
 
     // Enable move
     TkrzwHashStorageEngine(TkrzwHashStorageEngine &&other) noexcept :
-        StorageEngine<TkrzwHashStorageEngine>(other.level_),
+        StorageEngine<TkrzwHashStorageEngine>(other.level_, other.path_),
         db_(std::move(other.db_)), is_open_(other.is_open_) {
         other.is_open_ = false;
     }
