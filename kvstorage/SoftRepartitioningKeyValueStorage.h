@@ -82,6 +82,7 @@ private:
     std::atomic<bool> running_;  // Flag to control the repartitioning loop
     std::condition_variable cv_; // Condition variable to wake the thread
     std::mutex cv_mutex_;        // Mutex for condition variable
+    std::string path_; // Path for embedded database files (default: /tmp)
 
 public:
     /**
@@ -93,17 +94,20 @@ public:
      * before repartitioning
      * @param repartition_interval Optional interval between repartitioning
      * cycles
+     * @param path Optional path for embedded database files (default: /tmp)
      */
     SoftRepartitioningKeyValueStorage(
         size_t partition_count, const HashFunc &hash_func = HashFunc(),
         std::optional<std::chrono::milliseconds> tracking_duration =
             std::nullopt,
         std::optional<std::chrono::milliseconds> repartition_interval =
-            std::nullopt) :
+            std::nullopt,
+        const std::string &path = "/tmp") :
         enable_tracking_(false), is_repartitioning_(false),
-        partition_count_(partition_count), storage_(StorageEngineType(0)),
+        partition_count_(partition_count), storage_(StorageEngineType(0, path)),
         hash_func_(hash_func), tracking_duration_(tracking_duration),
-        repartition_interval_(repartition_interval), running_(true) {
+        repartition_interval_(repartition_interval), running_(true),
+        path_(path) {
         // Create partition locks
         partition_locks_.reserve(partition_count_);
         for (size_t i = 0; i < partition_count_; ++i) {

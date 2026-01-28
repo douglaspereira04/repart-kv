@@ -96,6 +96,7 @@ private:
 
     std::atomic<bool> auto_repartitioning_; // Flag indicating if auto
                                             // repartitioning is enabled
+    std::string path_; // Path for embedded database files (default: /tmp)
 
 public:
     /**
@@ -107,25 +108,27 @@ public:
      * before repartitioning
      * @param repartition_interval Optional interval between repartitioning
      * cycles
+     * @param path Optional path for embedded database files (default: /tmp)
      */
     HardThreadedRepartitioningKeyValueStorage(
         size_t partition_count, const HashFunc &hash_func = HashFunc(),
         std::optional<std::chrono::milliseconds> tracking_duration =
             std::nullopt,
         std::optional<std::chrono::milliseconds> repartition_interval =
-            std::nullopt) :
+            std::nullopt,
+        const std::string &path = "/tmp") :
         update_key_map_(false), enable_tracking_(false),
         is_repartitioning_(false), partition_count_(partition_count), level_(0),
         hash_func_(hash_func), repartitioning_semaphore_(1),
         tracking_duration_(tracking_duration),
         repartition_interval_(repartition_interval), running_(true), workers_(),
-        auto_repartitioning_(false) {
+        auto_repartitioning_(false), path_(path) {
 
         // Create partition_count storage engine instances
         storages_.reserve(partition_count_);
         for (size_t i = 0; i < partition_count_; ++i) {
             storages_.push_back(new StorageEngineType(
-                level_ + 1)); // Child storages at level + 1
+                level_ + 1, path_)); // Child storages at level + 1
         }
 
         // Create workers
@@ -385,7 +388,7 @@ public:
             // Increment level for new storage engines
             level_++;
             for (size_t i = 0; i < partition_count_; ++i) {
-                storages_.push_back(new StorageEngineType(level_));
+                storages_.push_back(new StorageEngineType(level_, path_));
             }
 
             // Unlock key map
