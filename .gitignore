@@ -103,3 +103,6 @@ gmon.out
 *.helgrind
 *.drd
 *.massif
+
+# LaTeX generated files
+*.aux
