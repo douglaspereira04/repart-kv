@@ -87,7 +87,8 @@ private:
 
     std::atomic<bool> auto_repartitioning_; // Flag indicating if auto
                                             // repartitioning is enabled
-    std::string path_; // Path for embedded database files (default: /tmp)
+    std::vector<std::string>
+        paths_; // Paths for embedded database files (default: {/tmp})
 
 public:
     /**
@@ -99,7 +100,9 @@ public:
      * before repartitioning
      * @param repartition_interval Optional interval between repartitioning
      * cycles
-     * @param path Optional path for embedded database files (default: /tmp)
+     * @param paths Optional vector of paths for embedded database files
+     * (default: {/tmp}) Uses the first path since this storage has only one
+     * storage engine
      */
     SoftThreadedRepartitioningKeyValueStorage(
         size_t partition_count, const HashFunc &hash_func = HashFunc(),
@@ -107,13 +110,15 @@ public:
             std::nullopt,
         std::optional<std::chrono::milliseconds> repartition_interval =
             std::nullopt,
-        const std::string &path = "/tmp") :
+        const std::vector<std::string> &paths = {"/tmp"}) :
         key_map_(PartitionMapType<size_t>()), update_key_map_(false),
         enable_tracking_(false), partition_count_(partition_count),
-        storage_(StorageEngineType(0, path)), hash_func_(hash_func), tracker_(),
-        is_repartitioning_(false), tracking_duration_(tracking_duration),
+        storage_(StorageEngineType(0, paths.empty() ? "/tmp" : paths[0])),
+        hash_func_(hash_func), tracker_(), is_repartitioning_(false),
+        tracking_duration_(tracking_duration),
         repartition_interval_(repartition_interval), running_(true), workers_(),
-        auto_repartitioning_(false), path_(path) {
+        auto_repartitioning_(false),
+        paths_(paths.empty() ? std::vector<std::string>{"/tmp"} : paths) {
 
         // Create workers
         workers_.reserve(partition_count_);

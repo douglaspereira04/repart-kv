@@ -96,7 +96,8 @@ private:
 
     std::atomic<bool> auto_repartitioning_; // Flag indicating if auto
                                             // repartitioning is enabled
-    std::string path_; // Path for embedded database files (default: /tmp)
+    std::vector<std::string>
+        paths_; // Paths for embedded database files (default: {/tmp})
 
 public:
     /**
@@ -108,7 +109,9 @@ public:
      * before repartitioning
      * @param repartition_interval Optional interval between repartitioning
      * cycles
-     * @param path Optional path for embedded database files (default: /tmp)
+     * @param paths Optional vector of paths for embedded database files
+     * (default: {/tmp}) Each partition uses paths[i % paths.size()] to
+     * distribute across paths
      */
     HardThreadedRepartitioningKeyValueStorage(
         size_t partition_count, const HashFunc &hash_func = HashFunc(),
@@ -116,19 +119,21 @@ public:
             std::nullopt,
         std::optional<std::chrono::milliseconds> repartition_interval =
             std::nullopt,
-        const std::string &path = "/tmp") :
+        const std::vector<std::string> &paths = {"/tmp"}) :
         update_key_map_(false), enable_tracking_(false),
         is_repartitioning_(false), partition_count_(partition_count), level_(0),
         hash_func_(hash_func), repartitioning_semaphore_(1),
         tracking_duration_(tracking_duration),
         repartition_interval_(repartition_interval), running_(true), workers_(),
-        auto_repartitioning_(false), path_(path) {
+        auto_repartitioning_(false),
+        paths_(paths.empty() ? std::vector<std::string>{"/tmp"} : paths) {
 
         // Create partition_count storage engine instances
         storages_.reserve(partition_count_);
         for (size_t i = 0; i < partition_count_; ++i) {
             storages_.push_back(new StorageEngineType(
-                level_ + 1, path_)); // Child storages at level + 1
+                level_ + 1,
+                paths_[i % paths_.size()])); // Child storages at level + 1
         }
 
         // Create workers
@@ -388,7 +393,8 @@ public:
             // Increment level for new storage engines
             level_++;
             for (size_t i = 0; i < partition_count_; ++i) {
-                storages_.push_back(new StorageEngineType(level_, path_));
+                storages_.push_back(
+                    new StorageEngineType(level_, paths_[i % paths_.size()]));
             }
 
             // Unlock key map

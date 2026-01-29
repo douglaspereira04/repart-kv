@@ -2,6 +2,7 @@
 #include "../TkrzwHashStorageEngine.h"
 #include "../TkrzwTreeStorageEngine.h"
 #include "../LmdbStorageEngine.h"
+#include "../TbbStorageEngine.h"
 #include "../../utils/test_assertions.h"
 #include <iostream>
 #include <thread>
@@ -458,6 +459,7 @@ int main() {
     run_storage_engine_test_suite<TkrzwTreeStorageEngine>(
         "TkrzwTreeStorageEngine");
     run_storage_engine_test_suite<LmdbStorageEngine>("LmdbStorageEngine");
+    run_storage_engine_test_suite<TbbStorageEngine>("TbbStorageEngine");
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;

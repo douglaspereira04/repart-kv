@@ -1,6 +1,7 @@
 #include "MapStorageEngine.h"
 #include "TkrzwHashStorageEngine.h"
 #include "TkrzwTreeStorageEngine.h"
+#include "TbbStorageEngine.h"
 #include <iostream>
 #include <string>
 #include <memory>
@@ -181,7 +182,9 @@ int main() {
               << std::endl;
     std::cout << "  3. TkrzwTreeStorageEngine (tree-based, sorted)"
               << std::endl;
-    std::cout << "\nEnter choice (1-3): ";
+    std::cout << "  4. TbbStorageEngine (in-memory, TBB concurrent_hash_map)"
+              << std::endl;
+    std::cout << "\nEnter choice (1-4): ";
 
     int choice;
     std::cin >> choice;
@@ -204,6 +207,11 @@ int main() {
             engine = std::make_unique<
                 StorageEngineWrapperImpl<TkrzwTreeStorageEngine>>(
                 "TkrzwTreeStorageEngine");
+            break;
+        case 4:
+            engine =
+                std::make_unique<StorageEngineWrapperImpl<TbbStorageEngine>>(
+                    "TbbStorageEngine");
             break;
         default:
             std::cout << "Invalid choice. Exiting." << std::endl;
