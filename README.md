@@ -14,27 +14,28 @@ Repart-KV is a C++20 project that executes key-value workloads against a partiti
 
 ### Using the build script
 
-`build.sh` configures CMake, builds targets, and runs the test suite.
+`build.sh` configures CMake, builds the core library + tests, and runs `run_tests.sh` by default. Pass `-t`/`--runner` to also build the optional CLI/test utility (`repart-kv-runner`).
 
 ```bash
-./build.sh
+./build.sh           # builds repart-kv-core + tests
+./build.sh -t        # also builds repart-kv-runner
 ```
 
 ### Manual build
 
 ```bash
 mkdir -p build
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_REPART_KV_RUNNER=ON
 cmake --build build -j"$(nproc)"
 ```
 
 ## Run workloads
 
-The main executable is `build/repart-kv`.
+The CLI runner is optional (`repart-kv-runner`). Either build it via `./build.sh -t` or set `-DBUILD_REPART_KV_RUNNER=ON` when configuring CMake.
 
 ```bash
 cd build
-./repart-kv <workload_file> [partition_count] [test_workers] [storage_type] [storage_engine] [warmup_operations] [storage_paths]
+./repart-kv-runner <workload_file> [partition_count] [test_workers] [storage_type] [storage_engine] [warmup_operations] [storage_paths]
 ```
 
 ### Arguments
@@ -51,13 +52,13 @@ cd build
 
 ```bash
 # Defaults: 4 partitions, 1 worker, soft + tkrzw_tree, no warmup, /tmp
-./repart-kv ../sample_workload.txt
+./repart-kv-runner ../sample_workload.txt
 
 # 8 partitions, 4 workers, threaded storage, tbb backend (in-memory)
-./repart-kv ../sample_workload.txt 8 4 threaded tbb
+./repart-kv-runner ../sample_workload.txt 8 4 threaded tbb
 
 # Use two storage directories for partition files (embedded backends only)
-./repart-kv ../sample_workload.txt 8 4 soft tkrzw_tree 0 /mnt/d1,/mnt/d2
+./repart-kv-runner ../sample_workload.txt 8 4 soft tkrzw_tree 0 /mnt/d1,/mnt/d2
 ```
 
 ## Workload format
@@ -87,9 +88,23 @@ elapsed_time_ms,executed_count,memory_kb,disk_kb
 1002,11,4380,45244
 ```
 
+## Linking against the library
+
+`repart-kv-core` is a static library that exports the entry point `run_repart_kv(argc, argv)` declared in `src/repart_kv_api.h`. Link it into your own binary, pass command-line arguments programmatically, and reuse the workload executor without depending on the optional runner.
+
+Use the core library target from this repository:
+
+```cmake
+add_subdirectory(/path/to/repart-kv)
+target_link_libraries(my_binary PRIVATE repart-kv-core)
+target_include_directories(my_binary PRIVATE ${CMAKE_SOURCE_DIR}/src)
+```
+
+`run_repart_kv(argc, argv)` mirrors the CLI argument validation described above.
+
 ## Tests
 
-Build and run all tests via:
+Build and run all tests (runner build flag is unrelated):
 
 ```bash
 ./build.sh

@@ -4,13 +4,14 @@ This document describes the current technical structure of Repart-KV and how the
 
 ## High-level flow
 
-1. `main.cpp` parses CLI arguments (workload path, partitions, workers, storage type/engine, warmup, storage paths).
-2. `workload/Workload.h` parses the workload file into operations (READ/WRITE/SCAN).
-3. The selected storage stack executes operations using:
+1. `repart-kv-core` exposes `run_repart_kv(int argc, char *argv[])`, which parses CLI arguments (workload path, partitions, workers, storage type/engine, warmup, storage paths) and orchestrates workload execution.
+2. (Optional) `main.cpp` is compiled into `repart-kv-runner`, a lightweight test/CLI utility that forwards `argc/argv` into `run_repart_kv`.
+3. `workload/Workload.h` parses the workload file into operations (READ/WRITE/SCAN).
+4. The selected storage stack executes operations using:
    - a `StorageEngine` backend (`storage/`)
    - optional partitioning/repartitioning logic (`kvstorage/`)
    - optional access-pattern tracking (`kvstorage/Tracker.h` + `graph/`)
-4. The runner writes `metrics.csv` during execution.
+5. The runner writes `metrics.csv` during execution.
 
 ## Key modules
 
@@ -92,7 +93,7 @@ Repart-KV mixes several concurrency mechanisms, chosen per component:
 
 ## Build and target selection
 
-`CMakeLists.txt` defines the build targets. Some targets are only built when a dependency is available (notably METIS-based tests/examples).
+`CMakeLists.txt` defines the core `repart-kv-core` library and an opt-in `repart-kv-runner` executable. Most storage/tests build by default; `repart-kv-runner` is enabled via `BUILD_REPART_KV_RUNNER=ON` or `build.sh -t`. Optional dependencies gate specific graph/test targets (METIS, LMDB, TBB, etc.).
 
 ## Extending: adding a StorageEngine backend
 

@@ -62,16 +62,17 @@ Module docs:
 
 ## Build system and entry points
 
-- `CMakeLists.txt`: defines build targets
-- `build.sh`: configure/build/test helper (also runs `clang-format`)
+- `CMakeLists.txt`: defines `repart-kv-core` and the opt-in `repart-kv-runner`
+- `build.sh`: configure/build/test helper (also runs `clang-format`; pass `-t` to build runner)
 - `run_tests.sh`: runs `build/test_*` executables
-- `main.cpp`: implements `repart-kv` CLI
+- `main.cpp`: CLI trampoline that forwards into `run_repart_kv`
 
-## CMake targets (executables)
+## CMake targets
 
 Core:
 
-- `repart-kv`
+- `repart-kv-core` (static library)
+- `repart-kv-runner` (optional executable; enabled via `BUILD_REPART_KV_RUNNER=ON`)
 - `interactive_storage_test`
 - `interactive_keystorage_test`
 

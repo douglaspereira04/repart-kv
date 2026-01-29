@@ -7,7 +7,7 @@ set -e  # Exit on any error
 # Default build type
 BUILD_TYPE="Release"
 # Optionally build the runner/test utility
-BUILD_RUNNER="ON"
+BUILD_RUNNER="OFF"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do

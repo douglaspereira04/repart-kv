@@ -26,16 +26,19 @@ For other platforms and minimal installs, see [INSTALL_DEPENDENCIES.md](INSTALL_
 ## Build and run tests
 
 ```bash
-./build.sh
+./build.sh           # builds repart-kv-core + tests
+./build.sh -t        # also builds the optional repart-kv-runner CLI
 ```
 
-This creates `build/`, builds all configured targets, and runs `run_tests.sh`.
+This creates `build/`, builds all configured targets, and runs `run_tests.sh`. The runner binary is only produced when you pass `-t`.
 
 ## Run a workload
 
+Only available when you built the runner (`-t` flag above). Then:
+
 ```bash
 cd build
-./repart-kv ../sample_workload.txt
+./repart-kv-runner ../sample_workload.txt
 ```
 
 ## Common configurations
@@ -43,32 +46,32 @@ cd build
 ### Change partitions and workers
 
 ```bash
-./repart-kv ../sample_workload.txt 8 4
+./repart-kv-runner ../sample_workload.txt 8 4
 ```
 
 ### Select storage type and backend
 
 ```bash
 # In-memory, no repartitioning (direct engine usage)
-./repart-kv ../sample_workload.txt 4 4 engine tbb
+./repart-kv-runner ../sample_workload.txt 4 4 engine tbb
 
 # Threaded repartitioning type with in-memory backend
-./repart-kv ../sample_workload.txt 8 4 threaded tbb
+./repart-kv-runner ../sample_workload.txt 8 4 threaded tbb
 
 # Persistent backend
-./repart-kv ../sample_workload.txt 8 4 soft tkrzw_tree
+./repart-kv-runner ../sample_workload.txt 8 4 soft tkrzw_tree
 ```
 
 ### Set warmup operations
 
 ```bash
-./repart-kv ../sample_workload.txt 8 4 soft tkrzw_tree 10000
+./repart-kv-runner ../sample_workload.txt 8 4 soft tkrzw_tree 10000
 ```
 
 ### Use multiple storage paths
 
 ```bash
-./repart-kv ../sample_workload.txt 8 4 soft tkrzw_tree 0 /mnt/d1,/mnt/d2
+./repart-kv-runner ../sample_workload.txt 8 4 soft tkrzw_tree 0 /mnt/d1,/mnt/d2
 ```
 
 ## Workload file format

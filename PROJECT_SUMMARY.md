@@ -4,9 +4,11 @@ Repart-KV is a C++20 codebase that executes a workload file against a partitione
 
 ## What this repository contains
 
-### Workload runner
+### Workload executor
 
-- `main.cpp`: `repart-kv` CLI and execution flow
+- `src/repart_kv.cpp`: core executor logic and `run_repart_kv(argc, argv)` implementation
+- `src/repart_kv_api.h`: exported header used by downstream binaries
+- `main.cpp`: optional `repart-kv-runner` CLI that forwards arguments to the core entry point
 - `workload/Workload.h`: workload parsing and operation model (READ/WRITE/SCAN)
 
 ### Storage engines (`storage/`)
@@ -49,5 +51,5 @@ Supporting components:
 ./build.sh
 ```
 
-This configures CMake, builds targets, and runs the test suite via `run_tests.sh`.
+This configures CMake, builds targets (core library plus tests), and runs the test suite via `run_tests.sh`. Add `-t` to `./build.sh` when you also want to compile the optional `repart-kv-runner` CLI.
 
