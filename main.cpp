@@ -31,7 +31,8 @@ size_t WARMUP_OPERATIONS = 0;              // Default to no warmup
 std::string STORAGE_TYPE = "soft";         // Default to soft repartitioning
 std::string STORAGE_ENGINE = "tkrzw_tree"; // Default to TkrzwTreeStorageEngine
 std::vector<std::string> STORAGE_PATHS = {
-    "/tmp"}; // Default paths for embedded database files
+    "/tmp"};                    // Default paths for embedded database files
+std::string WORKLOAD_FILE = ""; // Workload file path
 // Repartitioning parameters
 const std::chrono::milliseconds TRACKING_DURATION(
     0); // Duration to track key accesses before repartitioning
@@ -371,7 +372,26 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
     std::vector<size_t> executed_counts(test_workers,
                                         0); // One counter per worker
     std::atomic<bool> metrics_running(true);
-    std::string metrics_file = "metrics_" + storage_type_name + ".csv";
+
+    // Extract filename from workload_file path
+    std::string workload_filename = WORKLOAD_FILE;
+    size_t last_slash = workload_filename.find_last_of("/\\");
+    if (last_slash != std::string::npos) {
+        workload_filename = workload_filename.substr(last_slash + 1);
+    }
+    // Remove extension if present
+    size_t last_dot = workload_filename.find_last_of(".");
+    if (last_dot != std::string::npos) {
+        workload_filename = workload_filename.substr(0, last_dot);
+    }
+
+    // Create metrics filename:
+    // workload__testworkers__storagetype__partitions__storageengine__paths.csv
+    std::string metrics_file =
+        workload_filename + "__" + std::to_string(test_workers) + "__" +
+        STORAGE_TYPE + "__" + std::to_string(partition_count) + "__" +
+        STORAGE_ENGINE + "__" + std::to_string(STORAGE_PATHS.size()) +
+        "paths.csv";
 
     // Execute operations
     std::cout << "\n=== Executing Workload ===" << std::endl;
@@ -708,7 +728,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    std::string workload_file = argv[1];
+    WORKLOAD_FILE = argv[1];
 
     if (argc >= 3) {
         try {
@@ -795,7 +815,7 @@ int main(int argc, char *argv[]) {
     }
 
     std::cout << "=== Repart-KV Workload Executor ===" << std::endl;
-    std::cout << "Workload file: " << workload_file << std::endl;
+    std::cout << "Workload file: " << WORKLOAD_FILE << std::endl;
     std::cout << "Partition count: " << PARTITION_COUNT << std::endl;
     std::cout << "Test workers: " << TEST_WORKERS << std::endl;
     std::cout << "Storage type: " << STORAGE_TYPE << std::endl;
@@ -814,7 +834,7 @@ int main(int argc, char *argv[]) {
     // Read workload
     std::vector<workload::Operation> operations;
     try {
-        operations = workload::read_workload(workload_file);
+        operations = workload::read_workload(WORKLOAD_FILE);
     } catch (const std::exception &e) {
         std::cerr << "Error: " << e.what() << std::endl;
         return 1;
