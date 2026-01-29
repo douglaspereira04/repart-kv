@@ -12,6 +12,10 @@ if(NOT CMAKE_BUILD_TYPE)
     set(CMAKE_BUILD_TYPE Release)
 endif()
 
+option(BUILD_REPART_KV_RUNNER
+    "Build the optional repart-kv runner/testing utility"
+    OFF)
+
 # Add pthread for multithreading support
 find_package(Threads REQUIRED)
 
@@ -85,13 +89,12 @@ else()
     endif()
 endif()
 
-# Create main executable
-add_executable(repart-kv 
-    main.cpp
+# Core library target for repart-kv functionality
+add_library(repart-kv-core STATIC
+    src/repart_kv.cpp
 )
 
-# Link pthread, TKRZW, METIS, LMDB, TBB, and unordered_dense
-target_link_libraries(repart-kv PRIVATE 
+target_link_libraries(repart-kv-core PUBLIC 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
     ${METIS_LIB}
@@ -100,21 +103,30 @@ target_link_libraries(repart-kv PRIVATE
     unordered_dense::unordered_dense
 )
 
-# Set compiler flags
-target_compile_features(repart-kv PRIVATE cxx_std_20)
-
-# Enable all warnings (but not as errors for flexibility)
-target_compile_options(repart-kv PRIVATE 
+target_compile_features(repart-kv-core PUBLIC cxx_std_20)
+target_compile_options(repart-kv-core PRIVATE 
     -Wall -Wextra -Wpedantic
     $<$<CONFIG:Debug>:-g -O0>
     $<$<CONFIG:Release>:-O2>
 )
 
-# Include directories
-target_include_directories(repart-kv PRIVATE 
+target_include_directories(repart-kv-core PUBLIC 
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
 )
+
+if(BUILD_REPART_KV_RUNNER)
+    add_executable(repart-kv-runner 
+        main.cpp
+    )
+    target_link_libraries(repart-kv-runner PRIVATE 
+        repart-kv-core
+    )
+    target_compile_features(repart-kv-runner PRIVATE cxx_std_20)
+    target_compile_options(repart-kv-runner PRIVATE 
+        -Wall -Wextra -Wpedantic
+    )
+endif()
 
 # Optional: Build generic storage engine tests (tests all engines)
 add_executable(test_storage_engine 

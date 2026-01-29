@@ -6,6 +6,8 @@ set -e  # Exit on any error
 
 # Default build type
 BUILD_TYPE="Release"
+# Optionally build the runner/test utility
+BUILD_RUNNER="ON"
 
 # Parse command line arguments
 while [[ $# -gt 0 ]]; do
@@ -23,8 +25,13 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  -d, --debug     Build in Debug mode (no optimizations, with debug symbols)"
             echo "  -r, --release   Build in Release mode (optimizations enabled) [default]"
+            echo "  -t, --runner    Enable the Repart-KV runner/testing utility"
             echo "  -h, --help      Show this help message"
             exit 0
+            ;;
+        -t|--runner)
+            BUILD_RUNNER="ON"
+            shift
             ;;
         *)
             echo "Unknown option: $1"
@@ -41,8 +48,8 @@ mkdir -p build
 cd build
 
 # Configure with CMake
-echo "Configuring project with CMake (Build type: $BUILD_TYPE)..."
-cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE ..
+echo "Configuring project with CMake (Build type: $BUILD_TYPE, runner: $BUILD_RUNNER)..."
+cmake -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DBUILD_REPART_KV_RUNNER=$BUILD_RUNNER ..
 
 # Format code with clang-format
 echo "Formatting code with clang-format..."
