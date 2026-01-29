@@ -1,255 +1,149 @@
 # Repart-KV
 
-A high-performance partitioned key-value storage system with automatic repartitioning built with C++20, featuring dynamic graph-based partitioning using METIS and CRTP (Curiously Recurring Template Pattern) for zero-overhead abstractions.
+Repart-KV is a C++20 project that executes key-value workloads against a partitioned storage layer. It supports multiple storage backends and can repartition based on observed access patterns using METIS.
 
-**📖 Quick Navigation**: [Quick Start](QUICK_START.md) | [Architecture](ARCHITECTURE.md) | [Installation](INSTALL_DEPENDENCIES.md) | [Complete Index](INDEX.md) | [Project Summary](PROJECT_SUMMARY.md)
+## Documentation
 
-## Features
+- **Getting started**: [QUICK_START.md](QUICK_START.md)
+- **Dependencies**: [INSTALL_DEPENDENCIES.md](INSTALL_DEPENDENCIES.md)
+- **Architecture**: [ARCHITECTURE.md](ARCHITECTURE.md)
+- **Index**: [INDEX.md](INDEX.md)
+- **Project summary**: [PROJECT_SUMMARY.md](PROJECT_SUMMARY.md)
 
-- 🔄 **Dynamic Repartitioning** - Automatic graph-based repartitioning using METIS
-- 🔀 **Soft Repartitioning** - Non-disruptive repartitioning that preserves existing data access
-- 🧵 **Multi-threaded Workload Execution** - Parallel operation processing with configurable worker threads
-- 📊 **Real-time Metrics** - CSV-based metrics logging (operations/sec, memory, disk usage)
-- 🚀 **Zero-overhead abstractions** using CRTP (no virtual functions!)
-- 🔒 **Thread-safe operations** with fine-grained locking primitives
-- 🎯 **C++20 concepts** for compile-time type safety
-- ⚡ **High-performance containers** - Uses unordered_dense for optimal hash map performance
-- 📦 **Multiple storage backends**:
-  - `MapStorageEngine` - In-memory storage using `std::map`
-  - `TkrzwHashStorageEngine` - High-performance hash-based storage using TKRZW HashDBM (default)
-  - `TkrzwTreeStorageEngine` - Sorted key-value storage using TKRZW TreeDBM
-- 🗂️ **Generic key-storage interface** with iterators
-- 📈 **Access Pattern Tracking** - Graph-based tracking of key access patterns
-- ✅ **Comprehensive test suite**
+## Build
 
-## Prerequisites
+### Using the build script
 
-### Required
-- CMake 3.20 or higher
-- A C++20 compatible compiler (GCC 10+, Clang 10+, or MSVC 2019+)
-- Make or Ninja build system
-- **libtkrzw-dev** - TKRZW database library
-- **libmetis-dev** - METIS graph partitioning library
-- **libboost-dev (>= 1.83)** - Boost Lockfree SPSC queue (system-wide)
-- **unordered_dense** - High-performance hash map library (automatically fetched via CMake)
-
-### Quick Install (Ubuntu/Debian)
-
-```bash
-sudo apt-get update && sudo apt-get install -y \
-    cmake build-essential pkg-config \
-    libtkrzw-dev liblzma-dev liblz4-dev libzstd-dev \
-    libmetis-dev libboost-dev
-```
-
-**⚠️ Important:** The compression libraries (`liblzma-dev`, `liblz4-dev`, `libzstd-dev`) and METIS are **required**.
-
-For detailed installation instructions for other platforms, see [INSTALL_DEPENDENCIES.md](INSTALL_DEPENDENCIES.md).
-
-## Building
-
-### Option 1: Using the build script (Recommended)
+`build.sh` configures CMake, builds targets, and runs the test suite.
 
 ```bash
 ./build.sh
 ```
 
-This script will:
-- Create a `build` directory
-- Configure the project with CMake
-- Build the project using all available CPU cores
-
-### Option 2: Manual build
+### Manual build
 
 ```bash
-# Create build directory
-mkdir build
-cd build
-
-# Configure with CMake
-cmake ..
-
-# Build the project
-make -j$(nproc)
+mkdir -p build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j"$(nproc)"
 ```
 
-## Running
+## Run workloads
 
-### Workload Execution
-
-The main executable processes workload files with multi-threaded execution:
+The main executable is `build/repart-kv`.
 
 ```bash
 cd build
-./repart-kv <workload_file> [partition_count] [test_workers]
+./repart-kv <workload_file> [partition_count] [test_workers] [storage_type] [storage_engine] [warmup_operations] [storage_paths]
 ```
 
-**Arguments:**
-- `workload_file` - Path to the workload file (required)
-- `partition_count` - Number of partitions (default: 4)
-- `test_workers` - Number of worker threads (default: 1)
+### Arguments
 
-**Example:**
+- **workload_file**: path to workload file (required)
+- **partition_count**: number of partitions (default: `4`)
+- **test_workers**: worker threads for workload execution (default: `1`)
+- **storage_type**: `hard`, `soft`, `threaded`, `hard_threaded`, or `engine` (default: `soft`)
+- **storage_engine**: `tkrzw_tree`, `tkrzw_hash`, `lmdb`, `map`, or `tbb` (default: `tkrzw_tree`)
+- **warmup_operations**: number of operations executed before timing starts (default: `0`)
+- **storage_paths**: comma-separated directories used for embedded DB files (default: `/tmp`)
+
+### Examples
+
 ```bash
-./repart-kv ../sample_workload.txt 8 4
+# Defaults: 4 partitions, 1 worker, soft + tkrzw_tree, no warmup, /tmp
+./repart-kv ../sample_workload.txt
+
+# 8 partitions, 4 workers, threaded storage, tbb backend (in-memory)
+./repart-kv ../sample_workload.txt 8 4 threaded tbb
+
+# Use two storage directories for partition files (embedded backends only)
+./repart-kv ../sample_workload.txt 8 4 soft tkrzw_tree 0 /mnt/d1,/mnt/d2
 ```
 
-### Workload File Format
+## Workload format
 
-Each line contains one operation:
-- `0,<key>` - READ operation
-- `1,<key>` - WRITE operation (uses 1KB default value)
-- `2,<key>,<limit>` - SCAN operation with limit
+Workload files are CSV-style, one operation per line:
 
-**Example workload file:**
+- **READ**: `0,<key>`
+- **WRITE**: `1,<key>` (writes a default 1KB value)
+- **SCAN**: `2,<start_key>,<limit>` (lower_bound-style scan starting at `start_key`)
+
+Example:
+
+```text
+1,user:1001
+1,user:1002
+0,user:1001
+2,user:,10
 ```
-1,0000000105
-2,0000000066,38
-2,0000000001,16
-1,0000000009
-0,0000000008
-1,0000000002
-```
 
-### Metrics Output
+## Output
 
-The system automatically generates `metrics.csv` with real-time performance data:
+The executor writes `metrics.csv` (time series):
+
 ```csv
 elapsed_time_ms,executed_count,memory_kb,disk_kb
 0,0,4084,45244
 1002,11,4380,45244
-2004,21,4380,45244
 ```
 
-### Available Executables
+## Tests
 
-- `./repart-kv` - **Main workload executor with soft repartitioning**
-- `./interactive_storage_test` - Interactive CLI for testing storage engines
-- `./test_graph_tracking` - Graph tracking tests (8 tests)
-- `./test_repartitioning` - Repartitioning tests (5 tests)
-- `./test_soft_repartitioning` - Soft repartitioning tests (7 tests)
-- `./test_partitioned_kv_storage` - Partitioned storage tests (15 tests)
-- `./test_storage_engine` - Storage engine tests
-- `./example_storage` - MapStorageEngine examples
-- `./example_tkrzw_storage` - TkrzwHashStorageEngine examples
-- `./example_keystorage` - MapKeyStorage examples
-
-## Project Structure
-
-```
-repart-kv/
-├── CMakeLists.txt           # CMake configuration
-├── main.cpp                 # Main workload executor
-├── build.sh                 # Build script
-├── README.md               # This file
-├── storage/                # Storage engine implementations
-│   ├── StorageEngine.h                # CRTP base class
-│   ├── MapStorageEngine.h             # std::map implementation
-│   ├── TkrzwHashStorageEngine.h       # TKRZW HashDBM implementation
-│   └── TkrzwTreeStorageEngine.h       # TKRZW TreeDBM implementation
-├── keystorage/             # Generic key-value storage
-│   ├── KeyStorage.h                  # CRTP base class
-│   ├── MapKeyStorage.h               # std::map implementation
-│   ├── TkrzwHashKeyStorage.h         # TKRZW HashDBM implementation
-│   └── TkrzwTreeKeyStorage.h         # TKRZW TreeDBM implementation
-├── kvstorage/             # Partitioned key-value storage layer
-│   ├── PartitionedKeyValueStorage.h        # CRTP base for partitioned storage
-│   ├── RepartitioningKeyValueStorage.h     # Dynamic repartitioning storage
-│   ├── SoftRepartitioningKeyValueStorage.h # Non-disruptive repartitioning storage
-│   ├── test_graph_tracking.cpp             # Graph tracking tests
-│   ├── test_repartitioning.cpp             # Repartitioning tests
-│   ├── test_soft_repartitioning.cpp        # Soft repartitioning tests
-│   └── test_partitioned_kv_storage.cpp     # Partitioned storage tests
-├── graph/                  # Graph structures for partitioning
-│   ├── Graph.h                     # Access pattern graph
-│   ├── MetisGraph.h                # METIS graph interface
-│   └── test_graph.cpp              # Graph tests
-├── workload/              # Workload file parsing
-│   └── Workload.h                  # Workload parser and operations
-└── build/                  # Build directory (created after building)
-```
-
-## Architecture Highlights
-
-### Dynamic Repartitioning
-
-The system provides two repartitioning strategies:
-
-**RepartitioningKeyValueStorage**: Traditional repartitioning that creates new storage engines and migrates data.
-
-**SoftRepartitioningKeyValueStorage**: Non-disruptive repartitioning that preserves existing data access while optimizing partition assignments:
-
-1. **Access Pattern Tracking** - Tracks which keys are accessed together
-2. **Graph Construction** - Builds a graph where vertices are keys and edges represent co-access
-3. **METIS Partitioning** - Uses METIS to partition the graph optimally
-4. **Lazy Migration** - Data migrates to new partitions on-demand
-
-### Multi-threaded Execution
-
-Worker threads process operations in a strided pattern:
-- Worker 0: operations[0], operations[TEST_WORKERS], operations[2*TEST_WORKERS], ...
-- Worker 1: operations[1], operations[1+TEST_WORKERS], operations[1+2*TEST_WORKERS], ...
-
-This ensures no operation overlap between workers while maintaining good load distribution.
-
-### Thread Safety
-
-- **Graph Lock** - Protects graph updates and repartitioning operations
-- **Per-worker Counters** - Eliminates atomic contention
-- **Storage Locking** - Fine-grained locking for storage operations
-
-## Performance
-
-With Tkrzw storage backend:
-- **Single-threaded**: ~900-3700 microseconds/operation (persistent storage)
-- **Multi-threaded**: Linear scaling up to CPU core count
-- **Metrics overhead**: Minimal (CSV write every second)
-
-## Development
-
-The project is configured with:
-- **C++20 standard** with concepts and CRTP
-- Compiler warnings (`-Wall -Wextra -Wpedantic`)
-- Optimized builds in Release mode (`-O3`)
-- Debug symbols in Debug mode (`-g -O0`)
-- Zero virtual function overhead
-
-## Design Principles
-
-1. **Zero-cost abstractions** - CRTP eliminates runtime polymorphism overhead
-2. **No virtual functions** - All dispatch happens at compile time
-3. **Type safety** - C++20 concepts enforce constraints at compile time
-4. **Manual locking** - Users control thread-safety granularity
-5. **Modern C++** - Leverages C++20 features for better performance and safety
-6. **Graph-based optimization** - Access patterns drive data placement
-
-## Clean Build
-
-To clean and rebuild from scratch:
+Build and run all tests via:
 
 ```bash
-rm -rf build
 ./build.sh
 ```
 
-## Documentation
-
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Detailed architecture and design patterns
-- **[INSTALL_DEPENDENCIES.md](INSTALL_DEPENDENCIES.md)** - Dependency installation guide
-- **[INDEX.md](INDEX.md)** - Complete project index
-- **[QUICK_START.md](QUICK_START.md)** - Quick start guide
-
-## Testing
-
-Run the comprehensive test suite:
+Or run selected tests from `build/`:
 
 ```bash
 cd build
-./test_graph_tracking        # Graph tracking tests
-./test_repartitioning        # Repartitioning tests
-./test_soft_repartitioning   # Soft repartitioning tests
-./test_partitioned_kv_storage # Partitioned storage tests
-./test_storage_engine        # Storage engine tests
+./test_storage_engine
+./test_keystorage
+./test_partitioned_kv_storage
+./test_graph_tracking
+./test_repartitioning_storage
 ```
 
-All tests pass with detailed output showing each test case.
+## Interactive tools
+
+```bash
+cd build
+./interactive_storage_test
+./interactive_keystorage_test
+```
+
+See:
+
+- [storage/INTERACTIVE_USAGE.md](storage/INTERACTIVE_USAGE.md)
+- [keystorage/INTERACTIVE_USAGE.md](keystorage/INTERACTIVE_USAGE.md)
+
+## Dependencies (summary)
+
+See [INSTALL_DEPENDENCIES.md](INSTALL_DEPENDENCIES.md) for full instructions.
+
+- **Required**: CMake ≥ 3.20, C++20 compiler, `pkg-config`, TKRZW, METIS
+- **Used for specific backends/features**: LMDB (`lmdb`), Intel TBB (`tbb`), Boost Lockfree (threaded workers)
+- **Build script convenience**: `clang-format` (used by `build.sh`)
+
+## Extending: adding a new storage engine backend
+
+Repart-KV is designed to be extensible: **you can integrate another embedded database or storage engine by implementing the `StorageEngine` interface** (see `storage/StorageEngine.h`) and then wiring it into the build and CLI.
+
+For the concrete steps, see **“Extending: adding a StorageEngine backend”** in [ARCHITECTURE.md](ARCHITECTURE.md).
+
+## Repository layout
+
+```text
+repart-kv/
+  graph/        Graph + METIS adapter
+  keystorage/   KeyStorage abstractions and implementations
+  kvstorage/    Partitioned and (re)partitioning storage layers
+  storage/      StorageEngine backends
+  workload/     Workload parser and operation types
+  utils/        Shared test utilities
+  main.cpp      Workload executor (CLI)
+  build.sh      Configure/build/test script
+  run_tests.sh  Test runner for build artifacts
+```

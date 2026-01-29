@@ -1,190 +1,70 @@
-# Interactive KeyStorage Testing
+# Interactive KeyStorage tester
 
-The `interactive_keystorage_test` program provides an interactive command-line interface for testing and exploring KeyStorage implementations.
+`interactive_keystorage_test` is an interactive CLI for exploring KeyStorage implementations.
 
-## Building
+## Run
 
 ```bash
 cd build
-cmake ..
-make interactive_keystorage_test
+./interactive_keystorage_test
 ```
 
-## Running
+## Setup prompts
 
-```bash
-./build/interactive_keystorage_test
-```
+1. Select a value type (for example: `int`, `long`, `uint64_t`).
+2. Select an implementation (for example: Map, TKRZW Hash/Tree).
 
-## Setup
-
-When you run the program, you'll be prompted to:
-
-1. **Select a value type:**
-   - `1` - int
-   - `2` - long
-   - `3` - uint64_t
-
-2. **Select a KeyStorage implementation:**
-   - `1` - MapKeyStorage (in-memory, std::map)
-   - `2` - TkrzwHashKeyStorage (hash-based, unordered)
-   - `3` - TkrzwTreeKeyStorage (tree-based, sorted)
+The set of available implementations depends on what was built and which optional dependencies are present.
 
 ## Commands
 
-### `get("key")`
-Retrieve a value by its key.
+### `put("key", value)`
 
-**Example:**
+```text
+> put("user:1001", 100)
+OK
 ```
+
+### `get("key")`
+
+```text
 > get("user:1001")
 100
-```
-
-**Not found:**
-```
-> get("nonexistent")
+> get("missing")
 (not found)
 ```
 
-### `put("key", value)`
-Store a key-value pair.
-
-**Example:**
-```
-> put("user:1001", 100)
-OK
-> put("counter:visits", 1500)
-OK
-```
-
 ### `scan("start_key", limit)`
-Scan entries starting from the first key >= start_key, returning up to `limit` results.
-Uses iterator incrementation to traverse the storage.
 
-**Example:**
-```
-> scan("user:", 10)
-user:1001 -> 100
-user:1002 -> 200
-user:1003 -> 300
-```
+`scan` is **lower_bound-style**: it returns up to `limit` items with keys >= `start_key`.
 
-**With limit:**
-```
+```text
 > scan("user:", 2)
 user:1001 -> 100
 user:1002 -> 200
 ```
 
-**Scan all entries:**
-```
-> scan("", 100)
-counter:clicks -> 2500
-counter:visits -> 1500
-user:1001 -> 100
-user:1002 -> 200
-user:1003 -> 300
-```
+### Other commands
 
-**No results:**
-```
-> scan("zzz", 10)
-(no results)
-```
+- `help` or `?`
+- `exit` or `quit`
+- `Ctrl+D` (EOF)
 
-### `help` or `?`
-Display available commands.
-
-### `exit` or `quit`
-Exit the program.
-
-## Example Session
-
-```
-=== Interactive KeyStorage Test ===
-
-Select value type:
-  1. int
-  2. long
-  3. uint64_t
-
-Enter choice (1-3): 1
-
-Select a key storage implementation:
-  1. MapKeyStorage (in-memory, std::map)
-  2. TkrzwHashKeyStorage (hash-based, unordered)
-  3. TkrzwTreeKeyStorage (tree-based, sorted)
-
-Enter choice (1-3): 1
-
-Using: MapKeyStorage<int>
-
-Available commands:
-  get("key")                  - Get a value by key
-  put("key", value)           - Put a key-value pair
-  scan("start_key", limit)    - Scan entries >= start_key (up to limit)
-  help                        - Show this help
-  exit                        - Exit the program
-
-> put("user:1001", 100)
-OK
-> put("user:1002", 200)
-OK
-> put("counter:visits", 1500)
-OK
-> get("user:1001")
-100
-> scan("user:", 10)
-user:1001 -> 100
-user:1002 -> 200
-> exit
-
-Goodbye!
-```
-
-## Automated Testing
-
-You can pipe commands to test non-interactively:
+## Non-interactive usage
 
 ```bash
-./build/interactive_keystorage_test <<EOF
+./interactive_keystorage_test <<'EOF'
 1
 1
-put("key1", 100)
-put("key2", 200)
-get("key1")
-scan("key", 10)
+put("k1", 10)
+get("k1")
+scan("", 10)
 exit
 EOF
 ```
 
-Or use a test script:
+## Related
 
-```bash
-./keystorage/test_interactive_keystorage.sh
-```
-
-## Use Cases
-
-- **Learning**: Explore how different KeyStorage implementations behave
-- **Testing**: Quick manual testing of storage operations
-- **Debugging**: Interactive exploration of edge cases
-- **Comparison**: Compare behavior between MapKeyStorage, TkrzwHashKeyStorage, and TkrzwTreeKeyStorage
-- **Demonstrations**: Show how the KeyStorage interface works
-
-## Key Differences from StorageEngine Interactive Test
-
-1. **Type Safety**: KeyStorage requires value type selection (int, long, uint64_t)
-2. **API**: Uses `get`/`put` instead of `read`/`write`
-3. **Iteration**: `scan` uses iterators with `lower_bound()` + `++` incrementation
-4. **Return Values**: `get` returns boolean and uses output parameter
-
-## Notes
-
-- All KeyStorage implementations must store integral types or pointers (enforced by C++20 concepts)
-- `scan` uses `lower_bound()` to find the starting position, then `++` to iterate
-- TreeDBM-based storage maintains sorted key order (efficient scanning)
-- HashDBM-based storage requires full iteration then sorting for lower_bound
-- MapKeyStorage uses std::map which maintains sorted order naturally
+- `keystorage/test_interactive_keystorage.sh`
+- `build/test_keystorage`
 

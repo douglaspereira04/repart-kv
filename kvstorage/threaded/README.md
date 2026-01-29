@@ -1,19 +1,47 @@
-# Threaded Implementations
+# Threaded storage (`kvstorage/threaded/`)
 
-This directory contains threaded implementations of key-value storage systems.
+This directory contains the threaded variants of the repartitioning storage layer and the supporting worker/operation infrastructure they use.
 
-## Files
+## Key files
 
-- `SoftThreadedRepartitioningKeyValueStorage.h` - A threaded version of the soft repartitioning key-value storage implementation
+### Storage implementations
 
-## Purpose
+- `SoftThreadedRepartitioningKeyValueStorage.h`
+- `HardThreadedRepartitioningKeyValueStorage.h`
 
-This directory is dedicated to storing implementations that use threading for improved performance or concurrent access patterns. These implementations may offer different threading strategies compared to the main implementations in the parent directory.
+These are selected by the `repart-kv` CLI via `storage_type`:
 
-## Usage
+- `threaded` maps to `SoftThreadedRepartitioningKeyValueStorage`
+- `hard_threaded` maps to `HardThreadedRepartitioningKeyValueStorage`
 
-To use these threaded implementations, include them with the appropriate relative path:
+### Workers
 
-```cpp
-#include "kvstorage/threaded/SoftThreadedRepartitioningKeyValueStorage.h"
+- `SoftPartitionWorker.h`
+- `HardPartitionWorker.h`
+
+These workers coordinate partition-local work and inter-thread communication. Some paths use `boost::lockfree::spsc_queue` for SPSC queues.
+
+### Operation model and futures
+
+- `operation/`: operation types and tests (`test_operation`, `test_readoperation`, `test_writeoperation`, etc.)
+- `future/`: `Future` abstraction and tests (`test_future`)
+
+## Build and tests
+
+```bash
+./build.sh
+```
+
+Selected tests:
+
+```bash
+cd build
+./test_soft_partition_worker
+./test_operation
+./test_readoperation
+./test_writeoperation
+./test_scanoperation
+./test_doneoperation
+./test_syncoperation
+./test_future
 ```

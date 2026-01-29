@@ -1,490 +1,145 @@
-# Repart-KV Architecture
+# Architecture
 
-## Overview
+This document describes the current technical structure of Repart-KV and how the main components fit together.
 
-Repart-KV is a high-performance partitioned key-value storage system with automatic repartitioning built with C++20. It features dynamic graph-based partitioning using METIS, multi-threaded workload execution, and zero-overhead abstractions using CRTP (Curiously Recurring Template Pattern).
+## High-level flow
 
-## Core Design Principles
+1. `main.cpp` parses CLI arguments (workload path, partitions, workers, storage type/engine, warmup, storage paths).
+2. `workload/Workload.h` parses the workload file into operations (READ/WRITE/SCAN).
+3. The selected storage stack executes operations using:
+   - a `StorageEngine` backend (`storage/`)
+   - optional partitioning/repartitioning logic (`kvstorage/`)
+   - optional access-pattern tracking (`kvstorage/Tracker.h` + `graph/`)
+4. The runner writes `metrics.csv` during execution.
 
-1. **Zero-Cost Abstractions** - CRTP eliminates virtual function overhead
-2. **No Virtual Functions** - All polymorphism resolved at compile time
-3. **C++20 Concepts** - Type safety enforced at compile time
-4. **Fine-grained Locking** - Manual control over thread-safety granularity
-5. **Template-Based** - Maximum flexibility and performance
-6. **Graph-driven Optimization** - Access patterns drive data placement
+## Key modules
 
-## Architecture Layers
+### `storage/`: StorageEngine backends (String to String)
 
-### 1. Storage Engine Layer (String Keys → String Values)
+All storage engines implement the same CRTP-style interface exposed by `storage/StorageEngine.h`.
 
-**Purpose**: Provides basic key-value storage for string data.
+Implemented backends:
 
-**Abstract Base Class**: `StorageEngine<Derived>` (CRTP)
+- **`MapStorageEngine`**: in-memory `std::map`
+- **`TkrzwHashStorageEngine`**: TKRZW HashDBM (persistent)
+- **`TkrzwTreeStorageEngine`**: TKRZW TreeDBM (persistent, ordered keys)
+- **`LmdbStorageEngine`**: LMDB (persistent, ordered keys)
+- **`TbbStorageEngine`**: in-memory `tbb::concurrent_hash_map`
 
-**Interface**:
-```cpp
-std::string read(const std::string& key) const;
-void write(const std::string& key, const std::string& value);
-std::vector<std::pair<std::string, string>> scan(const std::string& initial_key_prefix, size_t limit) const;
-void lock() const;
-void unlock() const;
-void lock_shared() const;
-void unlock_shared() const;
-```
+Operational note:
 
-**Implementations**:
+- “scan” is implemented as a **lower_bound-style traversal** from a start key, limited to `N` results. It is not a strict prefix filter unless the underlying backend implements it that way.
 
-| Implementation | Backend | Order | Use Case |
-|----------------|---------|-------|----------|
-| `MapStorageEngine` | `std::map` | Sorted | In-memory, simple, sorted scans |
-| `TkrzwHashStorageEngine` | TKRZW HashDBM | Unordered | Persistent, fast random access (default) |
-| `TkrzwTreeStorageEngine` | TKRZW TreeDBM | Sorted | Persistent, efficient range queries |
+### `keystorage/`: KeyStorage (String to integral/pointer)
 
-### 2. Key Storage Layer (String Keys → Generic Values)
+KeyStorage is a separate abstraction used for internal maps and indexes where values are constrained by the `KeyStorageValueType` concept (integral types or pointers).
 
-**Purpose**: Generic key-value storage supporting integral types and pointers.
+Core types:
 
-**Abstract Base Classes**:
-- `KeyStorage<Derived, IteratorType, ValueType>` (CRTP)
-- `KeyStorageIterator<Derived, ValueType>` (CRTP)
+- `keystorage/KeyStorage.h`: CRTP base API (`get`, `put`, `lower_bound`)
+- `keystorage/KeyStorageIterator.h`: iterator API (`get_key`, `get_value`, `++`, `is_end`)
+- `keystorage/KeyStorageConcepts.h`: type constraints
 
-**Storage Interface**:
-```cpp
-bool get(const std::string& key, ValueType& value) const;
-void put(const std::string& key, const ValueType& value);
-IteratorType lower_bound(const std::string& key);
-```
+Implementations:
 
-**Implementations**:
+- `MapKeyStorage`
+- `TkrzwHashKeyStorage`, `TkrzwTreeKeyStorage`
+- `LmdbKeyStorage`
+- `UnorderedDenseKeyStorage` (hash-based; builds sorted iteration by collecting and sorting keys)
 
-| Implementation | Backend | Order | Value Types |
-|----------------|---------|-------|-------------|
-| `MapKeyStorage<T>` | `std::map` | Sorted | Integral, pointers |
-| `TkrzwHashKeyStorage<T>` | TKRZW HashDBM | Unordered | Integral, pointers |
-| `TkrzwTreeKeyStorage<T>` | TKRZW TreeDBM | Sorted | Integral, pointers |
+### `graph/`: Access graph + METIS adapter
 
-### 3. Graph Layer
+Tracking builds a weighted directed graph where:
 
-**Purpose**: Track key access patterns for intelligent partitioning.
+- **Vertices** represent keys (weights accumulate access frequency).
+- **Edges** represent co-access (weights accumulate co-occurrence).
 
-**Components**:
-
-#### Graph Class
-- **Vertices**: Represent keys (weighted by access frequency)
-- **Edges**: Represent co-access patterns (weighted by co-access frequency)
-- **Operations**: `add_vertex()`, `add_edge()`, `increment_vertex_weight()`, `increment_edge_weight()`
-
-#### MetisGraph Class
-- **Purpose**: Interface to METIS graph partitioning library
-- **Algorithm**: Multi-level graph partitioning
-- **Objective**: Minimize edge cuts (co-accessed keys in same partition)
-- **Method**: `partition(num_partitions)` → Returns key-to-partition mapping
-
-**Thread Safety**:
-- Protected by `graph_lock_` mutex
-- All graph operations are thread-safe
-- Lock-free reads during repartitioning
-
-### 4. Partitioned Key-Value Storage Layer
+Files:
 
-**Purpose**: Distributed partitioned storage with dynamic repartitioning.
-
-#### PartitionedKeyValueStorage<Derived, StorageEngineType>
+- `graph/Graph.h`: graph structure (uses `ankerl::unordered_dense`)
+- `graph/MetisGraph.h`: converts `Graph` to CSR format and partitions it using METIS
 
-**CRTP base class** providing:
-- Unified interface for partitioned storage
-- Template-based polymorphism
-- Zero-overhead abstraction
-
-#### HardRepartitioningKeyValueStorage<StorageEngineType, StorageMapType, PartitionMapType, HashFunc>
-
-**Core class** featuring:
-
-1. **Partition Management**
-   - Multiple storage engine instances (one per partition)
-   - Key-to-partition mapping
-   - Hash-based initial assignment
-
-2. **Access Pattern Tracking**
-   - Graph construction from read/write/scan operations
-   - Vertex weights track access frequency
-   - Edge weights track co-access patterns
-
-3. **Dynamic Repartitioning**
-   - METIS-based graph partitioning
-   - Lazy data migration
-   - Background repartitioning thread (optional)
-
-4. **Thread Safety**
-   - `key_map_lock_` (shared_mutex) - Protects key mappings
-   - `graph_lock_` (mutex) - Protects graph operations
-   - Per-storage locking for data operations
-
-**Template Parameters**:
-```cpp
-template<
-    typename StorageEngineType,         // e.g., TkrzwHashStorageEngine
-    template<typename> typename StorageMapType,  // e.g., TkrzwHashKeyStorage
-    template<typename> typename PartitionMapType, // e.g., TkrzwHashKeyStorage
-    typename HashFunc = std::hash<std::string>
->
-```
-
-### 5. Workload Execution Layer
-
-**Purpose**: Multi-threaded workload processing with metrics.
-
-**Components**:
-
-#### Workload Parser
-- Reads CSV-style workload files
-- Three operation types: READ (0), WRITE (1), SCAN (2)
-- 1KB default values for writes
-
-#### Worker Threads
-- **Pattern**: Strided operation distribution
-  - Worker 0: ops[0], ops[TEST_WORKERS], ops[2*TEST_WORKERS], ...
-  - Worker N: ops[N], ops[N+TEST_WORKERS], ops[N+2*TEST_WORKERS], ...
-- **Benefits**: No operation overlap, good load distribution
-- **Queues**: Lock-free Single-Producer/Single-Consumer queues using Boost `lockfree::spsc_queue`, coordinated with semaphores for bounded capacity
-- **Counters**: Per-worker arrays (no atomic contention)
-
-#### Metrics Thread
-- **Sampling**: Every 1 second
-- **Metrics**: Operations count, memory usage (KB), disk usage (KB)
-- **Format**: CSV (elapsed_time_ms, executed_count, memory_kb, disk_kb)
-
-## Repartitioning Algorithm
-
-### Phase 1: Tracking
-```
-while (tracking_enabled):
-    on READ/WRITE:
-        graph_lock.lock()
-        graph.increment_vertex_weight(key)
-        graph_lock.unlock()
-    
-    on SCAN:
-        graph_lock.lock()
-        for each key in scan_results:
-            graph.increment_vertex_weight(key)
-        for each pair (key_i, key_j) in scan_results:
-            graph.increment_edge_weight(key_i, key_j)
-        graph_lock.unlock()
-```
-
-### Phase 2: Partitioning
-```
-graph_lock.lock()
-
-# Build METIS graph
-metis_graph.prepare_from_graph(graph)
-
-# Partition with METIS
-partitions = metis_graph.partition(num_partitions)
-
-# Clear graph for next cycle
-graph.clear()
-
-graph_lock.unlock()
-```
-
-### Phase 3: Migration (Lazy)
-```
-# Update partition mappings
-for (key, partition_id) in partitions:
-    partition_map[key] = partition_id
-
-# Increment storage level
-level++
-
-# Create new storage engines
-storages = [new StorageEngine(level) for _ in num_partitions]
-
-# Data migrates on next access (lazy)
-```
-
-## CRTP Pattern Explained
-
-### Traditional Virtual Functions (NOT USED)
-```cpp
-class Base {
-public:
-    virtual void operation() = 0;  // Runtime dispatch via vtable
-};
-```
-
-**Overhead**: vtable lookup, prevents inlining, cache misses
-
-### CRTP Pattern (USED)
-```cpp
-template<typename Derived>
-class Base {
-public:
-    void operation() {
-        static_cast<Derived*>(this)->operation_impl();  // Compile-time dispatch
-    }
-};
-```
-
-**Benefits**: Zero overhead, full inlining, compile-time type checking
-
-## Thread Safety Architecture
-
-### Lock Hierarchy (to prevent deadlocks)
-
-```
-Level 1: graph_lock_          (Graph operations)
-Level 2: key_map_lock_        (Key mappings)
-Level 3: storage locks        (Individual storage operations)
-```
-
-**Rule**: Always acquire locks in ascending order
-
-### Lock Types
-
-1. **graph_lock_** (std::mutex)
-   - Protects: Graph structure, vertex/edge weights
-   - Used by: graph updates, repartitioning
-   - Pattern: Explicit lock()/unlock()
-
-2. **key_map_lock_** (std::shared_mutex)
-   - Protects: storage_map_, partition_map_
-   - Read operations: lock_shared()
-   - Write operations: lock()
-
-3. **storage locks** (per-engine shared_mutex)
-   - Protects: Individual storage data
-   - Read operations: lock_shared()
-   - Write operations: lock()
-
-### Per-Worker Counters
-
-Traditional (contended):
-```cpp
-std::atomic<size_t> executed_count;  // All workers increment same atomic
-```
-
-Optimized (lock-free):
-```cpp
-std::vector<size_t> executed_counts(num_workers);  // One per worker
-executed_counts[worker_id]++;  // No synchronization needed
-```
-
-**Benefits**:
-- No atomic operations
-- No cache line bouncing
-- Linear scalability
-
-## Type Safety with C++20 Concepts
-
-### KeyStorageValueType Concept
-```cpp
-template<typename T>
-concept KeyStorageValueType = std::integral<T> || std::is_pointer_v<T>;
-```
-
-**Enforces**: Only integral types (int, long, etc.) or pointers allowed
-
-**Example**:
-```cpp
-MapKeyStorage<int> valid;       // ✓ Compiles
-MapKeyStorage<double> invalid;  // ✗ Concept violation at compile time
-```
-
-## Performance Characteristics
-
-### Storage Engine Comparison
-
-| Operation | MapStorage | TkrzwHash | TkrzwTree |
-|-----------|------------|-----------|-----------|
-| Write | ~40 μs | ~900 μs | ~1000 μs |
-| Read | ~30 μs | ~800 μs | ~900 μs |
-| Scan (1000) | Fast | ~11ms | ~732μs |
-| Persistence | No | Yes | Yes |
-
-### Multi-threading Scalability
-
-| Workers | 1 | 2 | 4 | 8 |
-|---------|---|---|---|---|
-| Speedup | 1x | ~1.9x | ~3.7x | ~7.2x |
-| Efficiency | 100% | 95% | 93% | 90% |
-
-### METIS Partitioning Performance
-
-- **Graph size**: O(vertices + edges)
-- **Time complexity**: O(edges * log(vertices))
-- **Typical time**: <10ms for 10,000 vertices
-
-## File Organization
-
-```
-storage/                        # Storage engine layer
-├── StorageEngine.h                 # CRTP base
-├── MapStorageEngine.h              # In-memory
-├── TkrzwHashStorageEngine.h        # Persistent hash
-└── TkrzwTreeStorageEngine.h        # Persistent tree
-
-keystorage/                     # Key storage layer
-├── KeyStorage.h                    # CRTP base
-├── KeyStorageIterator.h            # Iterator base
-├── KeyStorageConcepts.h            # Type constraints
-├── MapKeyStorage.h                 # In-memory
-├── TkrzwHashKeyStorage.h           # Persistent hash
-└── TkrzwTreeKeyStorage.h           # Persistent tree
-
-graph/                          # Graph partitioning
-├── Graph.h                         # Access pattern graph
-└── MetisGraph.h                    # METIS interface
-
-kvstorage/                      # Partitioned storage
-├── PartitionedKeyValueStorage.h    # CRTP base
-└── RepartitioningKeyValueStorage.h # Dynamic repartitioning
-
-workload/                       # Workload system
-└── Workload.h                      # Parser and operations
-
-main.cpp                        # Multi-threaded executor
-```
-
-## Usage Patterns
-
-### Basic Repartitioning Storage
-```cpp
-RepartitioningKeyValueStorage<TkrzwHashStorageEngine, TkrzwHashKeyStorage, TkrzwHashKeyStorage> storage(4);
-
-// Enable tracking
-storage.enable_tracking(true);
-
-// Perform operations
-storage.write("key1", "value1");
-storage.write("key2", "value2");
-storage.read("key1");
-
-// Repartition based on access patterns
-storage.repartition();
-```
-
-### Automatic Background Repartitioning
-```cpp
-using namespace std::chrono_literals;
-
-// Repartition every 60s, track for 10s before each repartition
-RepartitioningKeyValueStorage<...> storage(
-    4,                    // num_partitions
-    std::hash<string>(),  // hash_func
-    10s,                  // tracking_duration
-    60s                   // repartition_interval
-);
-
-// Background thread automatically repartitions
-// Main thread continues normal operations
-```
-
-### Multi-threaded Workload Execution
-```cpp
-// Parse workload
-auto operations = read_workload("workload.txt");
-
-// Create storage
-RepartitioningKeyValueStorage<...> storage(8);
-
-// Execute with 4 worker threads
-std::vector<std::thread> workers;
-std::vector<size_t> counters(4, 0);
-
-for (size_t i = 0; i < 4; i++) {
-    workers.emplace_back(worker_function, i, std::ref(operations), 
-                        std::ref(storage), std::ref(counters));
-}
-
-for (auto& w : workers) w.join();
-```
-
-## Adding New Components
-
-### New Storage Engine
-
-1. Inherit from `StorageEngine<YourEngine>`
-2. Implement three methods:
-   ```cpp
-   std::string read_impl(const std::string& key) const;
-   void write_impl(const std::string& key, const std::string& value);
-   std::vector<std::pair<std::string, std::string>> scan_impl(...) const;
-   ```
-
-3. Use directly or with `RepartitioningKeyValueStorage`
-
-### New Partitioning Strategy
-
-1. Inherit from `PartitionedKeyValueStorage<YourStrategy, StorageEngineType>`
-2. Implement CRTP methods:
-   ```cpp
-   std::string read_impl(const std::string& key);
-   void write_impl(const std::string& key, const std::string& value);
-   std::vector<std::pair<...>> scan_impl(const std::string& initial_key_prefix, size_t limit);
-   ```
-
-3. Add custom partitioning logic
-
-## Future Enhancements
-
-1. **Advanced Repartitioning**
-   - Online migration (move data during repartitioning)
-   - Cost-based repartitioning decisions
-   - Adaptive tracking intervals
-
-2. **Distributed System**
-   - Network-based storage engines
-   - Cross-node partitioning
-   - Replication support
-
-3. **Performance Optimizations**
-   - Lock-free graph updates
-   - Batch repartitioning
-   - Async I/O for storage operations
-
-4. **More Backends**
-   - RocksDB integration
-   - Redis protocol support
-   - Cloud storage backends (S3, etc.)
-
-5. **Advanced Features**
-   - Compression support
-   - Encryption at rest
-   - Transaction support
-   - Snapshot isolation
-
-All future enhancements will maintain the zero-overhead CRTP design!
-
-## Design Decision Rationale
-
-### Why CRTP over Virtual Functions?
-- **Performance**: No vtable lookup overhead
-- **Inlining**: Compiler can inline across abstraction boundaries
-- **Type Safety**: Errors caught at compile time
-- **Zero Cost**: Same performance as hand-written code
-
-### Why Manual Locking?
-- **Flexibility**: Users control granularity
-- **Batch Operations**: Single lock for multiple ops
-- **Performance**: Avoid lock overhead when not needed
-- **Transparency**: Clear thread-safety model
-
-### Why METIS for Partitioning?
-- **Quality**: Produces high-quality partitions
-- **Speed**: Fast multi-level algorithm
-- **Standard**: Industry-standard graph partitioner
-- **Edge-cut Minimization**: Minimizes cross-partition access
-
-### Why Per-Worker Counters?
-- **Scalability**: Eliminates atomic contention
-- **Performance**: No cache line bouncing
-- **Simplicity**: Plain integer increments
-- **Accuracy**: Exact counts (not approximate)
-
-### Why Lazy Migration?
-- **Performance**: No blocking repartitioning
-- **Simplicity**: Data moves on-demand
-- **Correctness**: Always reads from correct partition
-- **Gradual**: Smooth transition to new layout
+### `kvstorage/`: Partitioned and repartitioning storage
+
+This layer coordinates:
+
+- assigning keys to partitions
+- executing operations against a per-partition storage engine
+- (optionally) collecting access patterns and repartitioning
+
+The `repart-kv` CLI selects the primary strategy via `storage_type`:
+
+- **`soft`**: `SoftRepartitioningKeyValueStorage` (single logical storage with partition coordination)
+- **`hard`**: `HardRepartitioningKeyValueStorage` (harder boundaries per partition / engine instances)
+- **`threaded`**: `SoftThreadedRepartitioningKeyValueStorage` (threaded variant)
+- **`hard_threaded`**: `HardThreadedRepartitioningKeyValueStorage` (threaded + hard repartitioning)
+- **`engine`**: direct `StorageEngine` usage (no repartitioning)
+
+Supporting components:
+
+- `kvstorage/Tracker.h`: access tracking and queueing
+- `kvstorage/threaded/`: worker infrastructure and operation types
+
+## Concurrency model (current)
+
+Repart-KV mixes several concurrency mechanisms, chosen per component:
+
+- **Worker execution**: configurable worker count in the runner.
+- **Threaded partitioning** (`kvstorage/threaded/`):
+  - `boost::lockfree::spsc_queue` is used for some producer/consumer paths.
+  - TBB queues/containers are used where appropriate (`tbb::concurrent_*`).
+- **Backend thread safety**: depends on the selected `StorageEngine` and storage strategy.
+
+## Build and target selection
+
+`CMakeLists.txt` defines the build targets. Some targets are only built when a dependency is available (notably METIS-based tests/examples).
+
+## Extending: adding a StorageEngine backend
+
+Repart-KV can be extended to support additional embedded databases or storage engines. Integration requires two parts:
+
+1. Implement a new `StorageEngine` backend (compile-time polymorphism via CRTP).
+2. Register it with the build and the `repart-kv` CLI so it can be selected.
+
+### 1) Implement the backend
+
+Create a new header in `storage/` (for example: `storage/MyDbStorageEngine.h`) and implement the interface from `storage/StorageEngine.h`:
+
+- Implement the required methods:
+  - `Status read_impl(const std::string& key, std::string& value)`
+  - `Status write_impl(const std::string& key, const std::string& value)`
+  - `Status scan_impl(const std::string& key_start, size_t limit, std::vector<std::pair<std::string, std::string>>& out)`
+- Respect the locking contract:
+  - `read()`, `write()`, and `scan()` **do not lock automatically**. Callers lock manually using `lock()` / `lock_shared()` on the engine when required.
+- Match the scan semantics:
+  - `scan` is treated as **lower_bound-style**: return keys >= `key_start`, up to `limit`.
+- If your backend needs a filesystem location for its files:
+  - use the base class `path()` (populated from the CLI `storage_paths` argument).
+
+### 2) Wire it into the build
+
+Update `CMakeLists.txt` to ensure your engine compiles and links:
+
+- Add include paths if needed.
+- Link your database library (for example via `find_package(...)` or `pkg_check_modules(...)` and `target_link_libraries(...)`).
+
+If the dependency is optional, follow the pattern used for METIS/TBB/LMDB: detect it, then build/enable the relevant targets conditionally.
+
+### 3) Expose it via the CLI
+
+Update `main.cpp` so `repart-kv` can select the backend:
+
+- Add a new accepted value to the `storage_engine` argument validation.
+- Add a new branch that maps that value to your engine type (similar to `tkrzw_tree`, `tkrzw_hash`, `lmdb`, `map`, `tbb`).
+- Update `print_usage()` so the new engine appears in `--help` output.
+
+### 4) Document and test
+
+- Update [INSTALL_DEPENDENCIES.md](INSTALL_DEPENDENCIES.md) with any new packages required to build/link your engine.
+- Consider adding coverage to `storage/test/test_storage_engine.cpp` if the backend should participate in the generic engine test suite.
+
+See:
+
+- [INSTALL_DEPENDENCIES.md](INSTALL_DEPENDENCIES.md)
+- [INDEX.md](INDEX.md)
+
