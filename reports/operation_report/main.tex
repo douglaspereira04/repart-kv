@@ -1,0 +1,434 @@
+\documentclass[11pt,openright,oneside,a4paper]{abntex2}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\title{Relatório Operacional Repart-KV}
+\author{Douglas Pereira Luiz}
+\date{\today}
+
+\begin{document}
+
+\imprimircapa
+\imprimirfolhaderosto
+
+\section{Introdução}
+Sistemas com estado local particionado estaticamente tendem a enfrentar desequilíbrios de carga e restrições de desempenho quando submetidos a padrões de acesso variáveis ou cargas de trabalho dinâmicas. A partir disso, foi desenvolvida a biblioteca Repart-KV, que busca explorar um rebalanceamento de baixo impacto, mantido o processamento eficiente e respeitando critérios de consistência preestabelecidos.
+
+ A biblioteca foi construída sobre o arcabouço das técnicas discutidas em \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}, e o documento descreve arquitetura, reconfiguração dinâmica e os experimentos que validam a abordagem.
+
+ Repart-KV foi projetada com extensibilidade em mente: além de suportar os backends permanentes documentados em `storage/`, a biblioteca permite adicionar rapidamente novos adaptadores para soluções comerciais de bancos de dados chave-valor, bastando implementar a interface pública e registrar o backend na CLI. Também fornecemos uma ferramenta de testes que automatiza a execução de workloads padronizados contra qualquer combinação de storage e configurações, facilitando a avaliação experimental em diferentes cenários.
+
+ Em termos de estratégia, a biblioteca implementa múltiplas estratégias de reparticionamento, e cada uma pode ser aplicada a qualquer backend que implemente as interfaces disponíveis. Os diferentes componentes da biblioteca contam com testes automatizados que validam o comportamento esperado e conferem maior confiabilidade quanto a corretude da implementação.
+
+\section{Metodologia}
+
+A implementação da biblioteca Repart-KV foi concebida como uma materialização das técnicas de reparticionamento dinâmico de estado apresentadas nos trabalhos publicados \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}. Nesses estudos, foram propostas estratégias de balanceamento de carga baseadas em particionamento de grafos que permitem reconfigurar o esquema de partições durante a execução do sistema, sem interromper o processamento de requisições. A biblioteca foi projetada para encapsular essas técnicas em componentes modulares e extensíveis, possibilitando a sua aplicação em diferentes contextos e com diversos \textit{backends} de armazenamento.
+
+\subsection{Linguagem e ferramentas}
+
+O desenvolvimento da biblioteca foi realizado na linguagem C++ utilizando o padrão C++20, que oferece recursos modernos de programação, como \textit{concepts} para validação de tipos em tempo de compilação, e \textit{templates} variádicos para a construção de componentes genéricos.
+
+O sistema de compilação adotado foi o CMake (versão 3.20 ou superior), que permite a configuração multiplataforma e a integração com diversas bibliotecas externas. A biblioteca depende de componentes externos para funcionalidades específicas:
+
+\begin{itemize}
+    \item \textbf{METIS} \cite{metis}: biblioteca de particionamento de grafos utilizada para computar o esquema de partições a partir do grafo de carga de trabalho. METIS implementa heurísticas de corte mínimo em grafos multiníveis;
+    \item \textbf{Tkrzw}: biblioteca de armazenamento chave-valor persistente de alto desempenho, utilizada como um dos \textit{backends} de armazenamento. Oferece implementações baseadas em árvore B+ e tabelas de dispersão;
+    \item \textbf{LMDB}: banco de dados embarcado baseado em árvore B+ com suporte a transações ACID, utilizado como alternativa de \textit{backend} persistente;
+    \item \textbf{TBB} (\textit{Thread Building Blocks}): biblioteca da Intel para programação paralela, utilizada para estruturas de dados concorrentes como filas e mapas \textit{thread-safe};
+    \item \textbf{unordered\_dense}: biblioteca \textit{header-only} que fornece implementações eficientes de mapas e conjuntos baseados em dispersão, utilizada para o armazenamento do grafo de carga de trabalho.
+\end{itemize}
+
+A arquitetura da biblioteca foi projetada utilizando \textit{templates} C++ que permitem a composição de diferentes componentes. Isso possibilita, por exemplo, a combinação de diferentes bancos de dados chave valor com diferentes implementações de mapeamento de chaves, sem necessidade de modificar o código das estratégias de reparticionamento.
+
+\subsection{Testes automatizados}
+
+Para assegurar a corretude da implementação, os principais componentes da biblioteca contam com testes automatizados. Os testes foram desenvolvidos seguindo uma abordagem de verificação unitária, onde cada componente é testado isoladamente antes de ser integrado ao sistema. O sistema de compilação CMake configura automaticamente os executáveis de teste, que podem ser executados individualmente ou em conjunto através do \textit{script} \texttt{run\_tests.sh}.
+
+\subsection{Ferramenta de execução de experimentos}
+
+Além dos componentes da biblioteca, foi desenvolvida uma ferramenta de linha de comando (\texttt{repart-kv-runner}) que permite a execução de experimentos com diferentes configurações de armazenamento e estratégias de reparticionamento. A ferramenta lê arquivos de carga de trabalho em formato padronizado, executa as operações e coleta métricas de desempenho durante a execução.
+
+\section{Arquitetura e principais componentes}
+
+A biblioteca Repart-KV foi projetada de forma modular, com componentes que podem ser combinados de diferentes maneiras para atender a diferentes requisitos de armazenamento e reparticionamento. A arquitetura segue um fluxo onde operações são recebidas, executadas ou despachadas para o componente de armazenamento particionado, que por sua vez utiliza um ou mais motores de armazenamento subjacentes e, opcionalmente, rastreia os padrões de acesso para reconfiguração dinâmica das partições.
+
+A seguir são descritos os principais componentes da biblioteca, e as estratégias de reparticionamento implementadas.
+
+
+\subsection{\textit{Storage}}
+
+O componente \textit{Storage} fornece a interface de armazenamento chave-valor utilizada pelas estratégias de reparticionamento. A implementação segue o padrão CRTP (\textit{Curiously Recurring Template Pattern}), que permite polimorfismo em tempo de compilação sem o custo de funções virtuais. A classe base \texttt{StorageEngine} define os métodos \texttt{read}, \texttt{write} e \texttt{scan}, que são implementados pelas classes derivadas de acordo com o \textit{backend} de armazenamento escolhido.
+
+A operação \texttt{read} recebe uma chave e retorna o valor associado. A operação \texttt{write} recebe uma chave e um valor, armazenando o par no \textit{backend}. A operação \texttt{scan} realiza uma varredura a partir de uma chave inicial, retornando até um número limite de pares chave-valor em ordem lexicográfica (para \textit{backends} que suportam ordenação).
+
+A classe base também fornece primitivas de travamento (\texttt{lock}, \texttt{unlock}, \texttt{lock\_shared}, \texttt{unlock\_shared}) que permitem controle manual de concorrência. As operações de leitura, escrita e varredura não adquirem travas automaticamente, delegando essa responsabilidade às camadas superiores da biblioteca.
+
+As seguintes implementações de \textit{StorageEngine} estão disponíveis:
+
+\begin{itemize}
+    \item \textbf{MapStorageEngine}: armazenamento em memória utilizando \texttt{std::map}, com chaves ordenadas;
+    \item \textbf{TkrzwHashStorageEngine}: armazenamento persistente baseado em tabela de dispersão, utilizando a biblioteca Tkrzw (HashDBM);
+    \item \textbf{TkrzwTreeStorageEngine}: armazenamento persistente baseado em árvore B+, utilizando a biblioteca Tkrzw (TreeDBM), com chaves ordenadas;
+    \item \textbf{LmdbStorageEngine}: armazenamento persistente utilizando LMDB, com suporte a transações ACID e chaves ordenadas;
+    \item \textbf{TbbStorageEngine}: armazenamento em memória utilizando \texttt{tbb::concurrent\_hash\_map}, com suporte nativo a concorrência.
+\end{itemize}
+
+\subsection{\textit{Grafo}}
+
+O componente \textit{Grafo} é responsável por representar o padrão de acesso à carga de trabalho e realizar o particionamento utilizando a biblioteca METIS. A representação do grafo de carga de trabalho segue a modelagem apresentada nos trabalhos publicados \cite{luiz2024lightweight,luiz2025stall}: os vértices representam chaves acessadas, com pesos que acumulam a frequência de acesso, e as arestas representam co-acessos entre chaves, com pesos que acumulam a frequência de co-ocorrência em operações de varredura.
+
+O grafo é implementado utilizando listas de adjacência baseadas em tabelas de dispersão. Essa estrutura garante complexidade $O(1)$ amortizada para operações de incremento de peso de vértices e arestas, que são as operações mais frequentes durante o rastreamento da carga de trabalho. Ao incrementar o peso de um vértice ou aresta, o elemento é criado caso não exista, ou tem seu peso incrementado caso já exista.
+
+Para realizar o particionamento, o grafo é convertido para o formato CSR (\textit{Compressed Sparse Row}) exigido pelo METIS, construindo os vetores de adjacência, os pesos dos vértices e os pesos das arestas. Também são mantidos mapeamentos bidirecionais entre os nomes das chaves e os índices inteiros utilizados pelo METIS.
+
+O particionamento do grafo é realizado em um número especificado de partições. O resultado do particionamento é um vetor que associa cada vértice (chave) a uma partição, utilizado pelos componentes de KV-Store da biblioteca para atualizar seus esquemas de partição.
+
+\subsection{\textit{KeyStorage}}
+
+O componente \textit{KeyStorage} fornece estruturas de mapeamento utilizadas internamente pela biblioteca para associar chaves a valores de tipos integrais ou ponteiros. Diferentemente do \textit{Storage}, que armazena pares chave-valor onde ambos são strings, o \textit{KeyStorage} é utilizado para mapear chaves a índices de partições, ponteiros para instâncias de armazenamento, e outras informações de controle interno.
+
+A interface segue o mesmo padrão CRTP utilizado pelo componente \textit{Storage}, oferecendo polimorfismo em tempo de compilação. As operações disponíveis são: obter o valor associado a uma chave, inserir ou atualizar um par chave-valor, e buscar o primeiro elemento com chave não menor que uma chave especificada (operação de limite inferior). Esta última operação é essencial para a implementação de varreduras ordenadas nas estratégias de reparticionamento.
+
+As seguintes implementações estão disponíveis:
+
+\begin{itemize}
+    \item \textbf{MapKeyStorage}: implementação em memória utilizando \texttt{std::map}, com chaves ordenadas e suporte eficiente à operação de limite inferior;
+    \item \textbf{TkrzwHashKeyStorage}: implementação persistente baseada em tabela de dispersão, utilizando a biblioteca Tkrzw;
+    \item \textbf{TkrzwTreeKeyStorage}: implementação persistente baseada em árvore B+, utilizando a biblioteca Tkrzw, com chaves ordenadas;
+    \item \textbf{LmdbKeyStorage}: implementação persistente utilizando LMDB, com chaves ordenadas;
+    \item \textbf{UnorderedDenseKeyStorage}: implementação em memória baseada em tabela de dispersão, que constrói iteração ordenada coletando e ordenando as chaves sob demanda.
+\end{itemize}
+
+\subsection{\textit{KVStorage}}
+
+O componente \textit{KVStorage} representa o núcleo da biblioteca Repart-KV, implementando as estratégias de armazenamento particionado com suporte a reparticionamento dinâmico. Este componente orquestra os demais módulos descritos anteriormente: utiliza instâncias de \textit{Storage} como motores de armazenamento subjacentes, estruturas de \textit{KeyStorage} para manter mapas de partições, e o componente de \textit{Grafo} para rastrear padrões de acesso e computar novos esquemas de particionamento via METIS.
+
+A arquitetura segue o mesmo padrão CRTP utilizado nos demais componentes. A classe base define as operações de leitura, escrita e varredura, que são delegadas às implementações concretas. As estratégias de reparticionamento estendem essa interface adicionando funcionalidades de rastreamento de padrões de acesso, verificação de estado de reparticionamento em progresso, e acesso ao grafo de carga de trabalho.
+
+A seguir são descritas as estratégias de reparticionamento implementadas, que diferem na forma como gerenciam a concorrência, a quantidade de instâncias de armazenamento, e o modelo de execução das operações.
+
+\subsubsection{\textit{SoftThreadedRepartitioningKeyValueStorage}}
+
+Esta estratégia é a mais similar às propostas apresentadas nos trabalhos publicados \cite{luiz2024lightweight,luiz2025stall}. Utiliza uma única instância de motor de armazenamento compartilhada entre múltiplas \textit{threads} trabalhadoras, cada uma responsável por gerenciar uma partição lógica do armazenamento.
+
+A estrutura principal é composta por: uma instância de motor de armazenamento, um mapa de partições que associa chaves a índices de partição, um conjunto de \textit{threads} trabalhadoras (uma para cada partição), e uma \textit{thread} de rastreamento que consome as chaves acessadas e constrói o grafo de carga de trabalho.
+
+Quando uma operação é invocada, o mapa de partições é consultado para determinar qual trabalhador é responsável pela chave. Se a chave ainda não possui partição associada, uma partição é atribuída utilizando uma função de dispersão. A operação é então submetida à fila do trabalhador correspondente. A \textit{thread} chamadora bloqueia até que a operação seja concluída, garantindo semântica síncrona para o cliente.
+
+Cada trabalhador possui uma fila \textit{lock-free} do tipo SPSC (\textit{Single-Producer Single-Consumer}) implementada com a biblioteca Boost.Lockfree, e utiliza semáforos contadores para controlar a capacidade da fila e sinalizar disponibilidade de operações. Essa arquitetura objetiva baixa contenção entre produtores e consumidores, permitindo alto \textit{throughput} de operações.
+
+\subsubsection{\textit{SoftRepartitioningKeyValueStorage}}
+
+Esta estratégia é similar à anterior, porém sem utilizar \textit{threads} trabalhadoras dedicadas. As operações são executadas diretamente pela \textit{thread} chamadora, evitando a necessidade de instanciar objetos de operação e sincronizar a execução entre chamador e trabalhador.
+
+A execução das operações ocorre em duas fases. Na primeira fase, o mapa de partições é bloqueado em modo de leitura (ou escrita, no caso de inserção de nova chave) e o índice da partição associada à chave é obtido. O bloqueio da partição correspondente é adquirido e o mapa de partições é liberado. Na segunda fase, a operação é executada sobre o motor de armazenamento e o bloqueio da partição é liberado.
+
+Embora esta estratégia garanta que operações sobre a mesma chave não sejam executadas concorrentemente, como há uma única instância de motor de armazenamento, a execução ainda está sujeita a sincronizações inerentes ao motor de armazenamento que podem ocorrer mesmo ao acessar chaves diferentes.
+
+A seguir são apresentados os algoritmos das operações de leitura e escrita. Seja $M_p$ o mapa de partições, $\mu_m$ o \textit{mutex} compartilhado do mapa, $P = \{\mu_0, \mu_1, \ldots, \mu_{n-1}\}$ o conjunto de \textit{mutexes} das partições, $S$ o motor de armazenamento, e $h: \mathcal{K} \rightarrow \mathbb{N}$ uma função de dispersão.
+
+\begin{algorithm}[H]
+\caption{Operação de Leitura -- \textit{SoftRepartitioningKeyValueStorage}}
+\begin{algorithmic}[1]
+\Function{Read}{$k \in \mathcal{K}$}
+    \State $\textsc{LockShared}(\mu_m)$
+    \State $p \gets M_p[k]$
+    \If{$p = \text{null}$}
+        \State $\textsc{UnlockShared}(\mu_m)$
+        \State \Return $\text{NOT\_FOUND}$
+    \EndIf
+    \State $\textsc{LockShared}(\mu_p)$
+    \State $\textsc{UnlockShared}(\mu_m)$
+    \State $v \gets S.\textsc{Read}(k)$
+    \State $\textsc{UnlockShared}(\mu_p)$
+    \State \Return $v$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Operação de Escrita -- \textit{SoftRepartitioningKeyValueStorage}}
+\begin{algorithmic}[1]
+\Function{Write}{$k \in \mathcal{K}, v \in \mathcal{V}$}
+    \State $\textsc{Lock}(\mu_m)$
+    \State $p \gets M_p[k]$
+    \If{$p = \text{null}$}
+        \State $p \gets h(k) \bmod n$
+        \State $M_p[k] \gets p$
+    \EndIf
+    \State $\textsc{Lock}(\mu_p)$
+    \State $\textsc{Unlock}(\mu_m)$
+    \State $S.\textsc{Write}(k, v)$
+    \State $\textsc{Unlock}(\mu_p)$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+A operação de varredura (\textit{scan}) apresenta maior complexidade por potencialmente acessar chaves em múltiplas partições. O algoritmo coleta as partições envolvidas e as bloqueia em ordem crescente de índice para evitar \textit{deadlocks}. Seja $L$ o limite de pares chave-valor a retornar.
+
+\begin{algorithm}[H]
+\caption{Operação de Varredura -- \textit{SoftRepartitioningKeyValueStorage}}
+\begin{algorithmic}[1]
+\Function{Scan}{$k_0 \in \mathcal{K}, L \in \mathbb{N}$}
+    \State $\textsc{LockShared}(\mu_m)$
+    \State $it \gets M_p.\textsc{LowerBound}(k_0)$
+    \State $P_{set} \gets \emptyset$; $K_{arr} \gets []$
+    \State $c \gets 0$
+    \While{$c < L \land \neg it.\textsc{IsEnd}()$}
+        \State $P_{set} \gets P_{set} \cup \{it.\textsc{Value}()\}$
+        \State $K_{arr}.\textsc{Append}(it.\textsc{Key}())$
+        \State $it \gets it.\textsc{Next}()$; $c \gets c + 1$
+    \EndWhile
+    \State $P_{sorted} \gets \textsc{Sort}(P_{set})$
+    \ForAll{$p \in P_{sorted}$}
+        \State $\textsc{LockShared}(\mu_p)$
+    \EndFor
+    \State $\textsc{UnlockShared}(\mu_m)$
+    \State $R \gets S.\textsc{Scan}(k_0, L)$
+    \ForAll{$p \in P_{sorted}$}
+        \State $\textsc{UnlockShared}(\mu_p)$
+    \EndFor
+    \State \Return $R$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{\textit{HardRepartitioningKeyValueStorage}}
+
+Esta estratégia é similar à anterior no que diz respeito à execução das operações diretamente pela \textit{thread} chamadora. Porém, diferentemente da estratégia \textit{soft}, esta implementação utiliza uma instância de motor de armazenamento dedicada para cada partição, possibilitando um particionamento físico dos dados. O particionamento físico é realizado utilizando bloqueios leitor/escritor para controlar o acesso às partições, permitindo concorrência de leituras.
+
+A cada reparticionamento, um novo conjunto de motores de armazenamento é criado, e os motores antigos tornam-se somente leitura. Quando uma chave é escrita, o valor é armazenado no motor mais recente correspondente à partição atual da chave. Para leituras, se a chave ainda não foi escrita após o reparticionamento mais recente, o valor será lido do motor antigo onde foi originalmente armazenado.
+
+Para viabilizar esse comportamento, além do mapa de partições $M_p$, a implementação mantém um mapa de armazenamento $M_s$ que associa cada chave à instância de motor onde seu valor está armazenado. Cada motor de armazenamento possui um atributo de nível $\ell$ que indica em qual geração de reparticionamento foi criado. Uma variável global $\ell_{curr}$ indica o nível atual do sistema.
+
+Considere as chaves $k_1$ e $k_2$ atribuídas às partições $p_1$ e $p_2$, com valores armazenados em $S_1$ e $S_2$. Após um reparticionamento onde $k_1$ é reassociada à partição $p_2$, os novos motores são $S'_1$ e $S'_2$. Até a próxima escrita, leituras de $k_1$ acessarão $S_1$. Quando uma escrita de $k_1$ ocorrer, seu mapeamento em $M_s$ será atualizado para $S'_2$, e leituras subsequentes lerão de $S'_2$.
+
+Esta estratégia permite reassociar chaves no mapa de partições sem migrar dados entre motores. O projeto evita concorrencia entre escritas ou entre escrita e leitura na mesma instância de armazenamento, enquanto permite leituras concorrentes (pois partições diferentes podem ter chaves em motores antigos compartilhados). Isso possibilita o uso de estruturas que não implementam sincronização interna, uma vez que leitura concorrente normalmente é naturalmente \textit{thread-safe}. Além disso, essa estratégia permite distribuir os dados em dispositivos físicos diferentes facilmente, já que é possível criar instâncias de motores em diretórios distintos que podem residir em dispositivos separados, beneficiando-se de E/S paralela.
+
+A seguir são apresentados os algoritmos das operações. Seja $M_s: \mathcal{K} \rightarrow \mathcal{S}$ o mapa de armazenamento, $M_p: \mathcal{K} \rightarrow \mathbb{N}$ o mapa de partições, $\mu_m$ o \textit{mutex} compartilhado dos mapas, $P = \{\mu_0, \mu_1, \ldots, \mu_{n-1}\}$ o conjunto de \textit{mutexes} das partições, $\mathcal{S} = \{S_0, S_1, \ldots, S_{n-1}\}$ o conjunto atual de motores de armazenamento, $\ell_{curr}$ o nível atual, e $h: \mathcal{K} \rightarrow \mathbb{N}$ uma função de dispersão.
+
+\begin{algorithm}[H]
+\caption{Operação de Leitura -- \textit{HardRepartitioningKeyValueStorage}}
+\begin{algorithmic}[1]
+\Function{Read}{$k \in \mathcal{K}$}
+    \State $\textsc{LockShared}(\mu_m)$
+    \State $S \gets M_s[k]$
+    \If{$S = \text{null}$}
+        \State $\textsc{UnlockShared}(\mu_m)$
+        \State \Return $\text{NOT\_FOUND}$
+    \EndIf
+    \State $p \gets M_p[k]$
+    \If{$p = \text{null}$}
+        \State $p \gets h(k) \bmod n$
+    \EndIf
+    \State $\textsc{LockShared}(\mu_p)$
+    \State $\textsc{UnlockShared}(\mu_m)$
+    \State $v \gets S.\textsc{Read}(k)$
+    \State $\textsc{UnlockShared}(\mu_p)$
+    \State \Return $v$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[H]
+\caption{Operação de Escrita -- \textit{HardRepartitioningKeyValueStorage}}
+\begin{algorithmic}[1]
+\Function{Write}{$k \in \mathcal{K}, v \in \mathcal{V}$}
+    \State $\textsc{Lock}(\mu_m)$
+    \State $S \gets M_s[k]$
+    \If{$S \neq \text{null}$}
+        \State $p \gets M_p[k]$
+        \If{$p = \text{null}$}
+            \State $p \gets h(k) \bmod n$
+            \State $M_p[k] \gets p$
+        \EndIf
+        \If{$S.\ell \neq \ell_{curr}$}
+            \State $S \gets \mathcal{S}[p]$
+            \State $M_s[k] \gets S$
+        \EndIf
+    \Else
+        \State $p \gets h(k) \bmod n$
+        \State $M_p[k] \gets p$
+        \State $S \gets \mathcal{S}[p]$
+        \State $M_s[k] \gets S$
+    \EndIf
+    \State $\textsc{Lock}(\mu_p)$
+    \State $\textsc{Unlock}(\mu_m)$
+    \State $S.\textsc{Write}(k, v)$
+    \State $\textsc{Unlock}(\mu_p)$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+A operação de varredura coleta as partições envolvidas a partir do mapa $M_p$ e as bloqueia em ordem crescente de índice para evitar \textit{deadlocks}. Note que múltiplas chaves podem estar em um mesmo motor antigo, porém o bloqueio é feito no nível de partição conforme o esquema atual.
+
+\begin{algorithm}[H]
+\caption{Operação de Varredura -- \textit{HardRepartitioningKeyValueStorage}}
+\begin{algorithmic}[1]
+\Function{Scan}{$k_0 \in \mathcal{K}, L \in \mathbb{N}$}
+    \State $\textsc{LockShared}(\mu_m)$
+    \State $it \gets M_s.\textsc{LowerBound}(k_0)$
+    \State $P_{set} \gets \emptyset$; $S_{arr} \gets []$; $K_{arr} \gets []$
+    \State $c \gets 0$
+    \While{$c < L \land \neg it.\textsc{IsEnd}()$}
+        \State $k \gets it.\textsc{Key}()$
+        \State $p \gets M_p[k]$
+        \If{$p = \text{null}$}
+            \State $p \gets h(k) \bmod n$
+        \EndIf
+        \State $P_{set} \gets P_{set} \cup \{p\}$
+        \State $S_{arr}.\textsc{Append}(it.\textsc{Value}())$
+        \State $K_{arr}.\textsc{Append}(k)$
+        \State $it \gets it.\textsc{Next}()$; $c \gets c + 1$
+    \EndWhile
+    \State $P_{sorted} \gets \textsc{Sort}(P_{set})$
+    \ForAll{$p \in P_{sorted}$}
+        \State $\textsc{LockShared}(\mu_p)$
+    \EndFor
+    \State $\textsc{UnlockShared}(\mu_m)$
+    \State $R \gets []$
+    \For{$i \gets 0$ \textbf{to} $|K_{arr}| - 1$}
+        \State $R.\textsc{Append}((K_{arr}[i], S_{arr}[i].\textsc{Read}(K_{arr}[i])))$
+    \EndFor
+    \ForAll{$p \in P_{sorted}$}
+        \State $\textsc{UnlockShared}(\mu_p)$
+    \EndFor
+    \State \Return $R$
+\EndFunction
+\end{algorithmic}
+\end{algorithm}
+
+\subsubsection{\textit{Tracker}}
+
+O componente \textit{Tracker} é responsável por rastrear os padrões de acesso às chaves e construir o grafo de carga de trabalho utilizado pelo METIS para computar o particionamento. A arquitetura segue um modelo produtor-consumidor: as operações de leitura, escrita e varredura submetem as chaves acessadas a uma fila concorrente, e uma \textit{thread} de rastreamento consome essa fila em segundo plano, atualizando o grafo.
+
+O grafo de carga de trabalho $G = (V, E, w)$ é um grafo ponderado onde:
+\begin{itemize}
+    \item $V \subseteq \mathcal{K}$ é o conjunto de vértices, cada vértice representando uma chave acessada;
+    \item $w_v: V \rightarrow \mathbb{N}$ é a função de peso dos vértices, onde $w_v(k)$ acumula a frequência de acesso à chave $k$;
+    \item $E \subseteq V \times V$ é o conjunto de arestas não direcionadas representando co-acessos entre chaves;
+    \item $w_e: E \rightarrow \mathbb{N}$ é a função de peso das arestas, onde $w_e(k_i, k_j)$ acumula a frequência de co-ocorrência das chaves $k_i$ e $k_j$ em operações de varredura.
+\end{itemize}
+
+Quando uma operação de leitura ou escrita é executada, a chave acessada é submetida à fila do \textit{Tracker}. A \textit{thread} de rastreamento consome a chave e incrementa o peso do vértice correspondente no grafo. Para operações de varredura, todas as chaves acessadas são submetidas em conjunto. A \textit{thread} de rastreamento incrementa o peso de cada vértice e também incrementa o peso das arestas entre todos os pares de chaves, refletindo a correlação de acesso entre elas.
+
+A implementação do grafo utiliza listas de adjacência baseadas em tabelas de dispersão (\texttt{unordered\_dense}), garantindo complexidade $O(1)$ amortizada para operações de incremento de peso de vértices e arestas. Essa estrutura é otimizada para o padrão de acesso do rastreamento, onde as operações predominantes são inserções e atualizações incrementais.
+
+Para realizar o particionamento, o METIS requer o grafo no formato CSR (\textit{Compressed Sparse Row}). O \textit{Tracker} utiliza um componente auxiliar (\texttt{MetisGraph}) que converte o grafo de listas de adjacência para o formato CSR, construindo:
+\begin{itemize}
+    \item Vetor \texttt{xadj}: índices de início de cada lista de adjacência;
+    \item Vetor \texttt{adjncy}: lista concatenada de vizinhos;
+    \item Vetor \texttt{vwgt}: pesos dos vértices;
+    \item Vetor \texttt{adjwgt}: pesos das arestas.
+\end{itemize}
+
+Adicionalmente, são mantidos mapeamentos bidirecionais entre os nomes das chaves (strings) e os índices inteiros utilizados pelo METIS. Após o particionamento, o resultado é um vetor que associa cada índice de vértice a um índice de partição, que é então utilizado para atualizar o mapa de partições $M_p$ do armazenamento.
+
+
+\subsection{Reparticionamento}
+
+O reparticionamento dinâmico é executado periodicamente por uma \textit{thread} dedicada que opera em ciclos contínuos. Cada ciclo alterna entre duas fases: uma fase de rastreamento, durante a qual os padrões de acesso são coletados, e uma fase de intervalo, durante a qual o sistema opera sem rastreamento. Ambas as durações são configuráveis na inicialização do armazenamento.
+
+O ciclo de reparticionamento segue os seguintes passos:
+
+\begin{enumerate}
+    \item \textbf{Intervalo de reparticionamento}: A \textit{thread} de reparticionamento aguarda por um período configurável (\texttt{repartition\_interval}). Durante esse período, o rastreamento está desabilitado e o sistema opera normalmente com o esquema de partições atual.
+    
+    \item \textbf{Período de rastreamento}: O rastreamento é habilitado e as operações executadas passam a submeter suas chaves à fila do \textit{Tracker}. A \textit{thread} de rastreamento consome a fila e constrói o grafo de carga de trabalho. Esse período tem duração configurável (\texttt{tracking\_duration}).
+    
+    \item \textbf{Execução do reparticionamento}: Ao final do período de rastreamento, o reparticionamento é executado:
+    \begin{enumerate}
+        \item O rastreamento é desabilitado e a \textit{flag} de reparticionamento é ativada;
+        \item A fila do \textit{Tracker} é esvaziada para garantir que todas as chaves submetidas sejam processadas;
+        \item O grafo é convertido para o formato CSR e o METIS é invocado para computar o particionamento;
+        \item Se o particionamento for bem-sucedido, o mapa de partições $M_p$ é bloqueado juntamente com todas as partições;
+        \item O mapa de partições é atualizado com as novas atribuições computadas pelo METIS;
+        \item Os bloqueios são liberados e o grafo é limpo para o próximo ciclo;
+        \item A \textit{flag} de reparticionamento é desativada.
+    \end{enumerate}
+    
+    \item O ciclo retorna ao passo 1 e se repete indefinidamente até a destruição do armazenamento.
+\end{enumerate}
+
+A Figura~\ref{fig:repartition-cycle} ilustra o ciclo de reparticionamento. A fase de intervalo permite que o sistema opere com estabilidade sob o novo esquema de partições antes de iniciar uma nova coleta de padrões de acesso. A fase de rastreamento captura uma janela representativa da carga de trabalho atual, permitindo que o METIS compute um particionamento otimizado para os padrões de acesso observados.
+
+\begin{figure}[H]
+\centering
+\caption{Ciclo de reparticionamento dinâmico}
+\label{fig:repartition-cycle}
+\end{figure}
+
+Durante a atualização do mapa de partições, as operações de leitura e escrita são bloqueadas momentaneamente enquanto os bloqueios são adquiridos. Esse bloqueio é breve, pois a atualização do mapa consiste apenas em iterar sobre os resultados do METIS e atualizar as entradas correspondentes no mapa de partições. Os dados em si não são migrados durante o reparticionamento; nas estratégias \textit{soft}, não há migração, sendo que todos os dados já estão no mesmo storage engine; enquanto na estratégia \textit{hard}, a migração ocorre de forma preguiçosa (\textit{lazy}) conforme as chaves são acessadas subsequentemente.
+
+
+\section{Execução de testes e experimentos}
+
+A biblioteca conta com testes automatizados que validam o comportamento esperado e conferem maior confiabilidade quanto a corretude da implementação. Enquanto isso, a ferramenta de execução de experimentos permite a execução de experimentos com diferentes configurações de armazenamento e estratégias de reparticionamento a fim de permitir avaliações comparativas de diferentes abordagens de reparticionamento.
+
+Os testes automatizados podem ser executados através do \textit{script} \texttt{run\_tests.sh} ou individualmente a partir dos executáveis gerados pelo CMake. Os testes verificam:
+
+\begin{itemize}
+    \item Operações básicas de leitura, escrita e varredura (\textit{scan}) nos motores de armazenamento;
+    \item Funcionamento correto das estruturas de mapeamento de chaves (\textit{KeyStorage});
+    \item Construção e manipulação do grafo de carga de trabalho;
+    \item Integração com a biblioteca METIS para particionamento de grafos;
+    \item Comportamento das diferentes estratégias de reparticionamento sob execução concorrente;
+    \item Sincronização entre \textit{threads} trabalhadoras durante a atualização do esquema de partições.
+\end{itemize}
+
+Os executáveis de teste incluem: \texttt{test\_storage\_engine}, \texttt{test\_keystorage}, \texttt{test\_graph}, \texttt{test\_metis\_graph}, \texttt{test\_partitioned\_kv\_storage}, \texttt{test\_repartitioning\_storage}, entre outros.
+
+A ferramenta de execução de experimentos aceita diferentes argumentos de configuração, além de um arquivo de carga de trabalho. É necessario que o arquivo de carga de trabalho siga o formato padronizado. A seguir é apresentado esse formato, e posteriomente são descritos os parâmetros de configuração.
+
+\subsection{Formato da carga de trabalho \label{sec:workload-format}}
+
+O formato do arquivo de carga de trabalho segue a convenção:
+\begin{itemize}
+    \item \texttt{0,<chave>}: operação de leitura;
+    \item \texttt{1,<chave>}: operação de escrita;
+    \item \texttt{2,<chave>,<limite>}: operação de varredura.
+\end{itemize}
+
+\subsection{Parâmetros de configuração}
+
+A ferramenta aceita os seguintes parâmetros de configuração:
+
+\begin{verbatim}
+repart-kv-runner <arquivo_workload> [partições] [workers] 
+                 [tipo_storage] [motor_storage] 
+                 [warmup] [caminhos_storage]
+\end{verbatim}
+
+O parâmetro \texttt{tipo\_storage} pode assumir os valores:
+\begin{itemize}
+    \item \texttt{soft}: reparticionamento leve com partições lógicas;
+    \item \texttt{hard}: reparticionamento com múltiplas instâncias de armazenamento;
+    \item \texttt{threaded}: versão com \textit{threads} trabalhadoras;
+    \item \texttt{hard\_threaded}: reparticionamento rígido com \textit{threads} trabalhadoras;
+    \item \texttt{engine}: acesso direto ao motor de armazenamento sem reparticionamento.
+\end{itemize}
+
+O parâmetro \texttt{motor\_storage} permite selecionar entre os \textit{backends} disponíveis: \texttt{tkrzw\_tree}, \texttt{tkrzw\_hash}, \texttt{lmdb}, \texttt{map} (em memória) ou \texttt{tbb}.
+
+\subsection{Funcionamento da ferramenta}
+
+Durante a execução, a ferramenta instancia o armazenamento configurado e cria múltiplas \textit{threads} trabalhadoras que executam operações concorrentemente. Cada \textit{thread} processa uma porção das operações do arquivo de carga de trabalho, e os contadores de operações executadas são agregados ao final para o cálculo da vazão total do sistema.
+
+Paralelamente, uma \textit{thread} de métricas registra periodicamente em um arquivo CSV o tempo decorrido, número de operações executadas, uso de memória, uso de disco e estados de rastreamento e reparticionamento. Essas métricas permitem a análise detalhada do comportamento do sistema sob diferentes cargas de trabalho, facilitando a comparação entre as estratégias implementadas e a identificação de gargalos de desempenho.
+
+\section{Discussão}
+% TODO: Discussão a ser escrita. 
+
+
+
+\bibliographystyle{abntex2-alf}
+\bibliography{references}
+
+\end{document}
