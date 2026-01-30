@@ -1,13 +1,13 @@
 #!/usr/bin/env Rscript
 #
-# Generate charts from aggregated CSV metrics files.
+# Generate makespan charts from aggregated CSV metrics files.
 #
 # Usage:
-#   Rscript generate_charts.R [input_path] [output_path]
+#   Rscript generate_makespan_charts.R [input_path] [output_path]
 #
 # Arguments:
-#   input_path:  Directory containing aggregated throughput CSV files (default: ./aggregated_results/throughput)
-#   output_path: Directory to save charts (default: ./charts/throughput)
+#   input_path:  Directory containing aggregated makespan CSV files (default: ./aggregated_results/makespan)
+#   output_path: Directory to save charts (default: ./charts/makespan)
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -18,8 +18,8 @@ suppressPackageStartupMessages({
 
 # Parse command line arguments
 args <- commandArgs(trailingOnly = TRUE)
-input_path <- if (length(args) >= 1) args[1] else "./aggregated_results/throughput"
-output_path <- if (length(args) >= 2) args[2] else "./charts/throughput"
+input_path <- if (length(args) >= 1) args[1] else "./aggregated_results/makespan"
+output_path <- if (length(args) >= 2) args[2] else "./charts/makespan"
 
 # Validate input path
 if (!dir.exists(input_path)) {
@@ -34,7 +34,7 @@ if (length(csv_files) == 0) {
   quit(status = 0)
 }
 
-cat(paste("Found", length(csv_files), "aggregated CSV file(s)\n"))
+cat(paste("Found", length(csv_files), "aggregated makespan CSV file(s)\n"))
 
 # Create output directory
 dir.create(output_path, showWarnings = FALSE, recursive = TRUE)
@@ -47,7 +47,7 @@ for (csv_file in csv_files) {
   workload <- unique(data$workload)
   storage_engine <- unique(data$storage_engine)
   
-  cat(paste("Generating chart for", workload, "-", storage_engine, "...\n"))
+  cat(paste("Generating makespan chart for", workload, "-", storage_engine, "...\n"))
   
   # Create storage type labels with partition count, paths, and interval
   data$storage_type_label <- paste0(
@@ -61,14 +61,13 @@ for (csv_file in csv_files) {
   data$workers_factor <- factor(data$workers, levels = sort(unique(data$workers)))
   
   # Create the plot
-  p <- ggplot(data, aes(x = workers_factor, y = ops_per_second / 1000, color = storage_type_label, group = storage_type_label)) +
-    geom_line(linewidth = 1.5, alpha = 0.8) +
-    geom_point(size = 4, alpha = 0.8) +
+  p <- ggplot(data, aes(x = workers_factor, y = makespan_s, fill = storage_type_label)) +
+    geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7, alpha = 0.8) +
     labs(
       x = "Number of Workers",
-      y = "Thousand Operations per Second",
-      title = paste(workload, "-", storage_engine),
-      color = "Storage Type"
+      y = "Makespan (seconds)",
+      title = paste("Execution Time:", workload, "-", storage_engine),
+      fill = "Storage Type"
     ) +
     theme_minimal() +
     theme(
@@ -81,7 +80,7 @@ for (csv_file in csv_files) {
       panel.grid.major = element_line(color = "gray90", linewidth = 0.5),
       panel.grid.minor = element_line(color = "gray95", linewidth = 0.25)
     ) +
-    scale_color_brewer(palette = "Set1") +
+    scale_fill_brewer(palette = "Set1") +
     scale_y_continuous(
       expand = expansion(mult = c(0, 0.15)), 
       limits = c(0, NA),
@@ -91,11 +90,11 @@ for (csv_file in csv_files) {
   # Save chart
   safe_workload <- str_replace_all(workload, "[^\\w\\-_]", "_")
   safe_engine <- str_replace_all(storage_engine, "[^\\w\\-_]", "_")
-  output_file <- file.path(output_path, paste(safe_workload, safe_engine, "png", sep = "."))
+  output_file <- file.path(output_path, paste(safe_workload, safe_engine, "makespan.png", sep = "."))
   
   ggsave(output_file, plot = p, width = 12, height = 6, dpi = 300, bg = "white")
   
   cat(paste("Generated chart:", output_file, "\n"))
 }
 
-cat(paste("\nAll charts saved to:", output_path, "\n"))
+cat(paste("\nAll makespan charts saved to:", output_path, "\n"))

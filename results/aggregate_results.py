@@ -23,9 +23,6 @@ def parse_filename(filename):
     
     parts = name_no_rep.split('__')
     if len(parts) != 7:
-        # Try to see if it matches the older format or if something is missing
-        # The user's example has 7 parts before (REP)
-        # ycsb_a (1) __ 1 (2) __ engine (3) __ 1 (4) __ tkrzw_tree (5) __ 1 (6) __ 0 (7)
         return None
         
     return {
@@ -40,7 +37,7 @@ def parse_filename(filename):
         'key': name_no_rep # Unique key for the experiment configuration
     }
 
-def calculate_ops_per_second(filepath):
+def calculate_metrics(filepath):
     try:
         with open(filepath, 'r') as f:
             lines = f.readlines()
@@ -63,19 +60,29 @@ def calculate_ops_per_second(filepath):
             if elapsed_ms <= 0:
                 return None
                 
-            return executed_count / (elapsed_ms / 1000.0)
+            ops_per_second = executed_count / (elapsed_ms / 1000.0)
+            makespan_s = elapsed_ms / 1000.0
+            
+            return {
+                'ops_per_second': ops_per_second,
+                'makespan_s': makespan_s
+            }
     except Exception as e:
         print(f"Error processing {filepath}: {e}")
         return None
 
 def main():
     input_dir = sys.argv[1] if len(sys.argv) > 1 else "."
-    output_dir = sys.argv[2] if len(sys.argv) > 2 else "aggregated_results"
+    output_base_dir = sys.argv[2] if len(sys.argv) > 2 else "aggregated_results"
     
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+    throughput_dir = os.path.join(output_base_dir, "throughput")
+    makespan_dir = os.path.join(output_base_dir, "makespan")
+    
+    for d in [throughput_dir, makespan_dir]:
+        if not os.path.exists(d):
+            os.makedirs(d)
         
-    # experiment_key -> list of ops_per_second
+    # experiment_key -> list of metrics
     results = defaultdict(list)
     # experiment_key -> metadata
     metadata = {}
@@ -87,21 +94,26 @@ def main():
         if not params:
             continue
             
-        ops = calculate_ops_per_second(os.path.join(input_dir, f))
-        if ops is not None:
+        metrics = calculate_metrics(os.path.join(input_dir, f))
+        if metrics is not None:
             key = params['key']
-            results[key].append(ops)
+            results[key].append(metrics)
             if key not in metadata:
                 metadata[key] = params
 
     # Group by workload and engine for output files
-    grouped_results = defaultdict(list)
-    for key, ops_list in results.items():
+    grouped_throughput = defaultdict(list)
+    grouped_makespan = defaultdict(list)
+    
+    for key, metrics_list in results.items():
         meta = metadata[key]
-        mean_ops = sum(ops_list) / len(ops_list)
+        
+        mean_ops = sum(m['ops_per_second'] for m in metrics_list) / len(metrics_list)
+        mean_makespan = sum(m['makespan_s'] for m in metrics_list) / len(metrics_list)
         
         output_key = f"{meta['workload']}__{meta['storage_engine']}"
-        grouped_results[output_key].append({
+        
+        common_meta = {
             'workload': meta['workload'],
             'workers': meta['workers'],
             'storage_type': meta['storage_type'],
@@ -109,18 +121,30 @@ def main():
             'storage_engine': meta['storage_engine'],
             'paths': meta['paths'],
             'interval': meta['interval'],
-            'ops_per_second': mean_ops
-        })
+        }
+        
+        grouped_throughput[output_key].append({**common_meta, 'ops_per_second': mean_ops})
+        grouped_makespan[output_key].append({**common_meta, 'makespan_s': mean_makespan})
 
-    for output_key, data_list in grouped_results.items():
-        output_file = os.path.join(output_dir, f"{output_key}.csv")
+    # Write throughput CSVs
+    for output_key, data_list in grouped_throughput.items():
+        output_file = os.path.join(throughput_dir, f"{output_key}.csv")
         with open(output_file, 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'ops_per_second'])
             writer.writeheader()
-            # Sort by workers for consistency
             sorted_data = sorted(data_list, key=lambda x: (x['workers'], x['storage_type'], x['partitions']))
             writer.writerows(sorted_data)
-        print(f"Created {output_file}")
+        print(f"Created throughput CSV: {output_file}")
+
+    # Write makespan CSVs
+    for output_key, data_list in grouped_makespan.items():
+        output_file = os.path.join(makespan_dir, f"{output_key}.csv")
+        with open(output_file, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'makespan_s'])
+            writer.writeheader()
+            sorted_data = sorted(data_list, key=lambda x: (x['workers'], x['storage_type'], x['partitions']))
+            writer.writerows(sorted_data)
+        print(f"Created makespan CSV: {output_file}")
 
 if __name__ == "__main__":
     main()
