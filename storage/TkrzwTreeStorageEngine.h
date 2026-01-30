@@ -25,6 +25,7 @@
  * - Efficient range queries and prefix scans
  * - Slightly slower writes than HashDBM
  * - Better for scan-heavy workloads
+ * - Uses zlib compression for record values to reduce storage space
  *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
@@ -59,11 +60,14 @@ public:
         std::filesystem::create_directories(
             path_ + std::string("/repart_kv_storage/") + id_);
 
+        tkrzw::TreeDBM::TuningParameters tuning_params;
+        tuning_params.record_comp_mode = tkrzw::HashDBM::RECORD_COMP_ZLIB;
+
         tkrzw::Status status =
             db_->OpenAdvanced(temp_path,
-                              true,                      // writable
-                              tkrzw::File::OPEN_TRUNCATE // Create new
-            );
+                              true,                       // writable
+                              tkrzw::File::OPEN_TRUNCATE, // Create new
+                              tuning_params);
 
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;
@@ -89,6 +93,7 @@ public:
         tkrzw::TreeDBM::TuningParameters tuning_params;
         tuning_params.max_page_size = max_page_size;
         tuning_params.max_branches = max_branches;
+        tuning_params.record_comp_mode = tkrzw::HashDBM::RECORD_COMP_ZLIB;
 
         tkrzw::Status status =
             db_->OpenAdvanced(file_path,

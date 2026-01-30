@@ -35,7 +35,7 @@ The CLI runner is optional (`repart-kv-runner`). Either build it via `./build.sh
 
 ```bash
 cd build
-./repart-kv-runner <workload_file> [partition_count] [test_workers] [storage_type] [storage_engine] [warmup_operations] [storage_paths]
+./repart-kv-runner <workload_file> [partition_count] [test_workers] [storage_type] [storage_engine] [warmup_operations] [storage_paths] [repartition_interval_ms]
 ```
 
 ### Arguments
@@ -47,6 +47,7 @@ cd build
 - **storage_engine**: `tkrzw_tree`, `tkrzw_hash`, `lmdb`, `map`, or `tbb` (default: `tkrzw_tree`)
 - **warmup_operations**: number of operations executed before timing starts (default: `0`)
 - **storage_paths**: comma-separated directories used for embedded DB files (default: `/tmp`)
+- **repartition_interval_ms**: interval in milliseconds between repartitioning cycles and tracking duration (default: `1000`). Sets both `TRACKING_DURATION` and `REPARTITION_INTERVAL` to this value.
 
 ### Examples
 

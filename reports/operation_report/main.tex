@@ -413,7 +413,7 @@ A ferramenta aceita os seguintes parâmetros de configuração:
 \begin{verbatim}
 repart-kv-runner <arquivo_workload> [partições] [workers] 
                  [tipo_storage] [motor_storage] 
-                 [warmup] [caminhos_storage]
+                 [warmup] [caminhos_storage] [intervalo_reparticao_ms]
 \end{verbatim}
 
 O parâmetro \texttt{tipo\_storage} pode assumir os valores:
@@ -426,6 +426,8 @@ O parâmetro \texttt{tipo\_storage} pode assumir os valores:
 \end{itemize}
 
 O parâmetro \texttt{motor\_storage} permite selecionar entre os \textit{backends} disponíveis: \texttt{tkrzw\_tree}, \texttt{tkrzw\_hash}, \texttt{lmdb}, \texttt{map} (em memória) ou \texttt{tbb}.
+
+O parâmetro \texttt{intervalo\_reparticao\_ms} define o intervalo em milissegundos entre ciclos de reparticionamento e a duração do rastreamento de acessos às chaves. Este parâmetro configura simultaneamente tanto a duração do rastreamento (\texttt{TRACKING\_DURATION}) quanto o intervalo entre reparticionamentos (\texttt{REPARTITION\_INTERVAL}) com o mesmo valor. O valor padrão é 1000 milissegundos.
 
 \subsection{Funcionamento da ferramenta de execução de experimentos}
 \label{sec:execution-tool}

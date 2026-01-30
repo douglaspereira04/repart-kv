@@ -35,10 +35,10 @@ std::vector<std::string> STORAGE_PATHS = {
     "/tmp"};                    // Default paths for embedded database files
 std::string WORKLOAD_FILE = ""; // Workload file path
 // Repartitioning parameters
-const std::chrono::milliseconds TRACKING_DURATION(
-    0); // Duration to track key accesses before repartitioning
-const std::chrono::milliseconds
-    REPARTITION_INTERVAL(0); // Interval between repartitioning cycles
+std::chrono::milliseconds TRACKING_DURATION(
+    1000); // Duration to track key accesses before repartitioning
+std::chrono::milliseconds
+    REPARTITION_INTERVAL(1000); // Interval between repartitioning cycles
 
 /**
  * @brief Format a number with thousand separators (dots)
@@ -391,8 +391,8 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
     std::string metrics_file =
         workload_filename + "__" + std::to_string(test_workers) + "__" +
         STORAGE_TYPE + "__" + std::to_string(partition_count) + "__" +
-        STORAGE_ENGINE + "__" + std::to_string(STORAGE_PATHS.size()) +
-        "paths.csv";
+        STORAGE_ENGINE + "__" + std::to_string(STORAGE_PATHS.size()) + "__" +
+        std::to_string(TRACKING_DURATION.count()) + ".csv";
 
     // Execute operations
     std::cout << "\n=== Executing Workload ===" << std::endl;
@@ -659,11 +659,12 @@ void execute_with_storage_config(
  * @brief Print usage information
  */
 void print_usage(const char *program_name) {
-    std::cout
-        << "Usage: " << program_name
-        << " <workload_file> [partition_count] [test_workers] "
-           "[storage_type] [storage_engine] [warmup_operations] [storage_paths]"
-        << std::endl;
+    std::cout << "Usage: " << program_name
+              << " <workload_file> [partition_count] [test_workers] "
+                 "[storage_type] [storage_engine] [warmup_operations] "
+                 "[storage_paths] "
+                 "[repartition_interval_ms]"
+              << std::endl;
     std::cout << "\nArguments:" << std::endl;
     std::cout << "  workload_file    Path to the workload file" << std::endl;
     std::cout << "  partition_count  Number of partitions (default: 4)"
@@ -684,6 +685,11 @@ void print_usage(const char *program_name) {
         << "  storage_paths    Comma-separated paths for embedded database "
            "files "
            "(default: /tmp). Multiple paths distribute partitions across them."
+        << std::endl;
+    std::cout
+        << "  repartition_interval_ms  Interval in milliseconds between "
+           "repartitioning cycles and tracking duration (default: 1000). "
+           "Sets both TRACKING_DURATION and REPARTITION_INTERVAL to this value."
         << std::endl;
     std::cout << "\nStorage Types:" << std::endl;
     std::cout << "  hard            HardRepartitioningKeyValueStorage (creates "
@@ -815,6 +821,18 @@ int run_repart_kv(int argc, char *argv[]) {
         }
     }
 
+    if (argc >= 9) {
+        try {
+            int64_t interval_ms = std::stoll(argv[8]);
+            TRACKING_DURATION = std::chrono::milliseconds(interval_ms);
+            REPARTITION_INTERVAL = std::chrono::milliseconds(interval_ms);
+        } catch (const std::exception &e) {
+            std::cerr << "Error: Invalid repartition_interval_ms: " << argv[8]
+                      << std::endl;
+            return 1;
+        }
+    }
+
     std::cout << "=== Repart-KV Workload Executor ===" << std::endl;
     std::cout << "Workload file: " << WORKLOAD_FILE << std::endl;
     std::cout << "Partition count: " << PARTITION_COUNT << std::endl;
@@ -830,6 +848,10 @@ int run_repart_kv(int argc, char *argv[]) {
         }
     }
     std::cout << std::endl;
+    std::cout << "Tracking duration: " << TRACKING_DURATION.count() << "ms"
+              << std::endl;
+    std::cout << "Repartition interval: " << REPARTITION_INTERVAL.count()
+              << "ms" << std::endl;
     std::cout << std::endl;
 
     // Read workload
