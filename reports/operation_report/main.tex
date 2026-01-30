@@ -9,7 +9,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 
-\title{Relatório Operacional Repart-KV}
+\title{Repart-KV: uma biblioteca para repartitionamento de armazenamento chave valor}
 \author{Douglas Pereira Luiz}
 \date{\today}
 
@@ -19,15 +19,20 @@
 \imprimirfolhaderosto
 
 \section{Introdução}
-Sistemas com estado local particionado estaticamente tendem a enfrentar desequilíbrios de carga e restrições de desempenho quando submetidos a padrões de acesso variáveis ou cargas de trabalho dinâmicas. A partir disso, foi desenvolvida a biblioteca Repart-KV, que busca explorar um rebalanceamento de baixo impacto, mantido o processamento eficiente e respeitando critérios de consistência preestabelecidos.
+Sistemas com estado local particionado estaticamente tendem a enfrentar desequilíbrios de carga e restrições de desempenho quando submetidos a padrões de acesso variáveis ou cargas de trabalho dinâmicas. Para enfrentar variabilidade intensa em padrões de acesso que degradam o desempenho em uma determidada configuração do esquema de partições, é possível rebalancear a carga de trabalho durante a execução por meio de particionamentos dinâmicos, o que pode permitir aproveitar melhor a capacidade de processamento do sistema. 
 
- A biblioteca foi construída sobre o arcabouço das técnicas discutidas em \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}, e o documento descreve arquitetura, reconfiguração dinâmica e os experimentos que validam a abordagem.
+Entretanto, o reparticionamento pode representar um custo computacional significativo, e pode ser difícil de implementar de forma eficiente e correta. Com o objetivo de encontrar uma forma de particionar e rebalancear o estado local, utilizando o contexto de bancos de dados chave-valor, desenvolvemos e exploramos de diferentes formas uma abordagem de reparticionamento dinâmico que permite reconfigurar o esquema de partições durante a execução do sistema, sem interromper o processamento de operações em \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}. Como uma forma de consolidar a aplicabilidade dessa abordagem, desenvolvemos a biblioteca Repart-KV, que busca explorar um rebalanceamento de baixo impacto, mantendo processamento eficiente e respeitando critérios de consistência preestabelecidos.
 
- Repart-KV foi projetada com extensibilidade em mente: além de suportar os backends permanentes documentados em `storage/`, a biblioteca permite adicionar rapidamente novos adaptadores para soluções comerciais de bancos de dados chave-valor, bastando implementar a interface pública e registrar o backend na CLI. Também fornecemos uma ferramenta de testes que automatiza a execução de workloads padronizados contra qualquer combinação de storage e configurações, facilitando a avaliação experimental em diferentes cenários.
+ A biblioteca foi construída sobre o arcabouço das técnicas discutidas em \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}, e este documento descreve a arquitetura, reconfiguração dinâmica e as ferramentas de testes e experimentos que podem servir para validar a abordagem.
+
+ Repart-KV foi projetada com extensibilidade em mente: além de suportar alguns backends de armazenamento já implementados, a biblioteca permite adicionar rapidamente novos adaptadores para soluções comerciais de bancos de dados chave-valor, bastando implementar a interface pública e registrar o backend na CLI. Também fornecemos uma ferramenta de testes que automatiza a execução de workloads padronizados contra qualquer combinação de storage e configurações, facilitando a avaliação experimental em diferentes cenários.
 
  Em termos de estratégia, a biblioteca implementa múltiplas estratégias de reparticionamento, e cada uma pode ser aplicada a qualquer backend que implemente as interfaces disponíveis. Os diferentes componentes da biblioteca contam com testes automatizados que validam o comportamento esperado e conferem maior confiabilidade quanto a corretude da implementação.
 
+O restante do documento está organizado da seguinte forma. A Seção~\ref{sec:metodologia} explica a abordagem de implementação da biblioteca e as ferramentas utilizadas; a Seção~\ref{sec:arquitetura} descreve a arquitetura modular e os principais componentes, incluindo as estratégias de reparticionamento; a Seção~\ref{sec:execucao} apresenta os testes automatizados e a ferramenta de execução de experimentos que permitem avaliar diferentes configurações; por fim, a Seção~\ref{sec:discussao} aborda reflexões e aprendizados decorrentes do desenvolvimento.
+
 \section{Metodologia}
+\label{sec:metodologia}
 
 A implementação da biblioteca Repart-KV foi concebida como uma materialização das técnicas de reparticionamento dinâmico de estado apresentadas nos trabalhos publicados \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}. Nesses estudos, foram propostas estratégias de balanceamento de carga baseadas em particionamento de grafos que permitem reconfigurar o esquema de partições durante a execução do sistema, sem interromper o processamento de requisições. A biblioteca foi projetada para encapsular essas técnicas em componentes modulares e extensíveis, possibilitando a sua aplicação em diferentes contextos e com diversos \textit{backends} de armazenamento.
 
@@ -49,15 +54,18 @@ A arquitetura da biblioteca foi projetada utilizando \textit{templates} C++ que 
 
 \subsection{Testes automatizados}
 
-Para assegurar a corretude da implementação, os principais componentes da biblioteca contam com testes automatizados. Os testes foram desenvolvidos seguindo uma abordagem de verificação unitária, onde cada componente é testado isoladamente antes de ser integrado ao sistema. O sistema de compilação CMake configura automaticamente os executáveis de teste, que podem ser executados individualmente ou em conjunto através do \textit{script} \texttt{run\_tests.sh}.
+Para aumentar a confiabilidade na corretude da implementação, os principais componentes da biblioteca contam com testes automatizados. Os testes foram desenvolvidos seguindo uma abordagem de verificação unitária, onde cada componente é testado isoladamente. O sistema de compilação CMake configura automaticamente os executáveis de teste, que podem ser executados individualmente ou em conjunto através do \textit{script} \texttt{run\_tests.sh}.
 
 \subsection{Ferramenta de execução de experimentos}
 
-Além dos componentes da biblioteca, foi desenvolvida uma ferramenta de linha de comando (\texttt{repart-kv-runner}) que permite a execução de experimentos com diferentes configurações de armazenamento e estratégias de reparticionamento. A ferramenta lê arquivos de carga de trabalho em formato padronizado, executa as operações e coleta métricas de desempenho durante a execução.
+Além dos componentes da biblioteca, foi desenvolvida uma ferramenta de linha de comando (\texttt{repart-kv-runner}) que permite a execução de experimentos com diferentes configurações de armazenamento e estratégias de reparticionamento. A ferramenta lê arquivos de carga de trabalho em formato padronizado, executa as operações e coleta métricas de desempenho durante a execução. O funcionamento dessa ferramenta é descrito em detalhes na Seção \ref{sec:execution-tool}.
 
 \section{Arquitetura e principais componentes}
+\label{sec:arquitetura}
 
 A biblioteca Repart-KV foi projetada de forma modular, com componentes que podem ser combinados de diferentes maneiras para atender a diferentes requisitos de armazenamento e reparticionamento. A arquitetura segue um fluxo onde operações são recebidas, executadas ou despachadas para o componente de armazenamento particionado, que por sua vez utiliza um ou mais motores de armazenamento subjacentes e, opcionalmente, rastreia os padrões de acesso para reconfiguração dinâmica das partições.
+
+Uma importante diferença entre a biblioteca desenvolvidas e os protótipos apresentados nos trabalhos \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall} e qua a bilbioteca Repart-KV considera uma API semelhante a \textit{embbeded databases} convencionais. Atualmente conta com as operações \texttt{read}, \texttt{write} e \texttt{scan}, que quando invocadas retornam o valor ao invocador da operação.
 
 A seguir são descritos os principais componentes da biblioteca, e as estratégias de reparticionamento implementadas.
 
@@ -369,6 +377,7 @@ Durante a atualização do mapa de partições, as operações de leitura e escr
 
 
 \section{Execução de testes e experimentos}
+\label{sec:execucao}
 
 A biblioteca conta com testes automatizados que validam o comportamento esperado e conferem maior confiabilidade quanto a corretude da implementação. Enquanto isso, a ferramenta de execução de experimentos permite a execução de experimentos com diferentes configurações de armazenamento e estratégias de reparticionamento a fim de permitir avaliações comparativas de diferentes abordagens de reparticionamento.
 
@@ -387,7 +396,8 @@ Os executáveis de teste incluem: \texttt{test\_storage\_engine}, \texttt{test\_
 
 A ferramenta de execução de experimentos aceita diferentes argumentos de configuração, além de um arquivo de carga de trabalho. É necessario que o arquivo de carga de trabalho siga o formato padronizado. A seguir é apresentado esse formato, e posteriomente são descritos os parâmetros de configuração.
 
-\subsection{Formato da carga de trabalho \label{sec:workload-format}}
+\subsection{Formato da carga de trabalho}
+\label{sec:workload-format}
 
 O formato do arquivo de carga de trabalho segue a convenção:
 \begin{itemize}
@@ -417,14 +427,24 @@ O parâmetro \texttt{tipo\_storage} pode assumir os valores:
 
 O parâmetro \texttt{motor\_storage} permite selecionar entre os \textit{backends} disponíveis: \texttt{tkrzw\_tree}, \texttt{tkrzw\_hash}, \texttt{lmdb}, \texttt{map} (em memória) ou \texttt{tbb}.
 
-\subsection{Funcionamento da ferramenta}
+\subsection{Funcionamento da ferramenta de execução de experimentos}
+\label{sec:execution-tool}
 
 Durante a execução, a ferramenta instancia o armazenamento configurado e cria múltiplas \textit{threads} trabalhadoras que executam operações concorrentemente. Cada \textit{thread} processa uma porção das operações do arquivo de carga de trabalho, e os contadores de operações executadas são agregados ao final para o cálculo da vazão total do sistema.
 
 Paralelamente, uma \textit{thread} de métricas registra periodicamente em um arquivo CSV o tempo decorrido, número de operações executadas, uso de memória, uso de disco e estados de rastreamento e reparticionamento. Essas métricas permitem a análise detalhada do comportamento do sistema sob diferentes cargas de trabalho, facilitando a comparação entre as estratégias implementadas e a identificação de gargalos de desempenho.
 
 \section{Discussão}
-% TODO: Discussão a ser escrita. 
+\label{sec:discussao}
+
+O desenvolvimento do Repart-KV foi conduzido como uma consolidação, em forma de biblioteca, das técnicas já propostas e avaliadas nos trabalhos publicados \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}. Apesar de preservar o conceito central de \textit{stall-free repartitioning} sobre estado local particionado em um armazenamento chave-valor, o projeto adota variações importantes em relação aos protótipos discutidos nesses estudos. Em particular, diversas decisões de projeto foram motivadas por dois objetivos práticos: (i) oferecer uma API mais clara e reutilizável, que se assemelha a uma API de \textit{embbeded database} convencional; e (ii) reduzir sobrecargas de execução e contenções desnecessárias, buscando um melhor desempenho nas combinações mais relevantes de carga de trabalho e \textit{backend}.
+
+A extensibilidade é alcançada com herança via CRTP (\textit{Curiously Recurring Template Pattern}), permitindo polimorfismo em tempo de compilação e composição de componentes sem a necessidade de \textit{virtuals}. Essa escolha facilita incorporar novos \textit{backends} e novas políticas de reparticionamento preservando tipos fortes, mantendo a interface consistente e reduzindo custo de abstração.
+
+Como resultado direto da evolução para uma biblioteca, também foi incorporada uma abordagem adicional de reparticionamento que não estava presente de forma equivalente nos protótipos: o particionamento físico dos dados (estratégia \textit{hard}). Nessa variante, o sistema pode operar com múltiplas instâncias de motores de armazenamento por partição, o que, além de separar fisicamente o estado, permite explorar de forma transparente os benefícios de E/S paralela quando os diretórios de armazenamento são distribuídos em diferentes dispositivos. Essa possibilidade abre espaço para novos estudos, por exemplo sobre sensibilidade a topologias de disco, políticas de posicionamento e impacto de cargas com \textit{scan} intensivo.
+
+Por fim, para dar suporte à validação sistemática das estratégias, foram desenvolvidas ferramentas de testes automatizados e uma ferramenta de execução de experimentos, permitindo variar parâmetros (número de partições, trabalhadores, estratégia e \textit{backend}) e coletar métricas ao longo do tempo. Como trabalho futuro imediato, essas ferramentas serão usadas para aprofundar a verificação de desempenho e robustez da implementação, reproduzindo cenários dos trabalhos anteriores e ampliando a avaliação para as novas variantes de projeto introduzidas nesta biblioteca.
+
 
 
 
