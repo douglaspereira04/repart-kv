@@ -106,3 +106,5 @@ gmon.out
 
 # LaTeX generated files
 *.aux
+*.bbl
+*.blg
