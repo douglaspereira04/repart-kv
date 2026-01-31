@@ -394,7 +394,7 @@ Os testes automatizados podem ser executados através do \textit{script} \texttt
 
 Os executáveis de teste incluem: \texttt{test\_storage\_engine}, \texttt{test\_keystorage}, \texttt{test\_graph}, \texttt{test\_metis\_graph}, \texttt{test\_partitioned\_kv\_storage}, \texttt{test\_repartitioning\_storage}, entre outros.
 
-A ferramenta de execução de experimentos aceita diferentes argumentos de configuração, além de um arquivo de carga de trabalho. É necessario que o arquivo de carga de trabalho siga o formato padronizado. A seguir é apresentado esse formato, e posteriomente são descritos os parâmetros de configuração.
+A ferramenta de execução de experimentos aceita diferentes argumentos de configuração, além de uma lista de arquivos de carga de trabalho. É necessario que os arquivos de carga de trabalho sigam o formato padronizado e que o número de arquivos fornecidos corresponda exatamente ao número de \textit{threads} trabalhadoras configuradas. A seguir é apresentado esse formato, e posteriomente são descritos os parâmetros de configuração.
 
 \subsection{Formato da carga de trabalho}
 \label{sec:workload-format}
@@ -411,10 +411,12 @@ O formato do arquivo de carga de trabalho segue a convenção:
 A ferramenta aceita os seguintes parâmetros de configuração:
 
 \begin{verbatim}
-repart-kv-runner <arquivo_workload> [partições] [workers] 
+repart-kv-runner [arquivos_workload] [partições] [workers] 
                  [tipo_storage] [motor_storage] 
                  [warmup] [caminhos_storage] [intervalo_reparticao_ms]
 \end{verbatim}
+
+O parâmetro \texttt{arquivos\_workload} deve ser uma lista separada por vírgulas de caminhos para os arquivos de carga de trabalho, sendo um arquivo para cada \textit{thread} trabalhadora. A ferramenta valida se o número de arquivos coincide com o número de \textit{workers}.
 
 O parâmetro \texttt{tipo\_storage} pode assumir os valores:
 \begin{itemize}

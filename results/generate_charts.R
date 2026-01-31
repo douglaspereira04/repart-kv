@@ -61,14 +61,20 @@ for (csv_file in csv_files) {
   data$workers_factor <- factor(data$workers, levels = sort(unique(data$workers)))
   
   # Create the plot
-  p <- ggplot(data, aes(x = workers_factor, y = ops_per_second / 1000, color = storage_type_label, group = storage_type_label)) +
-    geom_line(linewidth = 1.5, alpha = 0.8) +
+  p <- ggplot(data, aes(x = workers_factor, y = ops_per_second / 1000, 
+                        color = storage_type_label, 
+                        linetype = storage_type_label,
+                        shape = storage_type_label,
+                        group = storage_type_label)) +
+    geom_line(linewidth = 1.2, alpha = 0.8) +
     geom_point(size = 4, alpha = 0.8) +
     labs(
       x = "Number of Workers",
       y = "Thousand Operations per Second",
       title = paste(workload, "-", storage_engine),
-      color = "Storage Type"
+      color = "Storage Type",
+      linetype = "Storage Type",
+      shape = "Storage Type"
     ) +
     theme_minimal() +
     theme(
@@ -82,6 +88,8 @@ for (csv_file in csv_files) {
       panel.grid.minor = element_line(color = "gray95", linewidth = 0.25)
     ) +
     scale_color_brewer(palette = "Set1") +
+    scale_linetype_manual(values = c("solid", "dashed", "dotted", "dotdash", "longdash", "twodash", "11", "22", "44")) +
+    scale_shape_manual(values = c(16, 17, 18, 15, 3, 4, 8, 1, 2)) +
     scale_y_continuous(
       expand = expansion(mult = c(0, 0.15)), 
       limits = c(0, NA),

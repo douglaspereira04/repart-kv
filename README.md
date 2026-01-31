@@ -35,12 +35,12 @@ The CLI runner is optional (`repart-kv-runner`). Either build it via `./build.sh
 
 ```bash
 cd build
-./repart-kv-runner <workload_file> [partition_count] [test_workers] [storage_type] [storage_engine] [warmup_operations] [storage_paths] [repartition_interval_ms]
+./repart-kv-runner [workload_files] [partition_count] [test_workers] [storage_type] [storage_engine] [warmup_operations] [storage_paths] [repartition_interval_ms]
 ```
 
 ### Arguments
 
-- **workload_file**: path to workload file (required)
+- **workload_files**: comma-separated paths to workload files (one per worker thread). The number of files must match `test_workers`.
 - **partition_count**: number of partitions (default: `4`)
 - **test_workers**: worker threads for workload execution (default: `1`)
 - **storage_type**: `hard`, `soft`, `threaded`, `hard_threaded`, or `engine` (default: `soft`)

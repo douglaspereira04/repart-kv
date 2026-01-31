@@ -32,8 +32,8 @@ size_t WARMUP_OPERATIONS = 0;              // Default to no warmup
 std::string STORAGE_TYPE = "soft";         // Default to soft repartitioning
 std::string STORAGE_ENGINE = "tkrzw_tree"; // Default to TkrzwTreeStorageEngine
 std::vector<std::string> STORAGE_PATHS = {
-    "/tmp"};                    // Default paths for embedded database files
-std::string WORKLOAD_FILE = ""; // Workload file path
+    "/tmp"}; // Default paths for embedded database files
+std::vector<std::string> WORKLOAD_FILES; // Workload file paths
 // Repartitioning parameters
 std::chrono::milliseconds TRACKING_DURATION(
     1000); // Duration to track key accesses before repartitioning
@@ -301,7 +301,7 @@ void execute_operation(const workload::Operation &op, StorageType &storage) {
 /**
  * @brief Worker function that executes a subset of operations
  * @param worker_id ID of this worker (0-indexed)
- * @param operations Reference to the full operations vector
+ * @param operations Reference to the operations vector for this worker
  * @param storage Reference to the storage instance
  * @param executed_counts Array of counters (one per worker, no synchronization
  * needed)
@@ -312,12 +312,7 @@ void worker_function(size_t worker_id,
                      StorageType &storage,
                      std::vector<size_t> &executed_counts) {
 
-    // Execute operations in a strided pattern
-    // Worker 0: operations[0], operations[0 + TEST_WORKERS], operations[0 +
-    // 2*TEST_WORKERS], ... Worker 1: operations[1], operations[1 +
-    // TEST_WORKERS], operations[1 + 2*TEST_WORKERS], ... etc.
-    for (size_t i = worker_id; i < operations.size(); i += TEST_WORKERS) {
-        const auto &op = operations[i];
+    for (const auto &op : operations) {
         execute_operation(op, storage);
         executed_counts[worker_id]++;
     }
@@ -325,11 +320,10 @@ void worker_function(size_t worker_id,
 
 // Template function to run workload with any RepartitioningKeyValueStorage
 // implementation
-template <typename StorageType> void
-run_workload_with_storage(const std::vector<workload::Operation> &operations,
-                          size_t partition_count, size_t test_workers,
-                          const std::string &storage_type_name,
-                          size_t warmup_operations) {
+template <typename StorageType> void run_workload_with_storage(
+    const std::vector<std::vector<workload::Operation>> &all_worker_operations,
+    size_t partition_count, size_t test_workers,
+    const std::string &storage_type_name, size_t warmup_operations) {
     // Create storage instance
     std::cout << "\n=== Initializing Storage ===" << std::endl;
 
@@ -374,8 +368,8 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
                                         0); // One counter per worker
     std::atomic<bool> metrics_running(true);
 
-    // Extract filename from workload_file path
-    std::string workload_filename = WORKLOAD_FILE;
+    // Extract filename from the first workload_file path for the metrics file
+    std::string workload_filename = WORKLOAD_FILES[0];
     size_t last_slash = workload_filename.find_last_of("/\\");
     if (last_slash != std::string::npos) {
         workload_filename = workload_filename.substr(last_slash + 1);
@@ -396,25 +390,39 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
 
     // Execute operations
     std::cout << "\n=== Executing Workload ===" << std::endl;
+
+    // Handle warmup for each worker
     if (warmup_operations > 0) {
         std::cout << "Warming up: executing "
                   << format_with_separators(warmup_operations)
-                  << " operations before starting experiment..." << std::endl;
+                  << " operations per worker before starting experiment..."
+                  << std::endl;
+
+        for (size_t i = 0; i < test_workers; ++i) {
+            const auto &ops = all_worker_operations[i];
+            size_t actual_warmup = std::min(warmup_operations, ops.size());
+            for (size_t j = 0; j < actual_warmup; ++j) {
+                execute_operation(ops[j], storage);
+            }
+        }
+
+        std::cout << "Warmup complete." << std::endl;
     }
 
-    for (size_t i = 0; i < warmup_operations; ++i) {
-        const auto &op = operations[i];
-        execute_operation(op, storage);
+    // Prepare experiment operations (after warmup) for each worker
+    std::vector<std::vector<workload::Operation>>
+        experiment_operations_per_worker;
+    experiment_operations_per_worker.reserve(test_workers);
+    for (size_t i = 0; i < test_workers; ++i) {
+        const auto &ops = all_worker_operations[i];
+        if (warmup_operations < ops.size()) {
+            experiment_operations_per_worker.emplace_back(
+                ops.begin() + warmup_operations, ops.end());
+        } else {
+            experiment_operations_per_worker.emplace_back();
+        }
     }
 
-    if (warmup_operations > 0) {
-        std::cout << "Warmup complete: "
-                  << format_with_separators(warmup_operations)
-                  << " operations executed." << std::endl;
-    }
-
-    std::vector<workload::Operation> experiment_operations(
-        operations.begin() + warmup_operations, operations.end());
     auto start_time = std::chrono::high_resolution_clock::now();
 
     // Start metrics logging thread
@@ -428,8 +436,9 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
 
     for (size_t i = 0; i < test_workers; ++i) {
         worker_threads.emplace_back(
-            worker_function<StorageType>, i, std::ref(experiment_operations),
-            std::ref(storage), std::ref(executed_counts));
+            worker_function<StorageType>, i,
+            std::ref(experiment_operations_per_worker[i]), std::ref(storage),
+            std::ref(executed_counts));
     }
 
     // Wait for all worker threads to complete
@@ -481,7 +490,7 @@ run_workload_with_storage(const std::vector<workload::Operation> &operations,
  * @brief Helper function to execute workload with storage engine configuration
  */
 void execute_with_storage_config(
-    const std::vector<workload::Operation> &operations) {
+    const std::vector<std::vector<workload::Operation>> &operations) {
     size_t warmup_operations = WARMUP_OPERATIONS;
     if (STORAGE_ENGINE == "tkrzw_tree") {
         if (STORAGE_TYPE == "hard") {
@@ -536,7 +545,7 @@ void execute_with_storage_config(
                 "SoftRepartitioningKeyValueStorage", warmup_operations);
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType = SoftThreadedRepartitioningKeyValueStorage<
-                TkrzwTreeStorageEngine, MapKeyStorage>;
+                TkrzwHashStorageEngine, MapKeyStorage>;
             run_workload_with_storage<StorageType>(
                 operations, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
@@ -660,13 +669,15 @@ void execute_with_storage_config(
  */
 void print_usage(const char *program_name) {
     std::cout << "Usage: " << program_name
-              << " <workload_file> [partition_count] [test_workers] "
+              << " [workload_files] [partition_count] [test_workers] "
                  "[storage_type] [storage_engine] [warmup_operations] "
                  "[storage_paths] "
                  "[repartition_interval_ms]"
               << std::endl;
     std::cout << "\nArguments:" << std::endl;
-    std::cout << "  workload_file    Path to the workload file" << std::endl;
+    std::cout << "  workload_files   Comma-separated paths to workload files "
+                 "(one per worker)"
+              << std::endl;
     std::cout << "  partition_count  Number of partitions (default: 4)"
               << std::endl;
     std::cout << "  test_workers     Number of worker threads (default: 1)"
@@ -735,7 +746,17 @@ int run_repart_kv(int argc, char *argv[]) {
         return 1;
     }
 
-    WORKLOAD_FILE = argv[1];
+    std::string workload_files_str = argv[1];
+    std::stringstream ss_wf(workload_files_str);
+    std::string wf;
+    while (std::getline(ss_wf, wf, ',')) {
+        // Trim whitespace
+        wf.erase(0, wf.find_first_not_of(" \t"));
+        wf.erase(wf.find_last_not_of(" \t") + 1);
+        if (!wf.empty()) {
+            WORKLOAD_FILES.push_back(wf);
+        }
+    }
 
     if (argc >= 3) {
         try {
@@ -765,6 +786,15 @@ int run_repart_kv(int argc, char *argv[]) {
                       << std::endl;
             return 1;
         }
+    }
+
+    // Validate that the number of workload files matches the number of workers
+    if (WORKLOAD_FILES.size() != TEST_WORKERS) {
+        std::cerr << "Error: Number of workload files ("
+                  << WORKLOAD_FILES.size()
+                  << ") does not match number of workers (" << TEST_WORKERS
+                  << ")" << std::endl;
+        return 1;
     }
 
     if (argc >= 5) {
@@ -834,7 +864,14 @@ int run_repart_kv(int argc, char *argv[]) {
     }
 
     std::cout << "=== Repart-KV Workload Executor ===" << std::endl;
-    std::cout << "Workload file: " << WORKLOAD_FILE << std::endl;
+    std::cout << "Workload files: ";
+    for (size_t i = 0; i < WORKLOAD_FILES.size(); ++i) {
+        std::cout << WORKLOAD_FILES[i];
+        if (i < WORKLOAD_FILES.size() - 1) {
+            std::cout << ", ";
+        }
+    }
+    std::cout << std::endl;
     std::cout << "Partition count: " << PARTITION_COUNT << std::endl;
     std::cout << "Test workers: " << TEST_WORKERS << std::endl;
     std::cout << "Storage type: " << STORAGE_TYPE << std::endl;
@@ -854,31 +891,42 @@ int run_repart_kv(int argc, char *argv[]) {
               << "ms" << std::endl;
     std::cout << std::endl;
 
-    // Read workload
-    std::vector<workload::Operation> operations;
-    try {
-        operations = workload::read_workload(WORKLOAD_FILE);
-    } catch (const std::exception &e) {
-        std::cerr << "Error: " << e.what() << std::endl;
-        return 1;
+    // Read workloads
+    std::vector<std::vector<workload::Operation>> all_worker_operations;
+    all_worker_operations.reserve(TEST_WORKERS);
+    size_t total_loaded_ops = 0;
+
+    for (const auto &file : WORKLOAD_FILES) {
+        try {
+            auto ops = workload::read_workload(file);
+            total_loaded_ops += ops.size();
+            all_worker_operations.push_back(std::move(ops));
+        } catch (const std::exception &e) {
+            std::cerr << "Error loading workload file " << file << ": "
+                      << e.what() << std::endl;
+            return 1;
+        }
     }
 
-    std::cout << "Loaded " << format_with_separators(operations.size())
-              << " operations from workload file" << std::endl;
+    std::cout << "Loaded " << format_with_separators(total_loaded_ops)
+              << " operations from " << WORKLOAD_FILES.size()
+              << " workload files" << std::endl;
 
     // Print summary of operations
     size_t read_count = 0, write_count = 0, scan_count = 0;
-    for (const auto &op : operations) {
-        switch (op.type) {
-            case workload::OperationType::READ:
-                read_count++;
-                break;
-            case workload::OperationType::WRITE:
-                write_count++;
-                break;
-            case workload::OperationType::SCAN:
-                scan_count++;
-                break;
+    for (const auto &worker_ops : all_worker_operations) {
+        for (const auto &op : worker_ops) {
+            switch (op.type) {
+                case workload::OperationType::READ:
+                    read_count++;
+                    break;
+                case workload::OperationType::WRITE:
+                    write_count++;
+                    break;
+                case workload::OperationType::SCAN:
+                    scan_count++;
+                    break;
+            }
         }
     }
 
@@ -889,7 +937,7 @@ int run_repart_kv(int argc, char *argv[]) {
     std::cout << "  SCAN:  " << format_with_separators(scan_count) << std::endl;
 
     // Execute workload with the selected storage type and engine
-    execute_with_storage_config(operations);
+    execute_with_storage_config(all_worker_operations);
 
     return 0;
 }
