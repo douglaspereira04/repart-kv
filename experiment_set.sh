@@ -132,8 +132,8 @@ function run_hard_experiments {
 
 
 #invoke run_hard_experiments function with arguments
-run_hard_experiments 4 ycsb_a.txt 100000 lmdb 1,2 1,8 /tmp
-run_hard_experiments 4 ycsb_a.txt 100000 tkrzw_tree 1,2 1,8 /tmp
+run_hard_experiments 5 ycsb_a.txt 100000 lmdb 1,2 1,8 /tmp
+run_hard_experiments 5 ycsb_a.txt 100000 tkrzw_tree 1,2 1,8 /tmp
 
-run_hard_experiments 4 ycsb_d.txt 100000 lmdb 1,2 1,8 /tmp
-run_hard_experiments 4 ycsb_d.txt 100000 tkrzw_tree 1,2 1,8 /tmp
+run_hard_experiments 5 ycsb_d.txt 100000 lmdb 1,2 1,8 /tmp
+run_hard_experiments 5 ycsb_d.txt 100000 tkrzw_tree 1,2 1,8 /tmp

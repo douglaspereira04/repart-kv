@@ -1,0 +1,169 @@
+\documentclass[11pt,openright,oneside,a4paper,article]{abntex2}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage[brazil]{babel}
+\usepackage{lmodern}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+\title{Relatório de Avaliação Experimental: Biblioteca Repart-KV e a Técnica de Hard Partitioning}
+\author{Douglas Pereira Luiz}
+\date{\today}
+
+\begin{document}
+
+\imprimircapa
+\imprimirfolhaderosto
+
+\section{Introdução}
+
+Sistemas de armazenamento distribuídos e paralelos frequentemente utilizam o particionamento de estado para escalar o desempenho e a capacidade de armazenamento. Entretanto, o particionamento estático pode levar a desequilíbrios de carga quando os padrões de acesso mudam ao longo do tempo. Para mitigar esse problema, técnicas de reparticionamento dinâmico buscam reconfigurar o esquema de partições durante a execução, visando manter o equilíbrio e a eficiência do sistema.
+
+A biblioteca \texttt{repart-kv} foi desenvolvida para consolidar e estender as técnicas de reparticionamento dinâmico de baixo impacto (\textit{stall-free}) propostas em trabalhos anteriores \cite{luiz2024lightweight, luiz2024balanceamento, luiz2025stall}. Diferente de protótipos anteriores, a \texttt{repart-kv} oferece uma interface padronizada semelhante a bancos de dados embarcados (\textit{embedded databases}) e introduz a estratégia de \textit{hard partitioning}, que permite o particionamento físico dos dados em múltiplas instâncias de motores de armazenamento.
+
+Este relatório apresenta uma avaliação experimental inicial da biblioteca \texttt{repart-kv}, na forma de \textit{microbenchmaking} com foco na análise de desempenho da técnica de \textit{hard partitioning} sob diferentes cargas de trabalho e configurações. 
+
+O restante deste documento está organizado da seguinte forma: a Seção~\ref{sec:objetivos} descreve os objetivos da avaliação; a Seção~\ref{sec:metodologia} apresenta a metodologia adotada; a Seção~\ref{sec:configuracao} detalha a configuração dos experimentos; a Seção~\ref{sec:resultados} apresenta e analisa os resultados obtidos; e, por fim, a Seção~\ref{sec:discussao} discute as conclusões e trabalhos futuros.
+
+\section{Objetivos}
+\label{sec:objetivos}
+
+O principal objetivo desta avaliação experimental é realizar uma verificação inicial do desempenho e da viabilidade da técnica de \textit{hard partitioning} implementada na biblioteca \texttt{repart-kv}. Busca-se observar como a biblioteca se comporta em termos de vazão (\textit{throughput}) quando submetida a diferentes cargas de trabalho do benchmark YCSB, comparando o impacto do uso de múltiplas partições físicas e do intervalo de reparticionamento em relação ao uso direto do motor de armazenamento (\textit{baseline}).
+
+\section{Metodologia}
+\label{sec:metodologia}
+
+Para a realização deste trabalho, a metodologia seguiu as seguintes etapas:
+\begin{enumerate}
+    \item \textbf{Seleção de Soluções}: Foram selecionadas soluções comerciais de \textit{key-value store} local (LMDB e Tkrzw) para servirem como motores de armazenamento subjacentes.
+    \item \textbf{Definição de Cargas de Trabalho}: Utilizou-se o benchmark YCSB (Yahoo! Cloud Serving Benchmark) com as cargas A e D, que representam diferentes padrões de acesso comuns em sistemas reais.
+    \item \textbf{Definição de Parâmetros}: Foram estabelecidos parâmetros de teste, como o número de trabalhadores (\textit{workers}), número de partições e intervalos de reparticionamento, para verificar a sensibilidade da solução.
+    \item \textbf{Execução dos Experimentos}: Os experimentos foram automatizados através de scripts Bash (\texttt{experiment\_set.sh}), garantindo a repetibilidade dos testes (5 repetições para cada configuração).
+    \item \textbf{Compilação e Análise}: Os resultados coletados em formato CSV foram processados para a geração de gráficos de \textit{throughput}, seguidos de uma análise dos dados.
+\end{enumerate}
+
+\section{Configuração dos Experimentos}
+\label{sec:configuracao}
+
+Nesta seção, detalhamos o ambiente experimental e os parâmetros utilizados para a avaliação da biblioteca \texttt{repart-kv}. A configuração abrange a escolha dos motores de armazenamento subjacentes, a caracterização das cargas de trabalho sintéticas e a definição dos parâmetros operacionais que guiaram a execução dos testes.
+
+\subsection{Motores de Armazenamento}
+
+Foram utilizadas duas soluções de armazenamento persistente amplamente reconhecidas:
+\begin{itemize}
+    \item \textbf{LMDB (Lightning Memory-Mapped Database)}: Um banco de dados baseado em árvores B+ que utiliza mapeamento de memória (\textit{mmap}), oferecendo transações ACID e alta eficiência em leituras. Nos experimentos, o LMDB foi utilizado em sua configuração padrão, sem compressão.
+    \item \textbf{Tkrzw}: Uma biblioteca moderna que sucede o Kyoto Cabinet, oferecendo diversas implementações de estruturas de dados. Para este trabalho, utilizou-se a implementação \texttt{TreeDBM} (árvore B+), configurada especificamente para utilizar compressão \textit{zlib}, visando observar o impacto da compressão no desempenho e uso de disco.
+\end{itemize}
+
+\subsection{Cargas de Trabalho}
+
+As cargas de trabalho foram derivadas do YCSB \cite{ycsb}, conforme detalhado em \cite{luiz2025stall}:
+\begin{itemize}
+    \item \textbf{Carga A (Update-heavy)}: Composta por 50\% de leituras e 50\% de atualizações. Representa cenários como o armazenamento de sessões de usuários, onde as informações são frequentemente lidas e atualizadas.
+    \item \textbf{Carga D (Read-latest)}: Composta por 95\% de leituras e 5\% de inserções. Simula aplicações de redes sociais onde os usuários acessam predominantemente os dados mais recentemente inseridos (ex: \textit{trending topics}).
+\end{itemize}
+
+\subsection{Parâmetros de Teste}
+
+Os experimentos foram configurados com os seguintes parâmetros, extraídos de \texttt{experiment\_set.sh} e \texttt{src/repart\_kv.cpp}:
+\begin{itemize}
+    \item \textbf{Trabalhadores (\textit{workers})}: 1 e 2 threads. Cada \textit{worker} é uma \textit{thread} dedicada que executa todas as operações definidas no arquivo de carga de trabalho;
+    \item \textbf{Partições}: 1 e 8 partições.
+    \item \textbf{Intervalo de Reparticionamento}: 0 (desabilitado) e 1 segundo.
+    \item \textbf{Repetições}: 5 execuções para cada cenário.
+\end{itemize}
+
+\subsection{Ambiente de Testes}
+
+Os experimentos foram conduzidos em uma workstation com a seguinte configuração:
+\begin{itemize}
+    \item \textbf{Processador}: Intel Xeon E5-2683 v4 (16 núcleos físicos (\textit{Hyper-Threading foi desabilitado para os experimentos}), 2,10 GHz, 40 MB de cache);
+    \item \textbf{Memória}: 64 GB RAM DDR4 2400 MHz ECC RDIMM;
+    \item \textbf{Sistema Operacional}: Ubuntu 24.04 LTS (kernel Linux 6.14.0-37-generic);
+    \item \textbf{Compilador}: GCC 13.3.0 (padrão C++20).
+\end{itemize}
+
+\section{Resultados}
+\label{sec:resultados}
+
+Nesta seção, apresentamos os resultados de vazão (\textit{throughput}) obtidos para as diferentes configurações, analisando primeiro a carga A e, em seguida, a carga D. Os resultados foram compilados em gráficos que apresentam a vazão no eixo Y (em operações por segundo) e o número de \textit{workers} no eixo X.
+
+\subsection{Análise do Throughput com a carga A (Update-heavy)}
+
+A carga A apresenta um desafio para os motores de armazenamento devido à alta frequência de atualizações (50\%). Os resultados agregados mostram comportamentos distintos entre os motores Tkrzw e LMDB.
+
+\subsubsection{Tkrzw com carga A}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{throughput/ycsb_a.tkrzw_tree.png}
+    \caption{Vazão para a carga A utilizando o motor Tkrzw (Eixo X: número de \textit{workers}; Eixo Y: vazão em ops/s). Valores maiores de vazão indicam melhor desempenho.}
+    \label{fig:vazao_a_tkrzw}
+\end{figure}
+
+Para o motor Tkrzw (Figura~\ref{fig:vazao_a_tkrzw}), observa-se que o uso de \textit{hard partitioning} com 8 partições elevou significativamente a vazão em comparação ao \textit{baseline} (\texttt{engine}). Com 1 trabalhador, a vazão saltou de aproximadamente 41 mil ops/s no \textit{baseline} para mais de 481 mil ops/s com 8 partições físicas. Mesmo com 2 trabalhadores, a configuração de 8 partições manteve uma vazão superior (378 mil ops/s) à do uso do motor de armazenamento diretamente (98 mil ops/s). Habilitar o reparticionamento causou uma redução na vazão (de 481 mil para 389 mil ops/s com 1 \textit{worker}), o que sujere que, ou o sobrecusto do reparticionamento não supera os ganhos obtidos com o rebalanceamento de carga. Os motivos podem ser sobrecustos inerentes do modelo de execução implementado, custos do algoritmo que implementa o modelo de execução.
+
+Uma observação importante é que as versões \textit{hard} com uma só partição apresentam resultados praticamente identicos entre si. Com uma única partição, o sistema faz o rastreamento da carga de trabalho, entretanto não há reparticionamento, o que sugere que o custo do rastreamento não é significativo.
+
+\subsubsection{LMDB com carga A}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{throughput/ycsb_a.lmdb.png}
+    \caption{Vazão para a carga A utilizando o motor LMDB (Eixo X: número de \textit{workers}; Eixo Y: vazão em ops/s). Valores maiores de vazão indicam melhor desempenho.}
+    \label{fig:vazao_a_lmdb}
+\end{figure}
+
+No caso do LMDB (Figura~\ref{fig:vazao_a_lmdb}), o motor direto apresentou uma vazão robusta de 206 mil ops/s com 1 trabalhador. A técnica de \textit{hard partitioning} com 8 partições e 2 trabalhadores conseguiu superar o \textit{baseline} de 2 trabalhadores (173 mil ops/s), atingindo 212 mil ops/s. Isso sugere que a segmentação física ajuda a mitigar a contenção de escrita do LMDB quando múltiplos trabalhadores estão ativos.
+
+Entretanto, assim como no caso do Tkrzw, o uso de reparticionamento causou uma redução na vazão. Com 8 partições, tanto com uma quanto com duas trabalhadoras, a vazão sofreu redução de aproximadamente 15\% quando o reparticionamento foi habilitado.
+
+\subsection{Análise do Throughput com a carga D (Read-latest)}
+
+A carga D, sendo predominantemente de leitura (95\%), permite observar a eficiência do sistema em cenários de baixo conflito de escrita.
+
+\subsubsection{Tkrzw com carga D}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{throughput/ycsb_d.tkrzw_tree.png}
+    \caption{Vazão para a carga D utilizando o motor Tkrzw (Eixo X: número de \textit{workers}; Eixo Y: vazão em ops/s). Valores maiores de vazão indicam melhor desempenho.}
+    \label{fig:vazao_d_tkrzw}
+\end{figure}
+
+Na Figura~\ref{fig:vazao_d_tkrzw}, o Tkrzw demonstrou um ganho expressivo com o \textit{hard partitioning}. Com 2 trabalhadores, a vazão do uso direto do motor de armazenamento foi de 283 mil ops/s, enquanto a configuração com 8 partições atingiu picos de 804 mil ops/s. A redução do desempenho com o uso de reparticionamento também pode ser observada na carga D.
+
+\subsubsection{LMDB com carga D}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.8\textwidth]{throughput/ycsb_d.lmdb.png}
+    \caption{Vazão para a carga D utilizando o motor LMDB (Eixo X: número de \textit{workers}; Eixo Y: vazão em ops/s). Valores maiores de vazão indicam melhor desempenho.}
+    \label{fig:vazao_d_lmdb}
+\end{figure}
+
+Para o LMDB (Figura~\ref{fig:vazao_d_lmdb}), usar diretamento o motor de armazenamento resultou em melhor desempenho absoluto, ultrapassando 1 milhão de ops/s com 2 trabalhadores. Embora o \textit{hard partitioning} com 8 partições tenha apresentado uma vazão menor que o \textit{baseline} (701 mil ops/s), ele superou a configuração de partição única (566 mil ops/s), sugerindo que a estratégia, apesar de apresentar um sobrecusto alto na carga D, que é uma carga de trabalho naturalmente leve por ser predominantemente de leitura, ainda tem potêncial de escalabilidade.
+
+
+\section{Discussão}
+\label{sec:discussao}
+
+A avaliação experimental inicial da biblioteca \texttt{repart-kv} demonstrou que a técnica de \textit{hard partitioning} é funcional e apresenta um desempenho promissor frente aos motores de armazenamento convencionais para certas configurações. A separação física das partições em múltiplas instâncias de motores por vezes permitiu manter a vazão competitiva, mesmo com a introdução de camadas de abstração e mecanismos de rastreamento de carga.
+
+Os resultados preeliminares obtidos nos microbenchmarks realizados sugerem que, para cargas intensivas de atualização (carga A), o \textit{hard partitioning} pode oferecer benefícios ao reduzir a contenção em motores que utilizam travas globais ou de granularidade grossa para escrita. Para cargas de leitura (carga D), a sobrecarga do sistema de reparticionamento mostrou-se por vezes significativa.
+
+Como trabalhos futuros, pretende-se:
+\begin{itemize}
+    \item Estender a avaliação experimental utilizando uma gama maior de cargas de trabalho do YCSB (B, C, E e F).
+    \item Avaliar outras soluções comerciais como LevelDB ou WiredTiger.
+    \item Explorar o potencial de E/S paralelo da técnica \textit{hard partitioning} ao distribuir as instâncias de armazenamento em diferentes dispositivos físicos de armazenamento.
+    \item Investigar o impacto de diferentes algoritmos de particionamento além do METIS.
+\end{itemize}
+
+\bibliographystyle{abntex2-alf}
+\bibliography{references}
+
+\end{document}
