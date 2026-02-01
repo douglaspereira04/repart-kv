@@ -1,0 +1,4 @@
+elapsed_time_ms,executed_count,memory_kb,disk_kb,Tracking,Repartitioning
+0,7,463.552,191.412,x,x
+1.025,853.211,491.720,191.412,x,x
+2.046,1.688.154,521.944,191.412,x,x

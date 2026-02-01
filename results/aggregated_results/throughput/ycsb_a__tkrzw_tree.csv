@@ -1,0 +1,11 @@
+workload,workers,storage_type,partitions,storage_engine,paths,interval,ops_per_second
+ycsb_a,1,engine,1,tkrzw_tree,1,0,41201.068666241496
+ycsb_a,1,hard,1,tkrzw_tree,1,0,38820.53671208281
+ycsb_a,1,hard,1,tkrzw_tree,1,1000,38841.24209420979
+ycsb_a,1,hard,8,tkrzw_tree,1,0,481111.6525447266
+ycsb_a,1,hard,8,tkrzw_tree,1,1000,389865.5228700343
+ycsb_a,2,engine,1,tkrzw_tree,1,0,98364.0445261354
+ycsb_a,2,hard,1,tkrzw_tree,1,0,28001.15265283913
+ycsb_a,2,hard,1,tkrzw_tree,1,1000,27157.78732499152
+ycsb_a,2,hard,8,tkrzw_tree,1,0,378440.22198101477
+ycsb_a,2,hard,8,tkrzw_tree,1,1000,353091.72934418224
