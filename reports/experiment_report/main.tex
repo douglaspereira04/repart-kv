@@ -9,7 +9,7 @@
 \usepackage{amsmath}
 \usepackage{amssymb}
 
-\title{Relatório de Avaliação Experimental: Biblioteca Repart-KV e a Técnica de Hard Partitioning}
+\title{Relatório de Avaliação Experimental: Repart-KV}
 \author{Douglas Pereira Luiz}
 \date{\today}
 
@@ -22,7 +22,7 @@
 
 Sistemas de armazenamento distribuídos e paralelos frequentemente utilizam o particionamento de estado para escalar o desempenho e a capacidade de armazenamento. Entretanto, o particionamento estático pode levar a desequilíbrios de carga quando os padrões de acesso mudam ao longo do tempo. Para mitigar esse problema, técnicas de reparticionamento dinâmico buscam reconfigurar o esquema de partições durante a execução, visando manter o equilíbrio e a eficiência do sistema.
 
-A biblioteca \texttt{repart-kv} foi desenvolvida para consolidar e estender as técnicas de reparticionamento dinâmico de baixo impacto (\textit{stall-free}) propostas em trabalhos anteriores \cite{luiz2024lightweight, luiz2024balanceamento, luiz2025stall}. Diferente de protótipos anteriores, a \texttt{repart-kv} oferece uma interface padronizada semelhante a bancos de dados embarcados (\textit{embedded databases}) e introduz a estratégia de \textit{hard partitioning}, que permite o particionamento físico dos dados em múltiplas instâncias de motores de armazenamento.
+A biblioteca \texttt{repart-kv}\footnote{Código fonte disponível em: \url{https://github.com/douglaspereira04/repart-kv}} foi desenvolvida para consolidar e estender as técnicas de reparticionamento dinâmico de baixo impacto (\textit{stall-free}) propostas em trabalhos anteriores \cite{luiz2024lightweight, luiz2024balanceamento, luiz2025stall}. Diferente de protótipos anteriores, a \texttt{repart-kv} oferece uma interface padronizada semelhante a bancos de dados embarcados (\textit{embedded databases}) e introduz a estratégia de \textit{hard partitioning}, que permite o particionamento físico dos dados em múltiplas instâncias de motores de armazenamento.
 
 Este relatório apresenta uma avaliação experimental inicial da biblioteca \texttt{repart-kv}, na forma de \textit{microbenchmaking} com foco na análise de desempenho da técnica de \textit{hard partitioning} sob diferentes cargas de trabalho e configurações. 
 

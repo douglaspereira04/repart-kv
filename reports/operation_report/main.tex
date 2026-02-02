@@ -1,12 +1,15 @@
-\documentclass[11pt,openright,oneside,a4paper,article]{abntex2}\usepackage[T1]{fontenc}
+\documentclass[11pt,openright,oneside,a4paper,article]{abntex2}
+\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[brazil]{babel}
 \usepackage{lmodern}
 \usepackage{hyperref}
+\usepackage{graphicx}
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{amsmath}
 \usepackage{amssymb}
+\usepackage{float}
 
 \title{Repart-KV: uma biblioteca para repartitionamento de armazenamento chave valor}
 \author{Douglas Pereira Luiz}
@@ -20,13 +23,13 @@
 \section{Introdução}
 Sistemas com estado local particionado estaticamente tendem a enfrentar desequilíbrios de carga e restrições de desempenho quando submetidos a padrões de acesso variáveis ou cargas de trabalho dinâmicas. Para enfrentar variabilidade intensa em padrões de acesso que degradam o desempenho em uma determidada configuração do esquema de partições, é possível rebalancear a carga de trabalho durante a execução por meio de particionamentos dinâmicos, o que pode permitir aproveitar melhor a capacidade de processamento do sistema. 
 
-Entretanto, o reparticionamento pode representar um custo computacional significativo, e pode ser difícil de implementar de forma eficiente e correta. Com o objetivo de encontrar uma forma de particionar e rebalancear o estado local, utilizando o contexto de bancos de dados chave-valor, desenvolvemos e exploramos de diferentes formas uma abordagem de reparticionamento dinâmico que permite reconfigurar o esquema de partições durante a execução do sistema, sem interromper o processamento de operações em \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}. Como uma forma de consolidar a aplicabilidade dessa abordagem, desenvolvemos a biblioteca Repart-KV, que busca explorar um rebalanceamento de baixo impacto, mantendo processamento eficiente e respeitando critérios de consistência preestabelecidos.
+Entretanto, o reparticionamento pode representar um custo computacional significativo, e pode ser difícil de implementar de forma eficiente e correta. Com o objetivo de encontrar uma forma de particionar e rebalancear o estado local, utilizando o contexto de bancos de dados chave-valor, desenvolvemos e exploramos de diferentes formas uma abordagem de reparticionamento dinâmico que permite reconfigurar o esquema de partições durante a execução do sistema, sem interromper o processamento de operações em \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}. Como uma forma de consolidar a aplicabilidade dessa abordagem, desenvolvemos a biblioteca Repart-KV\footnote{Código fonte disponível em: \url{https://github.com/douglaspereira04/repart-kv}}, que busca explorar um rebalanceamento de baixo impacto, mantendo processamento eficiente e respeitando critérios de consistência preestabelecidos.
 
- A biblioteca foi construída sobre o arcabouço das técnicas discutidas em \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}, e este documento descreve a arquitetura, reconfiguração dinâmica e as ferramentas de testes e experimentos que podem servir para validar a abordagem.
+A biblioteca foi construída sobre o arcabouço das técnicas discutidas em \cite{luiz2024lightweight,luiz2024balanceamento,luiz2025stall}, e este documento descreve a arquitetura, reconfiguração dinâmica e as ferramentas de testes e experimentos que podem servir para validar a abordagem.
 
- Repart-KV foi projetada com extensibilidade em mente: além de suportar alguns backends de armazenamento já implementados, a biblioteca permite adicionar rapidamente novos adaptadores para soluções comerciais de bancos de dados chave-valor, bastando implementar a interface pública e registrar o backend na CLI. Também fornecemos uma ferramenta de testes que automatiza a execução de workloads padronizados contra qualquer combinação de storage e configurações, facilitando a avaliação experimental em diferentes cenários.
+Repart-KV foi projetada com extensibilidade em mente: além de suportar alguns backends de armazenamento já implementados, a biblioteca permite adicionar rapidamente novos adaptadores para soluções comerciais de bancos de dados chave-valor, bastando implementar a interface pública e registrar o backend na CLI. Também fornecemos uma ferramenta de testes que automatiza a execução de workloads padronizados contra qualquer combinação de storage e configurações, facilitando a avaliação experimental em diferentes cenários.
 
- Em termos de estratégia, a biblioteca implementa múltiplas estratégias de reparticionamento, e cada uma pode ser aplicada a qualquer backend que implemente as interfaces disponíveis. Os diferentes componentes da biblioteca contam com testes automatizados que validam o comportamento esperado e conferem maior confiabilidade quanto a corretude da implementação.
+Em termos de estratégia, a biblioteca implementa múltiplas estratégias de reparticionamento, e cada uma pode ser aplicada a qualquer backend que implemente as interfaces disponíveis. Os diferentes componentes da biblioteca contam com testes automatizados que validam o comportamento esperado e conferem maior confiabilidade quanto a corretude da implementação.
 
 O restante do documento está organizado da seguinte forma. A Seção~\ref{sec:metodologia} explica a abordagem de implementação da biblioteca e as ferramentas utilizadas; a Seção~\ref{sec:arquitetura} descreve a arquitetura modular e os principais componentes, incluindo as estratégias de reparticionamento; a Seção~\ref{sec:execucao} apresenta os testes automatizados e a ferramenta de execução de experimentos que permitem avaliar diferentes configurações; por fim, a Seção~\ref{sec:discussao} aborda reflexões e aprendizados decorrentes do desenvolvimento.
 
@@ -346,7 +349,6 @@ O reparticionamento dinâmico é executado periodicamente por uma \textit{thread
 O ciclo de reparticionamento segue os seguintes passos:
 
 \begin{enumerate}
-    \item \textbf{Intervalo de reparticionamento}: A \textit{thread} de reparticionamento aguarda por um período configurável (\texttt{repartition\_interval}). Durante esse período, o rastreamento está desabilitado e o sistema opera normalmente com o esquema de partições atual.
     
     \item \textbf{Período de rastreamento}: O rastreamento é habilitado e as operações executadas passam a submeter suas chaves à fila do \textit{Tracker}. A \textit{thread} de rastreamento consome a fila e constrói o grafo de carga de trabalho. Esse período tem duração configurável (\texttt{tracking\_duration}).
     
@@ -361,15 +363,18 @@ O ciclo de reparticionamento segue os seguintes passos:
         \item A \textit{flag} de reparticionamento é desativada.
     \end{enumerate}
     
+    \item \textbf{Intervalo de reparticionamento}: A \textit{thread} de reparticionamento aguarda por um período configurável (\texttt{repartition\_interval}). Durante esse período, o rastreamento está desabilitado e o sistema opera normalmente com o esquema de partições atual.
+    
     \item O ciclo retorna ao passo 1 e se repete indefinidamente até a destruição do armazenamento.
 \end{enumerate}
 
-A Figura~\ref{fig:repartition-cycle} ilustra o ciclo de reparticionamento. A fase de intervalo permite que o sistema opere com estabilidade sob o novo esquema de partições antes de iniciar uma nova coleta de padrões de acesso. A fase de rastreamento captura uma janela representativa da carga de trabalho atual, permitindo que o METIS compute um particionamento otimizado para os padrões de acesso observados.
+A Figura~\ref{fig:repartition-cycle} ilustra o ciclo de reparticionamento. A fase de rastreamento captura uma janela representativa da carga de trabalho atual, permitindo que o METIS compute um particionamento otimizado para os padrões de acesso observados na fase seguinte. Após o particionamento do grafo, a \textit{thread} de reparticionamento atualiza o mapa de partições $M_p$ com as novas atribuições computadas. A fase de intervalo permite que o sistema opere com estabilidade sob o novo esquema de partições antes de iniciar uma nova coleta de padrões de acesso. O ciclo se repete indefinidamente até o fim da execução do sistema.
 
 \begin{figure}[H]
 \centering
 \caption{Ciclo de reparticionamento dinâmico}
 \label{fig:repartition-cycle}
+\includegraphics[width=1.0\textwidth]{repart-kv-repartitioning.png}
 \end{figure}
 
 Durante a atualização do mapa de partições, as operações de leitura e escrita são bloqueadas momentaneamente enquanto os bloqueios são adquiridos. Esse bloqueio é breve, pois a atualização do mapa consiste apenas em iterar sobre os resultados do METIS e atualizar as entradas correspondentes no mapa de partições. Os dados em si não são migrados durante o reparticionamento; nas estratégias \textit{soft}, não há migração, sendo que todos os dados já estão no mesmo storage engine; enquanto na estratégia \textit{hard}, a migração ocorre de forma preguiçosa (\textit{lazy}) conforme as chaves são acessadas subsequentemente.
