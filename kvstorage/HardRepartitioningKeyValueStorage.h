@@ -182,10 +182,8 @@ public:
 
         // Look up which partition owns this key
         size_t partition_idx;
-        found = partition_map_.get(key, partition_idx);
-        if (!found) {
-            partition_idx = hash_func_(key) % partition_count_;
-        }
+        size_t next_partition_idx = hash_func_(key) % partition_count_;
+        partition_map_.get_or_insert(key, next_partition_idx, partition_idx);
 
         // Lock the partition for reading
         partition_locks_[partition_idx]->lock_shared();
@@ -215,28 +213,24 @@ public:
     Status write_impl(const std::string &key, const std::string &value) {
         // Lock key map for writing
         key_map_lock_.lock();
-        size_t partition_idx;
+        size_t partition_idx = 0;
         // Look up or assign storage for this key
         StorageEngineType *storage;
-        bool found = storage_map_.get(key, storage);
 
-        if (found) {
-            bool found = partition_map_.get(key, partition_idx);
-            if (!found) {
-                // No partition mapping - assign using hash function
-                partition_idx = hash_func_(key) % partition_count_;
-                partition_map_.put(key, partition_idx);
-            }
+        size_t next_partition_idx = hash_func_(key) % partition_count_;
+        StorageEngineType *next_storage = storages_[next_partition_idx];
 
-            if (storage->level() != level_) {
-                // Storage is from a different level - reassign to current level
-                storage = storages_[partition_idx];
-                storage_map_.put(key, storage);
-            }
+        bool found_storage =
+            storage_map_.get_or_insert(key, next_storage, storage);
+        if (found_storage) {
+            partition_map_.get(key, partition_idx);
         } else {
-            // Key not mapped yet - assign to a partition using hash function
-            partition_idx = hash_func_(key) % partition_count_;
-            partition_map_.put(key, partition_idx);
+            partition_map_.get_or_insert(key, next_partition_idx,
+                                         partition_idx);
+        }
+
+        if (storage->level() != level_) {
+            // Storage is from a different level - reassign to current level
             storage = storages_[partition_idx];
             storage_map_.put(key, storage);
         }
@@ -294,11 +288,9 @@ public:
             StorageEngineType *storage = it.get_value();
             std::string key = it.get_key();
             size_t partition_idx;
-            bool found = partition_map_.get(key, partition_idx);
-            if (!found) {
-                partition_idx = hash_func_(key) % partition_count_;
-                partition_map_.put(key, partition_idx);
-            }
+            size_t next_partition_idx = hash_func_(key) % partition_count_;
+            partition_map_.get_or_insert(key, next_partition_idx,
+                                         partition_idx);
             partition_set.insert(partition_idx);
             storage_array.push_back(storage);
             key_array.push_back(it.get_key());

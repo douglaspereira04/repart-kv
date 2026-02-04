@@ -202,12 +202,8 @@ public:
 
         // Look up or assign partition for this key
         size_t partition_idx;
-        bool found = key_map_.get(key, partition_idx);
-        if (!found) {
-            // Key not mapped yet - fall back to hash partitioning
-            partition_idx = hash_func_(key) % partition_count_;
-            key_map_.put(key, partition_idx);
-        }
+        size_t next_partition_idx = hash_func_(key) % partition_count_;
+        key_map_.get_or_insert(key, next_partition_idx, partition_idx);
 
         WriteOperation *write_operation = new WriteOperation(key, value);
         workers_[partition_idx]->enqueue(write_operation);

@@ -194,12 +194,10 @@ public:
 
         // Look up or assign partition for this key
         size_t partition_idx;
-        bool found = partition_map_.get(key, partition_idx);
-        if (!found) {
-            // Key not mapped yet - fall back to hash partitioning
-            partition_idx = hash_func_(key) % partition_count_;
-            partition_map_.put(key, partition_idx);
-        }
+
+        size_t next_partition_idx = hash_func_(key) % partition_count_;
+        partition_map_.get_or_insert(key, next_partition_idx, partition_idx);
+
         // Lock the partition for writing
         partition_locks_[partition_idx]->lock();
 

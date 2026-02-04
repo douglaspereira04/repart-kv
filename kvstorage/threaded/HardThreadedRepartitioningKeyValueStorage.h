@@ -196,13 +196,10 @@ public:
             return Status::NOT_FOUND;
         }
 
-        // Get partition index for this storage
+        // Look up which partition owns this key
         size_t partition_idx;
-        bool partition_found = partition_map_.get(key, partition_idx);
-        if (!partition_found) {
-            // Fallback: use hash function to determine partition
-            partition_idx = hash_func_(key) % partition_count_;
-        }
+        size_t next_partition_idx = hash_func_(key) % partition_count_;
+        partition_map_.get_or_insert(key, next_partition_idx, partition_idx);
 
         HardReadOperation<StorageEngineType> read_operation(key, value,
                                                             storage);
@@ -231,30 +228,27 @@ public:
         // Lock key map for writing
         key_map_lock_.lock();
 
+        size_t partition_idx;
+
         // Look up or assign storage for this key
         StorageEngineType *storage;
-        bool found = storage_map_.get(key, storage);
-        size_t partition_idx;
-        if (!found) {
-            // Key not mapped yet - assign to a partition using hash function
-            partition_idx = hash_func_(key) % partition_count_;
+
+        size_t next_partition_idx = hash_func_(key) % partition_count_;
+        StorageEngineType *next_storage = storages_[next_partition_idx];
+
+        bool found_storage =
+            storage_map_.get_or_insert(key, next_storage, storage);
+        if (found_storage) {
+            partition_map_.get(key, partition_idx);
+        } else {
+            partition_map_.get_or_insert(key, next_partition_idx,
+                                         partition_idx);
+        }
+
+        if (storage->level() != level_) {
+            // Storage is from a different level - reassign to current level
             storage = storages_[partition_idx];
             storage_map_.put(key, storage);
-            partition_map_.put(key, partition_idx);
-        } else {
-            // Get partition index
-            bool partition_found = partition_map_.get(key, partition_idx);
-            if (!partition_found) {
-                // Fallback: use hash function to determine partition
-                partition_idx = hash_func_(key) % partition_count_;
-                partition_map_.put(key, partition_idx);
-            } else if (storage->level() != level_) {
-                // Storage is from a different level - reassign to current level
-                partition_idx = hash_func_(key) % partition_count_;
-                storage = storages_[partition_idx];
-                storage_map_.put(key, storage);
-                partition_map_.put(key, partition_idx);
-            }
         }
 
         HardWriteOperation<StorageEngineType> *write_operation =
@@ -307,12 +301,10 @@ public:
 
             StorageEngineType *storage = it.get_value();
             size_t partition_idx;
-            bool partition_found =
-                partition_map_.get(it.get_key(), partition_idx);
-            if (!partition_found) {
-                // Fallback: use hash function to determine partition
-                partition_idx = hash_func_(it.get_key()) % partition_count_;
-            }
+            size_t next_partition_idx =
+                hash_func_(it.get_key()) % partition_count_;
+            partition_map_.get_or_insert(it.get_key(), next_partition_idx,
+                                         partition_idx);
             partition_set.insert(partition_idx);
             partition_array.push_back(partition_idx);
             storage_array.push_back(storage);
