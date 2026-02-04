@@ -1,4 +1,5 @@
 #include "../MapStorageEngine.h"
+#include "../AbslBtreeStorageEngine.h"
 #include "../TkrzwHashStorageEngine.h"
 #include "../TkrzwTreeStorageEngine.h"
 #include "../LmdbStorageEngine.h"
@@ -454,6 +455,8 @@ int main() {
 
     // Test all storage engine implementations
     run_storage_engine_test_suite<MapStorageEngine>("MapStorageEngine");
+    run_storage_engine_test_suite<AbslBtreeStorageEngine>(
+        "AbslBtreeStorageEngine");
     run_storage_engine_test_suite<TkrzwHashStorageEngine>(
         "TkrzwHashStorageEngine");
     run_storage_engine_test_suite<TkrzwTreeStorageEngine>(

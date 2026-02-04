@@ -28,6 +28,9 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(unordered_dense)
 
+# Find Abseil library (system-wide)
+find_package(absl REQUIRED)
+
 # Find TKRZW library and its dependencies
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(TKRZW REQUIRED tkrzw)
@@ -101,6 +104,7 @@ target_link_libraries(repart-kv-core PUBLIC
     ${LMDB_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
+    absl::btree
 )
 
 target_compile_features(repart-kv-core PUBLIC cxx_std_20)
@@ -139,6 +143,7 @@ target_link_libraries(test_storage_engine PRIVATE
     ${LMDB_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
+    absl::btree
 )
 target_compile_features(test_storage_engine PRIVATE cxx_std_20)
 target_compile_options(test_storage_engine PRIVATE -Wall -Wextra -Wpedantic)
@@ -157,6 +162,7 @@ target_link_libraries(interactive_storage_test PRIVATE
     ${TKRZW_ALL_LIBS}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
+    absl::btree
 )
 target_compile_features(interactive_storage_test PRIVATE cxx_std_20)
 target_compile_options(interactive_storage_test PRIVATE -Wall -Wextra -Wpedantic)
@@ -175,6 +181,7 @@ target_link_libraries(interactive_keystorage_test PRIVATE
     ${TKRZW_ALL_LIBS}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
+    absl::btree
 )
 target_compile_features(interactive_keystorage_test PRIVATE cxx_std_20)
 target_compile_options(interactive_keystorage_test PRIVATE -Wall -Wextra -Wpedantic)
@@ -194,6 +201,7 @@ target_link_libraries(test_keystorage PRIVATE
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     ${LMDB_LIB}
+    absl::btree
 )
 target_compile_features(test_keystorage PRIVATE cxx_std_20)
 target_compile_options(test_keystorage PRIVATE -Wall -Wextra -Wpedantic)
@@ -213,6 +221,7 @@ target_link_libraries(test_partitioned_kv_storage PRIVATE
     ${METIS_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
+    absl::btree
 )
 target_compile_features(test_partitioned_kv_storage PRIVATE cxx_std_20)
 target_compile_options(test_partitioned_kv_storage PRIVATE -Wall -Wextra -Wpedantic)
@@ -232,6 +241,7 @@ target_link_libraries(test_graph_tracking PRIVATE
     ${METIS_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
+    absl::btree
 )
 target_compile_features(test_graph_tracking PRIVATE cxx_std_20)
 target_compile_options(test_graph_tracking PRIVATE -Wall -Wextra -Wpedantic)
@@ -253,6 +263,7 @@ if(METIS_LIB)
         ${LMDB_LIB}
         ${TBB_LIBRARIES}
         unordered_dense::unordered_dense
+        absl::btree
     )
     target_compile_features(test_repartitioning_storage PRIVATE cxx_std_20)
     target_compile_options(test_repartitioning_storage PRIVATE -Wall -Wextra -Wpedantic)
@@ -406,6 +417,7 @@ target_link_libraries(test_soft_partition_worker PRIVATE
     ${METIS_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
+    absl::btree
 )
 target_compile_features(test_soft_partition_worker PRIVATE cxx_std_20)
 target_compile_options(test_soft_partition_worker PRIVATE -Wall -Wextra -Wpedantic)

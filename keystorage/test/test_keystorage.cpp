@@ -1,4 +1,5 @@
 #include "../MapKeyStorage.h"
+#include "../AbslBtreeKeyStorage.h"
 #include "../TkrzwHashKeyStorage.h"
 #include "../TkrzwTreeKeyStorage.h"
 #include "../LmdbKeyStorage.h"
@@ -443,6 +444,8 @@ int main() {
     // Test all storage implementations with int
     std::cout << "\n=== Testing with int ===" << std::endl;
     run_storage_test_suite<MapKeyStorage<int>, int>("MapKeyStorage", "int");
+    run_storage_test_suite<AbslBtreeKeyStorage<int>, int>("AbslBtreeKeyStorage",
+                                                          "int");
     run_storage_test_suite<TkrzwHashKeyStorage<int>, int>("TkrzwHashKeyStorage",
                                                           "int");
     run_storage_test_suite<TkrzwTreeKeyStorage<int>, int>("TkrzwTreeKeyStorage",
@@ -454,6 +457,8 @@ int main() {
     // Test all storage implementations with long
     std::cout << "\n=== Testing with long ===" << std::endl;
     run_storage_test_suite<MapKeyStorage<long>, long>("MapKeyStorage", "long");
+    run_storage_test_suite<AbslBtreeKeyStorage<long>, long>(
+        "AbslBtreeKeyStorage", "long");
     run_storage_test_suite<TkrzwHashKeyStorage<long>, long>(
         "TkrzwHashKeyStorage", "long");
     run_storage_test_suite<TkrzwTreeKeyStorage<long>, long>(
@@ -467,6 +472,8 @@ int main() {
     std::cout << "\n=== Testing with uint64_t ===" << std::endl;
     run_storage_test_suite<MapKeyStorage<uint64_t>, uint64_t>("MapKeyStorage",
                                                               "uint64_t");
+    run_storage_test_suite<AbslBtreeKeyStorage<uint64_t>, uint64_t>(
+        "AbslBtreeKeyStorage", "uint64_t");
     run_storage_test_suite<TkrzwHashKeyStorage<uint64_t>, uint64_t>(
         "TkrzwHashKeyStorage", "uint64_t");
     run_storage_test_suite<TkrzwTreeKeyStorage<uint64_t>, uint64_t>(
