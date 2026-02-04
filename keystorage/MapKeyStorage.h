@@ -56,6 +56,22 @@ public:
     }
 
     /**
+     * @brief Implementation: Get a value by key, or insert it if it doesn't
+     * exist
+     * @param key The key to look up
+     * @param value_to_insert The value to insert if the key doesn't exist
+     * @param found_value Output parameter for the retrieved (or inserted) value
+     * @return true if the key already existed, false if it was newly inserted
+     */
+    bool get_or_insert_impl(const std::string &key,
+                            const ValueType &value_to_insert,
+                            ValueType &found_value) {
+        auto [it, inserted] = storage_.try_emplace(key, value_to_insert);
+        found_value = it->second;
+        return !inserted;
+    }
+
+    /**
      * @brief Implementation: Find the first element with key not less than the
      * given key
      * @param key The key to search for

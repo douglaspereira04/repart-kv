@@ -140,6 +140,34 @@ public:
     }
 
     /**
+     * @brief Implementation: Get a value by key, or insert it if it doesn't
+     * exist
+     * @param key The key to look up
+     * @param value_to_insert The value to insert if the key doesn't exist
+     * @param found_value Output parameter for the retrieved (or inserted) value
+     * @return true if the key already existed, false if it was newly inserted
+     */
+    bool get_or_insert_impl(const std::string &key,
+                            const ValueType &value_to_insert,
+                            ValueType &found_value) {
+        if (!is_open_) {
+            found_value = value_to_insert;
+            return false;
+        }
+
+        std::string str_value;
+        tkrzw::Status status = db_->Get(key, &str_value);
+        if (status == tkrzw::Status::SUCCESS) {
+            found_value = string_to_value(str_value);
+            return true;
+        }
+
+        found_value = value_to_insert;
+        db_->Set(key, value_to_string(value_to_insert), false);
+        return false;
+    }
+
+    /**
      * @brief Implementation: Find the first element with key not less than the
      * given key
      * @param key The key to search for

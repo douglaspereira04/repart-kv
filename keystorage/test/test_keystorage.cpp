@@ -391,6 +391,37 @@ void test_numeric_value_ranges() {
     END_TEST("numeric_value_ranges")
 }
 
+template <typename StorageType, typename ValueType> void test_get_or_insert() {
+    TEST("get_or_insert")
+    StorageType storage;
+
+    ValueType found_value;
+    bool existed;
+
+    // Test insert when not exists
+    existed =
+        storage.get_or_insert("key1", static_cast<ValueType>(100), found_value);
+    ASSERT_FALSE(existed);
+    ASSERT_EQ(static_cast<ValueType>(100), found_value);
+
+    // Verify it was actually inserted
+    ValueType v;
+    ASSERT_TRUE(storage.get("key1", v));
+    ASSERT_EQ(static_cast<ValueType>(100), v);
+
+    // Test get when already exists
+    existed =
+        storage.get_or_insert("key1", static_cast<ValueType>(200), found_value);
+    ASSERT_TRUE(existed);
+    ASSERT_EQ(static_cast<ValueType>(100), found_value);
+
+    // Verify it was NOT overwritten
+    ASSERT_TRUE(storage.get("key1", v));
+    ASSERT_EQ(static_cast<ValueType>(100), v);
+
+    END_TEST("get_or_insert")
+}
+
 // Helper function to run all tests for a given storage type and value type
 template <typename StorageType, typename ValueType>
 void run_storage_test_suite(const std::string &storage_name,
@@ -430,7 +461,9 @@ void run_storage_test_suite(const std::string &storage_name,
         {"special_characters",
          []() { test_special_characters<StorageType, ValueType>(); }},
         {"numeric_value_ranges",
-         []() { test_numeric_value_ranges<StorageType, ValueType>(); }}};
+         []() { test_numeric_value_ranges<StorageType, ValueType>(); }},
+        {"get_or_insert",
+         []() { test_get_or_insert<StorageType, ValueType>(); }}};
 
     std::string suite_name = storage_name + "<" + value_type_name + ">";
     run_test_suite(suite_name, tests);

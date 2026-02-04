@@ -38,6 +38,19 @@ public:
     }
 
     /**
+     * @brief Get a value by key, or insert it if it doesn't exist
+     * @param key The key to look up
+     * @param value_to_insert The value to insert if the key doesn't exist
+     * @param found_value Output parameter for the retrieved (or inserted) value
+     * @return true if the key already existed, false if it was newly inserted
+     */
+    bool get_or_insert(const std::string &key, const ValueType &value_to_insert,
+                       ValueType &found_value) {
+        return static_cast<Derived *>(this)->get_or_insert_impl(
+            key, value_to_insert, found_value);
+    }
+
+    /**
      * @brief Find the first element with key not less than the given key
      * @param key The key to search for
      * @return Iterator pointing to the found element or end

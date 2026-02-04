@@ -197,6 +197,84 @@ public:
     }
 
     /**
+     * @brief Implementation: Get a value by key, or insert it if it doesn't
+     * exist
+     * @param key The key to look up
+     * @param value_to_insert The value to insert if the key doesn't exist
+     * @param found_value Output parameter for the retrieved (or inserted) value
+     * @return true if the key already existed, false if it was newly inserted
+     */
+    bool get_or_insert_impl(const std::string &key,
+                            const ValueType &value_to_insert,
+                            ValueType &found_value) {
+        if (!is_open_ || !env_) {
+            found_value = value_to_insert;
+            return false;
+        }
+
+        MDB_txn *txn;
+        MDB_val mdb_key;
+        MDB_val mdb_value;
+
+        // Try to get first
+        int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+        if (rc == 0) {
+            mdb_key.mv_size = key.size();
+            mdb_key.mv_data =
+                const_cast<void *>(static_cast<const void *>(key.c_str()));
+            rc = mdb_get(txn, dbi_, &mdb_key, &mdb_value);
+            if (rc == MDB_SUCCESS) {
+                std::string value_str(
+                    reinterpret_cast<char *>(mdb_value.mv_data),
+                    mdb_value.mv_size);
+                found_value = deserialize_value(value_str);
+                mdb_txn_abort(txn);
+                return true;
+            }
+            mdb_txn_abort(txn);
+        }
+
+        // Not found, try to insert
+        rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+        if (rc != 0) {
+            found_value = value_to_insert;
+            return false;
+        }
+
+        std::string value_str = serialize_value(value_to_insert);
+        mdb_key.mv_size = key.size();
+        mdb_key.mv_data =
+            const_cast<void *>(static_cast<const void *>(key.c_str()));
+        mdb_value.mv_size = value_str.size();
+        mdb_value.mv_data =
+            const_cast<void *>(static_cast<const void *>(value_str.c_str()));
+
+        rc = mdb_put(txn, dbi_, &mdb_key, &mdb_value, MDB_NOOVERWRITE);
+        if (rc == 0) {
+            mdb_txn_commit(txn);
+            found_value = value_to_insert;
+            return false;
+        } else if (rc == MDB_KEYEXIST) {
+            // Someone else inserted it in the meantime!
+            rc = mdb_get(txn, dbi_, &mdb_key, &mdb_value);
+            if (rc == MDB_SUCCESS) {
+                std::string v_str(reinterpret_cast<char *>(mdb_value.mv_data),
+                                  mdb_value.mv_size);
+                found_value = deserialize_value(v_str);
+                mdb_txn_abort(txn);
+                return true;
+            }
+            mdb_txn_abort(txn);
+            found_value = value_to_insert;
+            return false;
+        } else {
+            mdb_txn_abort(txn);
+            found_value = value_to_insert;
+            return false;
+        }
+    }
+
+    /**
      * @brief Implementation: Find the first element with key not less than the
      * given key
      * @param key The key to search for

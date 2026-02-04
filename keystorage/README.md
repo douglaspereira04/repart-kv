@@ -16,6 +16,7 @@ It is used by higher-level components (for example, to store mappings and indexe
 
 - `get(const std::string& key, ValueType& out) -> bool`
 - `put(const std::string& key, const ValueType& value)`
+- `get_or_insert(const std::string& key, const ValueType& value_to_insert, ValueType& found_value) -> bool`
 - `lower_bound(const std::string& key) -> IteratorType`
 
 ### Iterator
