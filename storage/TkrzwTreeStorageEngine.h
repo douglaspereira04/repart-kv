@@ -88,7 +88,6 @@ public:
         StorageEngine<TkrzwTreeStorageEngine>(level, path),
         db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
 
-
         tkrzw::Status status =
             db_->OpenAdvanced(file_path,
                               true,                     // writable

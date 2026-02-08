@@ -4,7 +4,7 @@ This document describes the current technical structure of Repart-KV and how the
 
 ## High-level flow
 
-1. `repart-kv-core` exposes `run_repart_kv(int argc, char *argv[])`, which parses CLI arguments (workload path, partitions, workers, storage type/engine, warmup, storage paths) and orchestrates workload execution.
+1. `repart-kv-core` exposes `run_repart_kv(int argc, char *argv[])`, which parses CLI arguments (workload path, partitions, workers, storage type/engine, storage paths) and orchestrates workload execution.
 2. (Optional) `main.cpp` is compiled into `repart-kv-runner`, a lightweight test/CLI utility that forwards `argc/argv` into `run_repart_kv`.
 3. `workload/Workload.h` parses the workload file into operations (READ/WRITE/SCAN).
 4. The selected storage stack executes operations using:

@@ -37,11 +37,12 @@
 #include "keystorage/LmdbKeyStorage.h"
 #include "keystorage/UnorderedDenseKeyStorage.h"
 #include "repart_kv_api.h"
+#include <cassert>
+#include <barrier>
 
 // Global parameters
 size_t PARTITION_COUNT = 4;
 size_t TEST_WORKERS = 1;
-size_t WARMUP_OPERATIONS = 0;              // Default to no warmup
 std::string STORAGE_TYPE = "soft";         // Default to soft repartitioning
 std::string STORAGE_ENGINE = "tkrzw_tree"; // Default to TkrzwTreeStorageEngine
 std::vector<std::string> STORAGE_PATHS = {
@@ -194,23 +195,25 @@ size_t get_disk_usage_kb() {
  * @param executed_counts Array of counters (one per worker)
  * @param running Atomic flag to control the loop
  * @param output_file Path to the output CSV file
- * @param start_time Start time of the execution for calculating elapsed time
  * @param storage Reference to the storage instance for tracking status
- * @param warmup_operations Number of operations to wait for before starting
- * metrics logging
+ * @param start_barrier Barrier to wait for before starting the metrics logging
  */
 template <typename StorageType>
 void metrics_loop(const std::vector<size_t> &executed_counts,
                   const std::atomic<bool> &running,
-                  const std::string &output_file,
-                  std::chrono::high_resolution_clock::time_point start_time,
-                  StorageType &storage) {
+                  const std::string &output_file, StorageType &storage,
+                  std::barrier<> &start_barrier) {
     std::ofstream file(output_file);
     if (!file.is_open()) {
         std::cerr << "Warning: Failed to open metrics file: " << output_file
                   << std::endl;
+        exit(1);
         return;
     }
+
+    start_barrier.arrive_and_wait();
+    std::chrono::high_resolution_clock::time_point start_time =
+        std::chrono::high_resolution_clock::now();
 
     // Write CSV header
     file << "elapsed_time_ms,executed_count,memory_kb,disk_kb,Tracking,"
@@ -345,19 +348,32 @@ make_operation_from_request(loadgen::types::Type type, long key,
  * @param storage Reference to the storage instance
  * @param executed_counts Array of counters (one per worker, no synchronization
  * needed)
+ * @param start_barrier Barrier to wait for before starting the workload
+ * @return void
  */
 template <typename StorageType>
 void worker_function(size_t worker_id, workload::RequestGenerator &generator,
-                     StorageType &storage,
-                     std::vector<size_t> &executed_counts) {
+                     StorageType &storage, std::vector<size_t> &executed_counts,
+                     std::barrier<> &start_barrier) {
     loadgen::types::Type type;
     long key;
     std::string value;
     long scan_size;
 
+    if (generator.current_phase() ==
+        workload::RequestGenerator::Phase::LOADING) {
+        generator.skip_current_phase();
+    }
+
+    std::vector<workload::Operation> operations;
     while (!generator.next(type, key, value, scan_size)) {
-        auto operation =
-            make_operation_from_request(type, key, value, scan_size);
+        operations.push_back(
+            make_operation_from_request(type, key, value, scan_size));
+    }
+
+    start_barrier.arrive_and_wait();
+
+    for (const auto &operation : operations) {
         execute_operation(operation, storage);
         executed_counts[worker_id]++;
     }
@@ -368,7 +384,7 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
 template <typename StorageType> void run_workload_with_storage(
     std::vector<std::unique_ptr<workload::RequestGenerator>> &generators,
     size_t partition_count, size_t test_workers,
-    const std::string &storage_type_name, size_t warmup_operations) {
+    const std::string &storage_type_name) {
     // Create storage instance
     std::cout << "\n=== Initializing Storage ===" << std::endl;
 
@@ -427,44 +443,37 @@ template <typename StorageType> void run_workload_with_storage(
     // Execute operations
     std::cout << "\n=== Executing Workload ===" << std::endl;
 
-    // Handle warmup for each worker
-    if (warmup_operations > 0) {
-        std::cout << "Warming up: executing "
-                  << format_with_separators(warmup_operations)
-                  << " operations before starting experiment..." << std::endl;
+    // Execute preload
+    std::cout << "Preload: executing preload operations... ";
+    size_t preload = 0;
 
+    auto &primary_generator = generators[0];
+    while (primary_generator->current_phase() ==
+           workload::RequestGenerator::Phase::LOADING) {
         loadgen::types::Type type;
         long key;
         std::string value;
         long scan_size;
-
-        auto &primary_generator = generators[0];
-        for (size_t i = 0; i < warmup_operations; ++i) {
-            if (primary_generator->next(type, key, value, scan_size)) {
-                break;
-            }
-            auto operation =
-                make_operation_from_request(type, key, value, scan_size);
-            execute_operation(operation, storage);
+        if (primary_generator->next(type, key, value, scan_size)) {
+            break;
         }
-
-        for (size_t worker = 1; worker < test_workers; ++worker) {
-            for (size_t i = 0; i < warmup_operations; ++i) {
-                if (generators[worker]->next(type, key, value, scan_size)) {
-                    break;
-                }
-            }
-        }
-
-        std::cout << "Warmup complete." << std::endl;
+        auto operation =
+            make_operation_from_request(type, key, value, scan_size);
+        execute_operation(operation, storage);
+        preload++;
     }
 
-    auto start_time = std::chrono::high_resolution_clock::now();
+    assert(primary_generator->current_phase() ==
+           workload::RequestGenerator::Phase::OPERATIONS);
+    std::cout << " [DONE]" << std::endl;
+    std::barrier start_barrier(test_workers + 2);
 
+    // Execute workload
     // Start metrics logging thread
-    std::thread metrics_thread(
-        metrics_loop<StorageType>, std::ref(executed_counts),
-        std::ref(metrics_running), metrics_file, start_time, std::ref(storage));
+    std::thread metrics_thread(metrics_loop<StorageType>,
+                               std::ref(executed_counts),
+                               std::ref(metrics_running), metrics_file,
+                               std::ref(storage), std::ref(start_barrier));
 
     // Create and start worker threads
     std::vector<std::thread> worker_threads;
@@ -473,13 +482,22 @@ template <typename StorageType> void run_workload_with_storage(
     for (size_t i = 0; i < test_workers; ++i) {
         worker_threads.emplace_back(worker_function<StorageType>, i,
                                     std::ref(*generators[i]), std::ref(storage),
-                                    std::ref(executed_counts));
+                                    std::ref(executed_counts),
+                                    std::ref(start_barrier));
     }
 
+    std::cout << "Loading workload into memory... ";
+    start_barrier.arrive_and_wait();
+    std::cout << " [DONE]" << std::endl;
+
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    std::cout << "Executing workload... ";
     // Wait for all worker threads to complete
     for (auto &thread : worker_threads) {
         thread.join();
     }
+    std::cout << " [DONE]" << std::endl;
 
     // Stop metrics logging
     metrics_running = false;
@@ -500,11 +518,11 @@ template <typename StorageType> void run_workload_with_storage(
 
     std::cout << "\n=== Results ===" << std::endl;
     std::cout << "Storage type: " << storage_type_name << std::endl;
-    if (warmup_operations > 0) {
-        std::cout << "Warmup operations: "
-                  << format_with_separators(warmup_operations) << std::endl;
+    if (preload > 0) {
+        std::cout << "Preload operations: " << format_with_separators(preload)
+                  << std::endl;
     }
-    std::cout << "Total operations executed (excluding warmup): "
+    std::cout << "Total operations executed (excluding preload): "
               << format_with_separators(total_operations) << std::endl;
     std::cout << "Duration: " << format_with_separators(duration.count())
               << " ms" << std::endl;
@@ -526,7 +544,6 @@ template <typename StorageType> void run_workload_with_storage(
  */
 void execute_with_storage_config(
     std::vector<std::unique_ptr<workload::RequestGenerator>> &generators) {
-    size_t warmup_operations = WARMUP_OPERATIONS;
     if (STORAGE_ENGINE == "tkrzw_tree") {
         if (STORAGE_TYPE == "hard") {
             using StorageType =
@@ -535,7 +552,7 @@ void execute_with_storage_config(
                                                   UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage", warmup_operations);
+                "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
             using StorageType =
                 SoftRepartitioningKeyValueStorage<TkrzwTreeStorageEngine,
@@ -543,25 +560,25 @@ void execute_with_storage_config(
                                                   AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage", warmup_operations);
+                "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType = SoftThreadedRepartitioningKeyValueStorage<
                 TkrzwTreeStorageEngine, AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
                 TkrzwTreeStorageEngine, AbslBtreeKeyStorage,
                 UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "HardThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "engine") {
             using StorageType = TkrzwTreeStorageEngine;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "TkrzwTreeStorageEngine", warmup_operations);
+            run_workload_with_storage<StorageType>(generators, PARTITION_COUNT,
+                                                   TEST_WORKERS,
+                                                   "TkrzwTreeStorageEngine");
         }
     } else if (STORAGE_ENGINE == "tkrzw_hash") {
         if (STORAGE_TYPE == "hard") {
@@ -571,7 +588,7 @@ void execute_with_storage_config(
                                                   UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage", warmup_operations);
+                "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
             using StorageType =
                 SoftRepartitioningKeyValueStorage<TkrzwHashStorageEngine,
@@ -579,25 +596,25 @@ void execute_with_storage_config(
                                                   AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage", warmup_operations);
+                "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType = SoftThreadedRepartitioningKeyValueStorage<
                 TkrzwHashStorageEngine, AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
                 TkrzwHashStorageEngine, AbslBtreeKeyStorage,
                 UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "HardThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "engine") {
             using StorageType = TkrzwHashStorageEngine;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "TkrzwHashStorageEngine", warmup_operations);
+            run_workload_with_storage<StorageType>(generators, PARTITION_COUNT,
+                                                   TEST_WORKERS,
+                                                   "TkrzwHashStorageEngine");
         }
     } else if (STORAGE_ENGINE == "lmdb") {
         if (STORAGE_TYPE == "hard") {
@@ -607,32 +624,31 @@ void execute_with_storage_config(
                                                   UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage", warmup_operations);
+                "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
             using StorageType = SoftRepartitioningKeyValueStorage<
                 LmdbStorageEngine, AbslBtreeKeyStorage, AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage", warmup_operations);
+                "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType =
                 SoftThreadedRepartitioningKeyValueStorage<LmdbStorageEngine,
                                                           AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
                 LmdbStorageEngine, AbslBtreeKeyStorage,
                 UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "HardThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "engine") {
             using StorageType = LmdbStorageEngine;
             run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS, "LmdbStorageEngine",
-                warmup_operations);
+                generators, PARTITION_COUNT, TEST_WORKERS, "LmdbStorageEngine");
         }
     } else if (STORAGE_ENGINE == "map") {
         if (STORAGE_TYPE == "hard") {
@@ -642,32 +658,31 @@ void execute_with_storage_config(
                                                   UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage", warmup_operations);
+                "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
             using StorageType = SoftRepartitioningKeyValueStorage<
                 MapStorageEngine, AbslBtreeKeyStorage, AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage", warmup_operations);
+                "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType =
                 SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine,
                                                           AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
                 MapStorageEngine, AbslBtreeKeyStorage,
                 UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "HardThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "engine") {
             using StorageType = MapStorageEngine;
             run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS, "MapStorageEngine",
-                warmup_operations);
+                generators, PARTITION_COUNT, TEST_WORKERS, "MapStorageEngine");
         }
     } else if (STORAGE_ENGINE == "tbb") {
         if (STORAGE_TYPE == "hard") {
@@ -677,32 +692,31 @@ void execute_with_storage_config(
                                                   UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage", warmup_operations);
+                "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
             using StorageType = SoftRepartitioningKeyValueStorage<
                 TbbStorageEngine, AbslBtreeKeyStorage, AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage", warmup_operations);
+                "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType =
                 SoftThreadedRepartitioningKeyValueStorage<TbbStorageEngine,
                                                           AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
                 TbbStorageEngine, AbslBtreeKeyStorage,
                 UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage", warmup_operations);
+                "HardThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "engine") {
             using StorageType = TbbStorageEngine;
             run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS, "TbbStorageEngine",
-                warmup_operations);
+                generators, PARTITION_COUNT, TEST_WORKERS, "TbbStorageEngine");
         }
     }
 }
@@ -713,7 +727,7 @@ void execute_with_storage_config(
 void print_usage(const char *program_name) {
     std::cout << "Usage: " << program_name
               << " <loadgen_config.toml> [partition_count] [test_workers] "
-                 "[storage_type] [storage_engine] [warmup_operations] "
+                 "[storage_type] [storage_engine] "
                  "[storage_paths] "
                  "[repartition_interval_ms]"
               << std::endl;
@@ -731,9 +745,6 @@ void print_usage(const char *program_name) {
     std::cout << "  storage_engine   Storage engine backend: 'tkrzw_tree', "
                  "'tkrzw_hash', "
                  "'lmdb', 'map', or 'tbb' (default: tkrzw_tree)"
-              << std::endl;
-    std::cout << "  warmup_operations Number of operations to execute before "
-                 "starting the experiment timer (default: 0)"
               << std::endl;
     std::cout
         << "  storage_paths    Comma-separated paths for embedded database "
@@ -852,17 +863,7 @@ int run_repart_kv(int argc, char *argv[]) {
     }
 
     if (argc >= 7) {
-        try {
-            WARMUP_OPERATIONS = std::stoull(argv[6]);
-        } catch (const std::exception &e) {
-            std::cerr << "Error: Invalid warmup_operations: " << argv[6]
-                      << std::endl;
-            return 1;
-        }
-    }
-
-    if (argc >= 8) {
-        std::string paths_str = argv[7];
+        std::string paths_str = argv[6];
         STORAGE_PATHS.clear();
         std::stringstream ss(paths_str);
         std::string path;
@@ -878,13 +879,13 @@ int run_repart_kv(int argc, char *argv[]) {
         }
     }
 
-    if (argc >= 9) {
+    if (argc >= 8) {
         try {
-            int64_t interval_ms = std::stoll(argv[8]);
+            int64_t interval_ms = std::stoll(argv[7]);
             TRACKING_DURATION = std::chrono::milliseconds(interval_ms);
             REPARTITION_INTERVAL = std::chrono::milliseconds(interval_ms);
         } catch (const std::exception &e) {
-            std::cerr << "Error: Invalid repartition_interval_ms: " << argv[8]
+            std::cerr << "Error: Invalid repartition_interval_ms: " << argv[7]
                       << std::endl;
             return 1;
         }
@@ -902,7 +903,6 @@ int run_repart_kv(int argc, char *argv[]) {
     std::cout << "Test workers: " << TEST_WORKERS << std::endl;
     std::cout << "Storage type: " << STORAGE_TYPE << std::endl;
     std::cout << "Storage engine: " << STORAGE_ENGINE << std::endl;
-    std::cout << "Warmup operations: " << WARMUP_OPERATIONS << std::endl;
     std::cout << "Storage paths: ";
     for (size_t i = 0; i < STORAGE_PATHS.size(); ++i) {
         std::cout << STORAGE_PATHS[i];

@@ -62,12 +62,6 @@ cd build
 ./repart-kv-runner ../sample_workload.txt 8 4 soft tkrzw_tree
 ```
 
-### Set warmup operations
-
-```bash
-./repart-kv-runner ../sample_workload.txt 8 4 soft tkrzw_tree 10000
-```
-
 ### Use multiple storage paths
 
 ```bash
