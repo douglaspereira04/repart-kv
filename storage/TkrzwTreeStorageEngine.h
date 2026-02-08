@@ -83,23 +83,17 @@ public:
      * @param path Optional path for database files (default: /tmp)
      */
     explicit TkrzwTreeStorageEngine(const std::string &file_path,
-                                    int32_t max_page_size = 8192,
-                                    int32_t max_branches = 256,
                                     size_t level = 0,
                                     const std::string &path = "/tmp") :
         StorageEngine<TkrzwTreeStorageEngine>(level, path),
         db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
 
-        tkrzw::TreeDBM::TuningParameters tuning_params;
-        tuning_params.max_page_size = max_page_size;
-        tuning_params.max_branches = max_branches;
-        tuning_params.record_comp_mode = tkrzw::HashDBM::RECORD_COMP_ZLIB;
 
         tkrzw::Status status =
             db_->OpenAdvanced(file_path,
-                              true,                      // writable
-                              tkrzw::File::OPEN_DEFAULT, // file opening options
-                              tuning_params);
+                              true,                     // writable
+                              tkrzw::File::OPEN_DEFAULT // file opening options
+            );
 
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;

@@ -227,8 +227,7 @@ public:
     Status write_impl(const std::string &key, const std::string &value) {
         // Lock key map for writing
         key_map_lock_.lock();
-
-        size_t partition_idx;
+        size_t partition_idx = 0;
 
         // Look up or assign storage for this key
         StorageEngineType *storage;

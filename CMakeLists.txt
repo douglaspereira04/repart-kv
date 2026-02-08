@@ -28,6 +28,22 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(unordered_dense)
 
+# Fetch loadgen workload generator library
+FetchContent_Declare(
+    loadgen
+    GIT_REPOSITORY https://github.com/douglaspereira04/loadgen.git
+    GIT_TAG main
+)
+FetchContent_MakeAvailable(loadgen)
+if(DEFINED loadgen_SOURCE_DIR AND TARGET loadgen-core)
+    target_include_directories(loadgen-core PUBLIC 
+        ${loadgen_SOURCE_DIR}
+        ${loadgen_SOURCE_DIR}/src
+        ${loadgen_SOURCE_DIR}/src/request
+        ${loadgen_SOURCE_DIR}/src/types
+    )
+endif()
+
 # Find Abseil library (system-wide)
 find_package(absl REQUIRED)
 
@@ -105,6 +121,7 @@ target_link_libraries(repart-kv-core PUBLIC
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     absl::btree
+    loadgen::core
 )
 
 target_compile_features(repart-kv-core PUBLIC cxx_std_20)
