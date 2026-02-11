@@ -1,0 +1,16 @@
+workload,workers,storage_type,partitions,storage_engine,paths,interval,makespan_s
+ycsb_d,1,engine,1,lmdb,1,0,14.542
+ycsb_d,1,hard,1,lmdb,1,5000,20.782
+ycsb_d,1,hard,1,lmdb,1,0,20.842
+ycsb_d,1,hard,8,lmdb,1,5000,21.815
+ycsb_d,1,hard,8,lmdb,1,0,21.887
+ycsb_d,2,engine,1,lmdb,1,0,10.374
+ycsb_d,2,hard,1,lmdb,1,5000,18.761
+ycsb_d,2,hard,1,lmdb,1,0,17.673
+ycsb_d,2,hard,8,lmdb,1,5000,13.512
+ycsb_d,2,hard,8,lmdb,1,0,15.589
+ycsb_d,4,engine,1,lmdb,1,0,20.835
+ycsb_d,4,hard,1,lmdb,1,0,36.51
+ycsb_d,4,hard,1,lmdb,1,5000,32.272
+ycsb_d,4,hard,8,lmdb,1,0,14.542
+ycsb_d,4,hard,8,lmdb,1,5000,14.528

@@ -1,0 +1,39 @@
+=== Repart-KV Workload Executor ===
+LoadGen config: ycsb_d.toml
+Partition count: 8
+Test workers: 4
+Storage type: hard
+Storage engine: tkrzw_tree
+Storage paths: /media/douglas/b69c7d47-6aef-4b75-a74b-cf70df78bdd5
+Tracking duration: 1000ms
+Repartition interval: 5000ms
+
+Configured workload summary:
+  Load records: 1000000
+  Operation phase: 10000000 operations
+  Data distribution: LATEST
+  Operation mix weights: READ=0.95, UPDATE=0, INSERT=0.05, SCAN=0
+  Scan length distribution: UNIFORM [1-1000]
+
+=== Initializing Storage ===
+Created HardRepartitioningKeyValueStorage with 8 partitions (Tkrzw)
+Tracking duration: 1000ms, Repartition interval: 5000ms
+
+=== Executing Workload ===
+Preload: executing preload operations...  [DONE]
+Loading workload into memory...  [DONE]
+Executing workload...  [DONE]
+
+=== Results ===
+Storage type: HardRepartitioningKeyValueStorage
+Preload operations: 1.000.000
+Total operations executed (excluding preload): 9.999.999
+Duration: 29.141 ms
+Operations per second: 343.159,09
+Metrics saved to: ycsb_d__4__hard__8__tkrzw_tree__1__5000.csv
+
+Per-worker statistics:
+  Worker 0: 2.499.999 operations
+  Worker 1: 2.500.000 operations
+  Worker 2: 2.500.000 operations
+  Worker 3: 2.500.000 operations

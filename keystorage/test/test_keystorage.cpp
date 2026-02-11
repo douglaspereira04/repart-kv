@@ -70,7 +70,7 @@ void test_overwrite_value() {
     StorageType storage;
 
     storage.put("key", static_cast<ValueType>(100));
-    ValueType value;
+    ValueType value = ValueType();
     ASSERT_TRUE(storage.get("key", value));
     ASSERT_EQ(static_cast<ValueType>(100), value);
 

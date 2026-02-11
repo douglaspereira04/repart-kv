@@ -292,6 +292,7 @@ void execute_operation(const workload::Operation &op, StorageType &storage) {
             if (status != Status::SUCCESS) {
                 std::cerr << "Error: Failed to read key: " << op.key
                           << std::endl;
+                exit(1);
             }
             break;
         }
@@ -302,6 +303,7 @@ void execute_operation(const workload::Operation &op, StorageType &storage) {
             if (status != Status::SUCCESS) {
                 std::cerr << "Error: Failed to write key: " << op.key
                           << std::endl;
+                exit(1);
             }
             break;
         }
@@ -311,6 +313,7 @@ void execute_operation(const workload::Operation &op, StorageType &storage) {
             if (status != Status::SUCCESS) {
                 std::cerr << "Error: Failed to scan key: " << op.key
                           << std::endl;
+                exit(1);
             }
             break;
         }
@@ -365,10 +368,15 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
         generator.skip_current_phase();
     }
 
+    assert(generator.current_phase() ==
+           workload::RequestGenerator::Phase::OPERATIONS);
     std::vector<workload::Operation> operations;
-    while (!generator.next(type, key, value, scan_size)) {
+    workload::RequestGenerator::Phase phase =
+        generator.next(type, key, value, scan_size);
+    while (phase == workload::RequestGenerator::Phase::OPERATIONS) {
         operations.push_back(
             make_operation_from_request(type, key, value, scan_size));
+        phase = generator.next(type, key, value, scan_size);
     }
 
     start_barrier.arrive_and_wait();
@@ -438,29 +446,29 @@ template <typename StorageType> void run_workload_with_storage(
         workload_filename + "__" + std::to_string(test_workers) + "__" +
         STORAGE_TYPE + "__" + std::to_string(partition_count) + "__" +
         STORAGE_ENGINE + "__" + std::to_string(STORAGE_PATHS.size()) + "__" +
-        std::to_string(TRACKING_DURATION.count()) + ".csv";
+        std::to_string(REPARTITION_INTERVAL.count()) + ".csv";
 
     // Execute operations
     std::cout << "\n=== Executing Workload ===" << std::endl;
 
     // Execute preload
-    std::cout << "Preload: executing preload operations... ";
+    std::cout << "Preload: executing preload operations... " << std::flush;
     size_t preload = 0;
 
     auto &primary_generator = generators[0];
-    while (primary_generator->current_phase() ==
-           workload::RequestGenerator::Phase::LOADING) {
-        loadgen::types::Type type;
-        long key;
-        std::string value;
-        long scan_size;
-        if (primary_generator->next(type, key, value, scan_size)) {
-            break;
-        }
+
+    loadgen::types::Type type;
+    long key;
+    std::string value;
+    long scan_size;
+    workload::RequestGenerator::Phase phase =
+        primary_generator->next(type, key, value, scan_size);
+    while (phase == workload::RequestGenerator::Phase::LOADING) {
         auto operation =
             make_operation_from_request(type, key, value, scan_size);
         execute_operation(operation, storage);
         preload++;
+        phase = primary_generator->next(type, key, value, scan_size);
     }
 
     assert(primary_generator->current_phase() ==
@@ -486,13 +494,13 @@ template <typename StorageType> void run_workload_with_storage(
                                     std::ref(start_barrier));
     }
 
-    std::cout << "Loading workload into memory... ";
+    std::cout << "Loading workload into memory... " << std::flush;
     start_barrier.arrive_and_wait();
     std::cout << " [DONE]" << std::endl;
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    std::cout << "Executing workload... ";
+    std::cout << "Executing workload... " << std::flush;
     // Wait for all worker threads to complete
     for (auto &thread : worker_threads) {
         thread.join();
@@ -882,8 +890,10 @@ int run_repart_kv(int argc, char *argv[]) {
     if (argc >= 8) {
         try {
             int64_t interval_ms = std::stoll(argv[7]);
-            TRACKING_DURATION = std::chrono::milliseconds(interval_ms);
             REPARTITION_INTERVAL = std::chrono::milliseconds(interval_ms);
+            if (interval_ms == 0) {
+                TRACKING_DURATION = std::chrono::milliseconds(interval_ms);
+            }
         } catch (const std::exception &e) {
             std::cerr << "Error: Invalid repartition_interval_ms: " << argv[7]
                       << std::endl;
@@ -926,6 +936,7 @@ int run_repart_kv(int argc, char *argv[]) {
         config.operation_seed += static_cast<long>(worker);
         config.key_seed += static_cast<long>(worker);
         config.scan_seed += static_cast<long>(worker);
+        config.n_operations = config.n_operations / TEST_WORKERS;
         generator->initialize();
         generators.push_back(std::move(generator));
     }
@@ -938,8 +949,9 @@ int run_repart_kv(int argc, char *argv[]) {
     const auto &summary_config = generators.front()->config();
     std::cout << "Configured workload summary:" << std::endl;
     std::cout << "  Load records: " << summary_config.n_records << std::endl;
-    std::cout << "  Operation phase: " << summary_config.n_operations
-              << " operations" << std::endl;
+    std::cout << "  Operation phase: "
+              << summary_config.n_operations * TEST_WORKERS << " operations"
+              << std::endl;
     std::cout << "  Data distribution: " << summary_config.data_distribution
               << std::endl;
     std::cout << "  Operation mix weights: " << "READ="

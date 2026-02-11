@@ -1,5 +1,5 @@
-workload.n_records = 100000
-workload.n_operations = 1000000
+workload.n_records = 1000000
+workload.n_operations = 10000000
 
 workload.key_seed = 1908944376
 workload.operation_seed = 1836524827

@@ -45,20 +45,33 @@ function run_and_move_metrics {
 
     local EXECUTE="./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL"
     echo $EXECUTE
-    ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL
+
+
     local BASENAME=${WORKLOAD}__${W}__${KV_STORAGE_TYPE}__${PARTITIONS}__${STORAGE_ENGINE}__${NUMBER_OF_PATHS}__${REPARTITIONING_INTERVAL}
     
+    local SUCCESS=false
+    #run the experiment, and in case of error try again
+    for i in {1..5}; do
+        ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL > "${BASENAME}(${i}).log"
+        #deletes directories repart_kv_storage in each path
+        for p in "${PATHS[@]}"; do
+            rm -rf "$p/repart_kv_storage"
+        done
+        if [ $? -eq 0 ]; then
+            SUCCESS=true
+            break
+        fi
+    done
+    if [ $SUCCESS = false ]; then
+        echo "Error: experiment failed"
+        exit 1
+    fi
     # Create results folder if it doesn't exist
     mkdir -p results
     mv "${BASENAME}.csv" "results/${BASENAME}(${REP}).csv"
 
     #echo $BASENAME
     #echo ""
-    
-    #deletes directories repart_kv_storage in each path
-    for p in "${PATHS[@]}"; do
-        rm -rf "$p/repart_kv_storage"
-    done
 }
 
 
@@ -90,7 +103,7 @@ function run_hard_experiments {
     # set PATHS as the subsequent arguments
     local PATHS=("$@")
 
-    local REPARTITIONING_INTERVALS=(0 1000)
+    local REPARTITIONING_INTERVALS=(0 5000)
 
     # for each repetition run the experiment
     for REP in $(seq 1 $REPETITIONS); do
@@ -123,9 +136,11 @@ function run_hard_experiments {
 TMP=("/tmp")
 
 
-
+#invoke run_hard_experiments function with arguments
+run_hard_experiments 1 ycsb_a.toml lmdb 1,2,4 1,8 $TMP
+run_hard_experiments 1 ycsb_a.toml tkrzw_tree 1,2,4 1,8 $TMP
 
 #invoke run_hard_experiments function with arguments
-run_hard_experiments 1 ycsb_a.toml lmdb 1,2 1,8 $TMP
-run_hard_experiments 1 ycsb_a.toml tkrzw_tree 1,2 1,8 $TMP
+run_hard_experiments 1 ycsb_d.toml lmdb 1,2,4 1,8 $TMP
+run_hard_experiments 1 ycsb_d.toml tkrzw_tree 1,2,4 1,8 $TMP
 
