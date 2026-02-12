@@ -46,6 +46,9 @@ private:
     // Flag indicating if graph has been prepared
     bool prepared_;
 
+    // Flag indicating if recursive bisection should be used
+    bool use_recursive_bisection_;
+
     // Partition result array
     std::vector<idx_t> part_;
 
@@ -53,7 +56,9 @@ public:
     /**
      * @brief Default constructor
      */
-    MetisGraph() : nvtxs_(0), ncon_(1), prepared_(false) {}
+    MetisGraph() :
+        nvtxs_(0), ncon_(1), prepared_(false), use_recursive_bisection_(false) {
+    }
 
     /**
      * @brief Prepares the METIS graph data structures from a Graph instance.
@@ -175,7 +180,7 @@ public:
 
         // Call METIS partitioning function
         int ret;
-        if (num_partitions <= 8) {
+        if (use_recursive_bisection_) {
             // Use recursive bisection for small number of partitions
             ret = METIS_PartGraphRecursive(
                 &nvtxs_,        // Number of vertices

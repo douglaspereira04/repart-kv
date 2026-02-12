@@ -15,9 +15,11 @@ void test_prepare_from_graph() {
     graph.increment_vertex_weight("A");
     graph.increment_vertex_weight("B");
     graph.increment_vertex_weight("C");
+    graph.increment_vertex_weight("D");
     graph.increment_edge_weight("A", "B");
     graph.increment_edge_weight("B", "C");
     graph.increment_edge_weight("C", "A");
+    graph.increment_edge_weight("D", "A");
 
     MetisGraph metis_graph;
     ASSERT_FALSE(metis_graph.is_prepared());
@@ -25,22 +27,22 @@ void test_prepare_from_graph() {
     metis_graph.prepare_from_graph(graph);
 
     ASSERT_TRUE(metis_graph.is_prepared());
-    ASSERT_EQ(3, metis_graph.get_num_vertices());
-    ASSERT_EQ(3, metis_graph.get_num_edges());
+    ASSERT_EQ(4, metis_graph.get_num_vertices());
+    ASSERT_EQ(4 * 2, metis_graph.get_num_edges());
 
     // Check vertex mappings
     const auto &vertex_to_idx = metis_graph.get_vertex_to_idx();
     const auto &idx_to_vertex = metis_graph.get_idx_to_vertex();
 
-    ASSERT_EQ(3, vertex_to_idx.size());
-    ASSERT_EQ(3, idx_to_vertex.size());
+    ASSERT_EQ(4, vertex_to_idx.size());
+    ASSERT_EQ(4, idx_to_vertex.size());
 
     // Check CSR structure
     const auto &xadj = metis_graph.get_xadj();
     const auto &adjncy = metis_graph.get_adjncy();
 
-    ASSERT_EQ(4, xadj.size()); // nvtxs + 1
-    ASSERT_EQ(3, adjncy.size());
+    ASSERT_EQ(5, xadj.size()); // nvtxs + 1
+    ASSERT_EQ(4 * 2, adjncy.size());
 
     std::cout << "  ✓ Prepare from graph passed" << std::endl;
     END_TEST("prepare_from_graph")

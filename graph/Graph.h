@@ -5,12 +5,14 @@
 #include <string>
 
 /**
- * @brief A weighted directed graph implementation using adjacency list
+ * @brief A weighted undirected graph implementation using adjacency list
  * representation.
  *
  * This class provides efficient operations for managing vertices and edges with
  * integer weights. Both vertices and edges are identified by strings and have
- * associated integer weights.
+ * associated integer weights. Edges are undirected: adding an edge between A
+ * and B automatically stores both A→B and B→A with the same weight, which is
+ * required by METIS for graph partitioning.
  */
 class Graph {
 private:
@@ -43,18 +45,23 @@ public:
     }
 
     /**
-     * @brief Increments the weight of an edge by 1.
+     * @brief Increments the weight of an undirected edge by 1.
      * If the edge does not exist, it is created with weight 1.
+     * Both directions (source→destination and destination→source) are updated
+     * to keep the adjacency structure symmetric.
      *
-     * @param source The source vertex of the edge
-     * @param destination The destination vertex of the edge
+     * @param source One endpoint of the edge
+     * @param destination The other endpoint of the edge
      * @return The new weight of the edge after incrementing
      */
     int increment_edge_weight(const std::string &source,
                               const std::string &destination) {
-        // Using operator[] on nested maps - creates entries with default value
-        // (0) if not exists Then increment and return
-        return ++edges_[source][destination];
+        // Update both directions to maintain symmetry for undirected graph
+        int new_weight = ++edges_[source][destination];
+        if (source != destination) {
+            edges_[destination][source] = new_weight;
+        }
+        return new_weight;
     }
 
     /**
@@ -121,16 +128,18 @@ public:
     size_t get_vertex_count() const { return vertices_.size(); }
 
     /**
-     * @brief Gets the number of edges in the graph.
+     * @brief Gets the number of undirected edges in the graph.
+     * Since each undirected edge is stored in both directions, the raw
+     * adjacency count is halved.
      *
-     * @return The number of edges
+     * @return The number of undirected edges
      */
     size_t get_edge_count() const {
         size_t count = 0;
         for (const auto &[source, destinations] : edges_) {
             count += destinations.size();
         }
-        return count;
+        return count / 2;
     }
 
     /**

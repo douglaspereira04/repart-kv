@@ -144,3 +144,6 @@ run_hard_experiments 1 ycsb_a.toml tkrzw_tree 1,2,4 1,8 $TMP
 run_hard_experiments 1 ycsb_d.toml lmdb 1,2,4 1,8 $TMP
 run_hard_experiments 1 ycsb_d.toml tkrzw_tree 1,2,4 1,8 $TMP
 
+#invoke run_hard_experiments function with arguments
+run_hard_experiments 1 ycsb_e.toml lmdb 1,2,4 1,8 $TMP
+run_hard_experiments 1 ycsb_e.toml tkrzw_tree 1,2,4 1,8 $TMP

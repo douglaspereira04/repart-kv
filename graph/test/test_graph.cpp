@@ -51,9 +51,9 @@ void testBasicEdgeOperations() {
     ASSERT_EQ(1, graph.increment_edge_weight("B", "C"));
     ASSERT_EQ(3, graph.get_edge_count());
 
-    // Test directed edges (A->B exists but B->A doesn't)
+    // Test undirected edges (A-B exists in both directions)
     ASSERT_TRUE(graph.has_edge("A", "B"));
-    ASSERT_FALSE(graph.has_edge("B", "A"));
+    ASSERT_TRUE(graph.has_edge("B", "A"));
 
     // Test non-existent edge
     ASSERT_FALSE(graph.has_edge("X", "Y"));
@@ -79,6 +79,7 @@ void testCombinedOperations() {
 
     ASSERT_EQ(6, graph.get_vertex_weight("A"));
     ASSERT_EQ(6, graph.get_edge_weight("A", "B"));
+    ASSERT_EQ(6, graph.get_edge_weight("B", "A")); // Undirected: same weight
 
     END_TEST("combined_operations")
 }
