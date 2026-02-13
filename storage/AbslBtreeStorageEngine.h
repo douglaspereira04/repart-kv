@@ -1,5 +1,6 @@
 #pragma once
 
+#include "StorageEngineIterator.h"
 #include "StorageEngine.h"
 #include "absl/container/btree_map.h"
 #include <string>
@@ -103,4 +104,50 @@ public:
         lock_.unlock_shared();
         return Status::SUCCESS;
     }
+
+    /**
+     * @brief absl::btree_map scan iterator for key lookups
+     *
+     * Provides the StorageEngineIterator interface with shared locking for
+     * thread-safety. absl::btree_map is ordered; the iterator uses find() for
+     * lookups.
+     */
+    class AbslBtreeIterator
+        : public StorageEngineIterator<AbslBtreeIterator,
+                                       AbslBtreeStorageEngine> {
+    public:
+        explicit AbslBtreeIterator(AbslBtreeStorageEngine &engine) :
+            StorageEngineIterator<AbslBtreeIterator, AbslBtreeStorageEngine>(
+                engine) {}
+
+        AbslBtreeIterator(const AbslBtreeIterator &) = delete;
+        AbslBtreeIterator &operator=(const AbslBtreeIterator &) = delete;
+
+        AbslBtreeIterator(AbslBtreeIterator &&other) noexcept :
+            StorageEngineIterator<AbslBtreeIterator, AbslBtreeStorageEngine>(
+                *other.engine_) {}
+
+        AbslBtreeIterator &operator=(AbslBtreeIterator &&other) noexcept {
+            if (this != &other) {
+                engine_ = other.engine_;
+            }
+            return *this;
+        }
+
+        ~AbslBtreeIterator() = default;
+
+        Status find_impl(const std::string &key, std::string &value) const {
+            engine_->lock_.lock_shared();
+            auto it = engine_->storage_.find(key);
+            if (it != engine_->storage_.end()) {
+                value = it->second;
+                engine_->lock_.unlock_shared();
+                return Status::SUCCESS;
+            }
+            engine_->lock_.unlock_shared();
+            return Status::NOT_FOUND;
+        }
+    };
+
+    AbslBtreeIterator iterator_impl() { return AbslBtreeIterator(*this); }
 };

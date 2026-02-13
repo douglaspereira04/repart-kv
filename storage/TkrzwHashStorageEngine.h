@@ -1,5 +1,6 @@
 #pragma once
 
+#include "StorageEngineIterator.h"
 #include "StorageEngine.h"
 #include <atomic>
 #include <tkrzw_dbm_hash.h>
@@ -258,6 +259,51 @@ public:
         }
         return Status::ERROR;
     }
+
+    /**
+     * @brief TKRZW HashDBM scan iterator for key lookups
+     *
+     * Provides the StorageEngineIterator interface. HashDBM is unordered
+     * (hash-based), so this iterator uses Get() per lookup without spatial
+     * locality benefits.
+     */
+    class TkrzwHashIterator
+        : public StorageEngineIterator<TkrzwHashIterator,
+                                       TkrzwHashStorageEngine> {
+    public:
+        explicit TkrzwHashIterator(TkrzwHashStorageEngine &engine) :
+            StorageEngineIterator<TkrzwHashIterator, TkrzwHashStorageEngine>(
+                engine) {}
+
+        TkrzwHashIterator(const TkrzwHashIterator &) = delete;
+        TkrzwHashIterator &operator=(const TkrzwHashIterator &) = delete;
+
+        TkrzwHashIterator(TkrzwHashIterator &&other) noexcept :
+            StorageEngineIterator<TkrzwHashIterator, TkrzwHashStorageEngine>(
+                *other.engine_) {}
+
+        TkrzwHashIterator &operator=(TkrzwHashIterator &&other) noexcept {
+            if (this != &other) {
+                engine_ = other.engine_;
+            }
+            return *this;
+        }
+
+        ~TkrzwHashIterator() = default;
+
+        Status find_impl(const std::string &key, std::string &value) const {
+            if (!engine_->is_open_ || !engine_->db_) {
+                return Status::ERROR;
+            }
+            tkrzw::Status status = engine_->db_->Get(key, &value);
+            if (status == tkrzw::Status::SUCCESS) {
+                return Status::SUCCESS;
+            }
+            return Status::NOT_FOUND;
+        }
+    };
+
+    TkrzwHashIterator iterator_impl() { return TkrzwHashIterator(*this); }
 };
 
 // Static member definitions

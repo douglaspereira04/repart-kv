@@ -1,5 +1,6 @@
 #pragma once
 
+#include "StorageEngineIterator.h"
 #include "StorageEngine.h"
 #include <map>
 #include <string>
@@ -104,4 +105,47 @@ public:
         lock_.unlock_shared();
         return Status::SUCCESS;
     }
+
+    /**
+     * @brief std::map scan iterator for key lookups
+     *
+     * Provides the StorageEngineIterator interface with shared locking for
+     * thread-safety. std::map is ordered; the iterator uses find() for lookups.
+     */
+    class MapIterator
+        : public StorageEngineIterator<MapIterator, MapStorageEngine> {
+    public:
+        explicit MapIterator(MapStorageEngine &engine) :
+            StorageEngineIterator<MapIterator, MapStorageEngine>(engine) {}
+
+        MapIterator(const MapIterator &) = delete;
+        MapIterator &operator=(const MapIterator &) = delete;
+
+        MapIterator(MapIterator &&other) noexcept :
+            StorageEngineIterator<MapIterator, MapStorageEngine>(
+                *other.engine_) {}
+
+        MapIterator &operator=(MapIterator &&other) noexcept {
+            if (this != &other) {
+                engine_ = other.engine_;
+            }
+            return *this;
+        }
+
+        ~MapIterator() = default;
+
+        Status find_impl(const std::string &key, std::string &value) const {
+            engine_->lock_.lock_shared();
+            auto it = engine_->storage_.find(key);
+            if (it != engine_->storage_.end()) {
+                value = it->second;
+                engine_->lock_.unlock_shared();
+                return Status::SUCCESS;
+            }
+            engine_->lock_.unlock_shared();
+            return Status::NOT_FOUND;
+        }
+    };
+
+    MapIterator iterator_impl() { return MapIterator(*this); }
 };

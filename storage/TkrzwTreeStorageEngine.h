@@ -1,5 +1,6 @@
 #pragma once
 
+#include "StorageEngineIterator.h"
 #include "StorageEngine.h"
 #include <tkrzw_dbm_tree.h>
 #include <string>
@@ -265,6 +266,87 @@ public:
         }
         return Status::ERROR;
     }
+
+    /**
+     * @brief TKRZW TreeDBM scan iterator for locality-optimized key lookups
+     *
+     * Maintains an open iterator. Best used when retrieving keys that are
+     * close in TreeDBM's sorted layout—avoids repeated tree traversal from
+     * the root for nearby keys.
+     */
+    class TkrzwTreeIterator
+        : public StorageEngineIterator<TkrzwTreeIterator,
+                                       TkrzwTreeStorageEngine> {
+    private:
+        std::unique_ptr<tkrzw::DBM::Iterator> iter_;
+
+    public:
+        /**
+         * @brief Construct and prepare the iterator for scanning
+         * @param engine The TreeDBM storage engine to scan
+         */
+        explicit TkrzwTreeIterator(TkrzwTreeStorageEngine &engine) :
+            StorageEngineIterator<TkrzwTreeIterator, TkrzwTreeStorageEngine>(
+                engine) {
+            if (engine.is_open_ && engine.db_) {
+                iter_ = engine.db_->MakeIterator();
+            }
+        }
+
+        TkrzwTreeIterator(const TkrzwTreeIterator &) = delete;
+        TkrzwTreeIterator &operator=(const TkrzwTreeIterator &) = delete;
+
+        TkrzwTreeIterator(TkrzwTreeIterator &&other) noexcept :
+            StorageEngineIterator<TkrzwTreeIterator, TkrzwTreeStorageEngine>(
+                *other.engine_),
+            iter_(std::move(other.iter_)) {}
+
+        TkrzwTreeIterator &operator=(TkrzwTreeIterator &&other) noexcept {
+            if (this != &other) {
+                engine_ = other.engine_;
+                iter_ = std::move(other.iter_);
+            }
+            return *this;
+        }
+
+        /**
+         * @brief Destructor - iterator is automatically cleaned up
+         */
+        ~TkrzwTreeIterator() = default;
+
+        /**
+         * @brief Implementation: retrieve value for key using iterator
+         * @param key The key to look up
+         * @param value Reference to store the value
+         * @return Status code
+         */
+        Status find_impl(const std::string &key, std::string &value) const {
+            if (!iter_ || !engine_->is_open_) {
+                return Status::ERROR;
+            }
+
+            tkrzw::Status status = iter_->Jump(key);
+            if (status != tkrzw::Status::SUCCESS) {
+                return Status::NOT_FOUND;
+            }
+
+            std::string retrieved_key;
+            status = iter_->Get(&retrieved_key, &value);
+            if (status != tkrzw::Status::SUCCESS) {
+                return Status::NOT_FOUND;
+            }
+            if (retrieved_key != key) {
+                return Status::NOT_FOUND;
+            }
+            return Status::SUCCESS;
+        }
+    };
+
+    /**
+     * @brief Implementation: create and return a TreeDBM scan iterator
+     * @return A TkrzwTreeIterator bound to this engine
+     */
+    TkrzwTreeIterator iterator_impl() { return TkrzwTreeIterator(*this); }
 };
 
 // Static member definitions

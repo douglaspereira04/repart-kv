@@ -1,5 +1,6 @@
 #pragma once
 
+#include "StorageEngineIterator.h"
 #include "StorageEngine.h"
 #include <lmdb.h>
 #include <string>
@@ -385,6 +386,117 @@ public:
      * @return The path to the database directory
      */
     const std::string &get_path() const { return db_path_; }
+
+    /**
+     * @brief LMDB scan iterator for locality-optimized key lookups
+     *
+     * Maintains an open read transaction and cursor. Best used when retrieving
+     * keys that are close in LMDB's B+tree layout—avoids repeated tree
+     * traversal from the root for nearby keys.
+     */
+    class LmdbIterator
+        : public StorageEngineIterator<LmdbIterator, LmdbStorageEngine> {
+    private:
+        MDB_txn *txn_;
+        MDB_cursor *cursor_;
+
+    public:
+        /**
+         * @brief Construct and prepare the iterator for scanning
+         * @param engine The LMDB storage engine to scan
+         */
+        explicit LmdbIterator(LmdbStorageEngine &engine) :
+            StorageEngineIterator<LmdbIterator, LmdbStorageEngine>(engine),
+            txn_(nullptr), cursor_(nullptr) {
+            if (engine.is_open_ && engine.env_) {
+                int rc = mdb_txn_begin(engine.env_, nullptr, MDB_RDONLY, &txn_);
+                if (rc == 0) {
+                    rc = mdb_cursor_open(txn_, engine.dbi_, &cursor_);
+                    if (rc != 0) {
+                        mdb_txn_abort(txn_);
+                        txn_ = nullptr;
+                    }
+                }
+            }
+        }
+
+        LmdbIterator(const LmdbIterator &) = delete;
+        LmdbIterator &operator=(const LmdbIterator &) = delete;
+
+        LmdbIterator(LmdbIterator &&other) noexcept :
+            StorageEngineIterator<LmdbIterator, LmdbStorageEngine>(
+                *other.engine_),
+            txn_(other.txn_), cursor_(other.cursor_) {
+            other.txn_ = nullptr;
+            other.cursor_ = nullptr;
+        }
+
+        LmdbIterator &operator=(LmdbIterator &&other) noexcept {
+            if (this != &other) {
+                if (cursor_) {
+                    mdb_cursor_close(cursor_);
+                }
+                if (txn_) {
+                    mdb_txn_abort(txn_);
+                }
+                engine_ = other.engine_;
+                txn_ = other.txn_;
+                cursor_ = other.cursor_;
+                other.txn_ = nullptr;
+                other.cursor_ = nullptr;
+            }
+            return *this;
+        }
+
+        /**
+         * @brief Destructor - closes cursor and frees transaction
+         */
+        ~LmdbIterator() {
+            if (cursor_) {
+                mdb_cursor_close(cursor_);
+                cursor_ = nullptr;
+            }
+            if (txn_) {
+                mdb_txn_abort(txn_);
+                txn_ = nullptr;
+            }
+        }
+
+        /**
+         * @brief Implementation: retrieve value for key using cursor
+         * @param key The key to look up
+         * @param value Reference to store the value
+         * @return Status code
+         */
+        Status find_impl(const std::string &key, std::string &value) const {
+            if (!cursor_ || !txn_) {
+                return Status::ERROR;
+            }
+
+            MDB_val mdb_key;
+            MDB_val mdb_value;
+            mdb_key.mv_size = key.size();
+            mdb_key.mv_data =
+                const_cast<void *>(static_cast<const void *>(key.c_str()));
+
+            int rc = mdb_cursor_get(cursor_, &mdb_key, &mdb_value, MDB_SET);
+            if (rc == MDB_SUCCESS) {
+                value = std::string(reinterpret_cast<char *>(mdb_value.mv_data),
+                                    mdb_value.mv_size);
+                return Status::SUCCESS;
+            }
+            if (rc == MDB_NOTFOUND) {
+                return Status::NOT_FOUND;
+            }
+            return Status::ERROR;
+        }
+    };
+
+    /**
+     * @brief Implementation: create and return an LMDB scan iterator
+     * @return An LmdbIterator bound to this engine
+     */
+    LmdbIterator iterator_impl() { return LmdbIterator(*this); }
 
 private:
     /**

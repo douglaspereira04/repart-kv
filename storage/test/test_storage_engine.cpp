@@ -385,6 +385,59 @@ template <typename EngineType> void test_scan_after_updates() {
     END_TEST("scan_after_updates")
 }
 
+template <typename EngineType> void test_iterator_find_existing_key() {
+    TEST("iterator_find_existing_key")
+    EngineType engine;
+
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("iter_key1", "iter_val1"));
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("iter_key2", "iter_val2"));
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("iter_key3", "iter_val3"));
+
+    auto it = engine.iterator();
+    std::string value;
+    ASSERT_STATUS_EQ(Status::SUCCESS, it.find("iter_key1", value));
+    ASSERT_STR_EQ("iter_val1", value);
+    ASSERT_STATUS_EQ(Status::SUCCESS, it.find("iter_key2", value));
+    ASSERT_STR_EQ("iter_val2", value);
+    ASSERT_STATUS_EQ(Status::SUCCESS, it.find("iter_key3", value));
+    ASSERT_STR_EQ("iter_val3", value);
+    END_TEST("iterator_find_existing_key")
+}
+
+template <typename EngineType> void test_iterator_find_nonexistent_key() {
+    TEST("iterator_find_nonexistent_key")
+    EngineType engine;
+
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("existing", "value"));
+
+    auto it = engine.iterator();
+    std::string value;
+    ASSERT_STATUS_EQ(Status::NOT_FOUND, it.find("nonexistent_key", value));
+    END_TEST("iterator_find_nonexistent_key")
+}
+
+template <typename EngineType> void test_iterator_multiple_lookups() {
+    TEST("iterator_multiple_lookups")
+    EngineType engine;
+
+    for (int i = 0; i < 10; ++i) {
+        std::string key = "multi:" + std::to_string(i);
+        std::string val = "v" + std::to_string(i);
+        ASSERT_STATUS_EQ(Status::SUCCESS, engine.write(key, val));
+    }
+
+    auto it = engine.iterator();
+    std::string value;
+    // Find keys in non-sequential order to exercise iterator
+    ASSERT_STATUS_EQ(Status::SUCCESS, it.find("multi:5", value));
+    ASSERT_STR_EQ("v5", value);
+    ASSERT_STATUS_EQ(Status::SUCCESS, it.find("multi:0", value));
+    ASSERT_STR_EQ("v0", value);
+    ASSERT_STATUS_EQ(Status::SUCCESS, it.find("multi:9", value));
+    ASSERT_STR_EQ("v9", value);
+    END_TEST("iterator_multiple_lookups")
+}
+
 template <typename EngineType> void test_operation_count() {
     TEST("operation_count")
     EngineType engine;
@@ -448,6 +501,20 @@ void run_storage_engine_test_suite(const std::string &engine_name) {
     run_test_suite(engine_name, tests);
 }
 
+// Iterator tests - only for engines that implement iterator_impl()
+template <typename EngineType>
+void run_iterator_tests(const std::string &engine_name) {
+    std::vector<std::pair<std::string, TestFunction>> tests = {
+        {"iterator_find_existing_key",
+         []() { test_iterator_find_existing_key<EngineType>(); }},
+        {"iterator_find_nonexistent_key",
+         []() { test_iterator_find_nonexistent_key<EngineType>(); }},
+        {"iterator_multiple_lookups",
+         []() { test_iterator_multiple_lookups<EngineType>(); }}};
+
+    run_test_suite(engine_name + " (iterator)", tests);
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << "  Generic StorageEngine Test Suite" << std::endl;
@@ -463,6 +530,14 @@ int main() {
         "TkrzwTreeStorageEngine");
     run_storage_engine_test_suite<LmdbStorageEngine>("LmdbStorageEngine");
     run_storage_engine_test_suite<TbbStorageEngine>("TbbStorageEngine");
+
+    // Iterator tests (only for engines that implement iterator_impl)
+    run_iterator_tests<MapStorageEngine>("MapStorageEngine");
+    run_iterator_tests<AbslBtreeStorageEngine>("AbslBtreeStorageEngine");
+    run_iterator_tests<TkrzwHashStorageEngine>("TkrzwHashStorageEngine");
+    run_iterator_tests<LmdbStorageEngine>("LmdbStorageEngine");
+    run_iterator_tests<TkrzwTreeStorageEngine>("TkrzwTreeStorageEngine");
+    run_iterator_tests<TbbStorageEngine>("TbbStorageEngine");
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "StorageEngineIterator.h"
 #include "StorageEngine.h"
 #include <tbb/concurrent_hash_map.h>
 #include <string>
@@ -147,4 +148,46 @@ public:
         }
         return Status::NOT_FOUND;
     }
+
+    /**
+     * @brief TBB concurrent_hash_map scan iterator for key lookups
+     *
+     * Provides the StorageEngineIterator interface. TBB concurrent_hash_map is
+     * unordered (hash-based), so this iterator does not offer spatial locality
+     * benefits; it uses find() per lookup. Thread-safe like the engine.
+     */
+    class TbbIterator
+        : public StorageEngineIterator<TbbIterator, TbbStorageEngine> {
+    public:
+        explicit TbbIterator(TbbStorageEngine &engine) :
+            StorageEngineIterator<TbbIterator, TbbStorageEngine>(engine) {}
+
+        TbbIterator(const TbbIterator &) = delete;
+        TbbIterator &operator=(const TbbIterator &) = delete;
+
+        TbbIterator(TbbIterator &&other) noexcept :
+            StorageEngineIterator<TbbIterator, TbbStorageEngine>(
+                *other.engine_) {}
+
+        TbbIterator &operator=(TbbIterator &&other) noexcept {
+            if (this != &other) {
+                engine_ = other.engine_;
+            }
+            return *this;
+        }
+
+        ~TbbIterator() = default;
+
+        Status find_impl(const std::string &key, std::string &value) const {
+            tbb::concurrent_hash_map<std::string, std::string>::const_accessor
+                accessor;
+            if (engine_->storage_.find(accessor, key)) {
+                value = accessor->second;
+                return Status::SUCCESS;
+            }
+            return Status::NOT_FOUND;
+        }
+    };
+
+    TbbIterator iterator_impl() { return TbbIterator(*this); }
 };

@@ -19,10 +19,12 @@
  * when thread-safety is required.
  *
  * Derived classes must implement:
- * - std::string read_impl(const std::string& key) const
- * - void write_impl(const std::string& key, const std::string& value)
- * - std::vector<std::pair<std::string, std::string>> scan_impl(const
- * std::string& initial_key_prefix, size_t limit) const
+ * - read_impl(const std::string& key, std::string& value) const
+ * - write_impl(const std::string& key, const std::string& value)
+ * - scan_impl(const std::string& initial_key_prefix, size_t limit,
+ *   std::vector<std::pair<std::string, std::string>>& results) const
+ * - iterator_impl() (optional) - returns a scan iterator for locality-optimized
+ * lookups
  */
 template <typename Derived> class StorageEngine {
 protected:
@@ -81,6 +83,19 @@ public:
         Derived *derived = static_cast<Derived *>(this);
         derived->operation_count_.fetch_add(1, std::memory_order_relaxed);
         return derived->scan_impl(key_start, limit, results);
+    }
+
+    /**
+     * @brief Create and return a scan iterator for locality-optimized lookups
+     * @return An iterator instance bound to this storage engine
+     *
+     * Engines that support iterators implement iterator_impl() to return their
+     * iterator type. Engines without iterator support should not be used with
+     * code that requires iterator().
+     */
+    auto iterator() {
+        Derived *derived = static_cast<Derived *>(this);
+        return derived->iterator_impl();
     }
 
     /**
