@@ -148,4 +148,6 @@ public:
     };
 
     MapIterator iterator_impl() { return MapIterator(*this); }
+
+    using IteratorType = MapIterator;
 };

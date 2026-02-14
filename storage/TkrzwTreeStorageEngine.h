@@ -347,6 +347,8 @@ public:
      * @return A TkrzwTreeIterator bound to this engine
      */
     TkrzwTreeIterator iterator_impl() { return TkrzwTreeIterator(*this); }
+
+    using IteratorType = TkrzwTreeIterator;
 };
 
 // Static member definitions

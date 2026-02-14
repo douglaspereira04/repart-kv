@@ -190,4 +190,6 @@ public:
     };
 
     TbbIterator iterator_impl() { return TbbIterator(*this); }
+
+    using IteratorType = TbbIterator;
 };

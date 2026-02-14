@@ -150,4 +150,6 @@ public:
     };
 
     AbslBtreeIterator iterator_impl() { return AbslBtreeIterator(*this); }
+
+    using IteratorType = AbslBtreeIterator;
 };

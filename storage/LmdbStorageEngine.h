@@ -498,6 +498,8 @@ public:
      */
     LmdbIterator iterator_impl() { return LmdbIterator(*this); }
 
+    using IteratorType = LmdbIterator;
+
 private:
     /**
      * @brief Initialize the database with a temporary path

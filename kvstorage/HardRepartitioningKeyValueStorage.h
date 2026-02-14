@@ -6,6 +6,8 @@
 #include "../graph/Graph.h"
 #include "../graph/MetisGraph.h"
 #include "Tracker.h"
+#include "storage/StorageEngineIterator.h"
+#include <map>
 #include <string>
 #include <vector>
 #include <cstddef>
@@ -88,6 +90,8 @@ private:
     std::mutex cv_mutex_;        // Mutex for condition variable
     std::vector<std::string>
         paths_; // Paths for embedded database files (default: {/tmp})
+
+    using IteratorType = typename StorageEngineType::IteratorType;
 
 public:
     /**
@@ -311,17 +315,26 @@ public:
         // Unlock key map
         key_map_lock_.unlock_shared();
 
+        std::map<StorageEngineType *, IteratorType> iterators;
+        for (size_t i = 0; i < storage_array.size(); ++i) {
+            iterators.try_emplace(storage_array[i],
+                                  storage_array[i]->iterator());
+        }
+
         // Read values from storages
         results.reserve(key_array.size());
         Status status;
         for (size_t i = 0; i < storage_array.size(); ++i) {
             std::string value;
-            status = storage_array[i]->read(key_array[i], value);
+            IteratorType &iterator = iterators.at(storage_array[i]);
+            status = iterator.find(key_array[i], value);
             if (status != Status::SUCCESS) {
                 break;
             }
             results.push_back({key_array[i], value});
         }
+
+        iterators.clear();
 
         // Unlock all storages
         for (size_t partition_idx : sorted_partitions) {

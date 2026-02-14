@@ -304,6 +304,8 @@ public:
     };
 
     TkrzwHashIterator iterator_impl() { return TkrzwHashIterator(*this); }
+
+    using IteratorType = TkrzwHashIterator;
 };
 
 // Static member definitions
