@@ -1,0 +1,28 @@
+workload.n_records = 1000000
+workload.n_operations = 10000000
+
+workload.key_seed = 1908944376
+workload.operation_seed = 1836524827
+workload.scan_seed = 2239123249
+
+
+workload.single_distribution = true
+workload.data_distribution = "ZIPFIAN"
+workload.scan_length_distribution = "UNIFORM"
+workload.read_proportion = 0.95
+workload.update_proportion = 0.05
+workload.scan_proportion = 0.0
+workload.insert_proportion = 0.0
+
+workload.min_scan_length = 1
+workload.max_scan_length = 1000
+
+workload.gen_values = false
+workload.value_min_size = 3840
+workload.value_max_size = 4352
+
+# export
+export = true
+output.requests.export_path = "requests.txt"
+
+

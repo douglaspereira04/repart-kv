@@ -81,15 +81,15 @@ for (csv_file in csv_files) {
     # Min-Max band
     geom_ribbon(aes(ymin = min / 1000, ymax = max / 1000), alpha = 0.2, color = NA) +
     # Mean line
-    geom_line(linewidth = 1) +
+    geom_line(linewidth = 1, alpha = 0.6) +
     # Repartitioning Start (Dot, same color as line, lighter)
     geom_point(data = repartitioning_starts, 
                aes(x = elapsed_s, y = mean / 1000, color = label),
                alpha = 0.4, size = 3, shape = 16, inherit.aes = FALSE) +
     # Repartitioning End (Vertical line, same color as line, solid)
-    geom_linerange(data = repartitioning_ends, 
-                   aes(x = elapsed_s, ymin = (mean / 1000) - 5, ymax = (mean / 1000) + 5, color = label),
-                   alpha = 1.0, linewidth = 1, inherit.aes = FALSE) +
+    geom_point(data = repartitioning_ends, 
+               aes(x = elapsed_s, y = mean / 1000, color = label),
+               alpha = 1.0, size = 3, shape = 16, inherit.aes = FALSE) +
     labs(
       x = "Elapsed Time (s)",
       y = "Thousand Operations per Second",

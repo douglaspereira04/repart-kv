@@ -119,12 +119,14 @@ function run_hard_experiments {
                 for P in ${PARTITIONS[@]}; do
                     # ... number of partitions, ...
                     run_and_move_metrics $REP $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE $INTERVAL ${PATHS[0]}
+                    run_and_move_metrics $REP $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE $INTERVAL ${PATHS[0]}
 
             
                     # if number of partitions is greater than 1 and number of paths is greater than 1
                     if [ $P -gt 1 ] && [ ${#PATHS[@]} -gt 1 ]; then
                         # ... and usage of multiple storage drives
                         run_and_move_metrics $REP $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE $INTERVAL ${PATHS[@]}
+                        run_and_move_metrics $REP $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE $INTERVAL ${PATHS[@]}
                     fi
                 done 
             done
@@ -136,14 +138,24 @@ function run_hard_experiments {
 TMP=("/tmp")
 
 
-#invoke run_hard_experiments function with arguments
-run_hard_experiments 1 ycsb_a.toml lmdb 1,2,4 1,8 $TMP
-run_hard_experiments 1 ycsb_a.toml tkrzw_tree 1,2,4 1,8 $TMP
+REPETITIONS=5
 
 #invoke run_hard_experiments function with arguments
-run_hard_experiments 1 ycsb_d.toml lmdb 1,2,4 1,8 $TMP
-run_hard_experiments 1 ycsb_d.toml tkrzw_tree 1,2,4 1,8 $TMP
+run_hard_experiments $REPETITIONS ycsb_a.toml lmdb 1,2,4 1,8 $TMP
+run_hard_experiments $REPETITIONS ycsb_a.toml tkrzw_tree 1,2,4 1,8 $TMP
 
 #invoke run_hard_experiments function with arguments
-run_hard_experiments 1 ycsb_e.toml lmdb 1,2,4 1,8 $TMP
-run_hard_experiments 1 ycsb_e.toml tkrzw_tree 1,2,4 1,8 $TMP
+run_hard_experiments $REPETITIONS ycsb_d.toml lmdb 1,2,4 1,8 $TMP
+run_hard_experiments $REPETITIONS ycsb_d.toml tkrzw_tree 1,2,4 1,8 $TMP
+
+#invoke run_hard_experiments function with arguments
+run_hard_experiments $REPETITIONS ycsb_e.toml lmdb 1,2,4 1,8 $TMP
+run_hard_experiments $REPETITIONS ycsb_e.toml tkrzw_tree 1,2,4 1,8 $TMP
+
+#invoke run_hard_experiments function with arguments
+run_hard_experiments $REPETITIONS ycsb_b.toml lmdb 1,2,4 1,8 $TMP
+run_hard_experiments $REPETITIONS ycsb_b.toml tkrzw_tree 1,2,4 1,8 $TMP
+
+#invoke run_hard_experiments function with arguments
+run_hard_experiments $REPETITIONS ycsb_c.toml lmdb 1,2,4 1,8 $TMP
+run_hard_experiments $REPETITIONS ycsb_c.toml tkrzw_tree 1,2,4 1,8 $TMP
