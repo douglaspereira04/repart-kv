@@ -24,6 +24,7 @@
 #include "../../loadgen/src/types/types.h"
 #endif
 #include "kvstorage/HardRepartitioningKeyValueStorage.h"
+#include "kvstorage/LockStrippingKeyValueStorage.h"
 #include "kvstorage/SoftRepartitioningKeyValueStorage.h"
 #include "kvstorage/threaded/SoftThreadedRepartitioningKeyValueStorage.h"
 #include "kvstorage/threaded/HardThreadedRepartitioningKeyValueStorage.h"
@@ -139,6 +140,13 @@ auto try_construct_repartitioning(T *, size_t partition_count,
                   REPARTITION_INTERVAL, paths)) {
     return T(partition_count, std::hash<std::string>(), TRACKING_DURATION,
              REPARTITION_INTERVAL, paths);
+}
+
+template <typename T>
+auto try_construct_partitioned(T *, size_t partition_count,
+                               const std::vector<std::string> &paths)
+    -> decltype(T(partition_count, std::hash<std::string>(), paths)) {
+    return T(partition_count, std::hash<std::string>(), paths);
 }
 
 template <typename T>
@@ -412,6 +420,19 @@ template <typename StorageType> void run_workload_with_storage(
                 static_cast<StorageType *>(nullptr), partition_count,
                 STORAGE_PATHS);
         }
+        // Try PartitionedKeyValueStorage constructor (e.g. LockStripping)
+        else if constexpr (requires {
+                               try_construct_partitioned(
+                                   static_cast<StorageType *>(nullptr),
+                                   partition_count, STORAGE_PATHS);
+                           }) {
+            std::cout << "Created " << storage_type_name << " with "
+                      << partition_count << " partitions (PartitionedStorage)"
+                      << std::endl;
+            return try_construct_partitioned(
+                static_cast<StorageType *>(nullptr), partition_count,
+                STORAGE_PATHS);
+        }
         // Try StorageEngine constructor
         else if constexpr (requires {
                                try_construct_storage_engine(
@@ -587,6 +608,12 @@ void execute_with_storage_config(
             run_workload_with_storage<StorageType>(generators, PARTITION_COUNT,
                                                    TEST_WORKERS,
                                                    "TkrzwTreeStorageEngine");
+        } else if (STORAGE_TYPE == "lock_stripping") {
+            using StorageType =
+                LockStrippingKeyValueStorage<TkrzwTreeStorageEngine>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "LockStrippingKeyValueStorage<TkrzwTreeStorageEngine>");
         }
     } else if (STORAGE_ENGINE == "tkrzw_hash") {
         if (STORAGE_TYPE == "hard") {
@@ -623,6 +650,12 @@ void execute_with_storage_config(
             run_workload_with_storage<StorageType>(generators, PARTITION_COUNT,
                                                    TEST_WORKERS,
                                                    "TkrzwHashStorageEngine");
+        } else if (STORAGE_TYPE == "lock_stripping") {
+            using StorageType =
+                LockStrippingKeyValueStorage<TkrzwHashStorageEngine>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "LockStrippingKeyValueStorage<TkrzwHashStorageEngine>");
         }
     } else if (STORAGE_ENGINE == "lmdb") {
         if (STORAGE_TYPE == "hard") {
@@ -657,6 +690,11 @@ void execute_with_storage_config(
             using StorageType = LmdbStorageEngine;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS, "LmdbStorageEngine");
+        } else if (STORAGE_TYPE == "lock_stripping") {
+            using StorageType = LockStrippingKeyValueStorage<LmdbStorageEngine>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "LockStrippingKeyValueStorage<LmdbStorageEngine>");
         }
     } else if (STORAGE_ENGINE == "map") {
         if (STORAGE_TYPE == "hard") {
@@ -691,6 +729,11 @@ void execute_with_storage_config(
             using StorageType = MapStorageEngine;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS, "MapStorageEngine");
+        } else if (STORAGE_TYPE == "lock_stripping") {
+            using StorageType = LockStrippingKeyValueStorage<MapStorageEngine>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "LockStrippingKeyValueStorage<MapStorageEngine>");
         }
     } else if (STORAGE_ENGINE == "tbb") {
         if (STORAGE_TYPE == "hard") {
@@ -725,6 +768,11 @@ void execute_with_storage_config(
             using StorageType = TbbStorageEngine;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS, "TbbStorageEngine");
+        } else if (STORAGE_TYPE == "lock_stripping") {
+            using StorageType = LockStrippingKeyValueStorage<TbbStorageEngine>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "LockStrippingKeyValueStorage<TbbStorageEngine>");
         }
     }
 }
@@ -748,7 +796,8 @@ void print_usage(const char *program_name) {
     std::cout << "  test_workers     Number of worker threads (default: 1)"
               << std::endl;
     std::cout << "  storage_type     Storage implementation: 'hard', 'soft', "
-                 "'threaded', 'hard_threaded', or 'engine' (default: soft)"
+                 "'threaded', 'hard_threaded', 'engine', or 'lock_stripping' "
+                 "(default: soft)"
               << std::endl;
     std::cout << "  storage_engine   Storage engine backend: 'tkrzw_tree', "
                  "'tkrzw_hash', "
@@ -779,6 +828,10 @@ void print_usage(const char *program_name) {
               << std::endl;
     std::cout
         << "  engine          Direct StorageEngine usage (no repartitioning)"
+        << std::endl;
+    std::cout
+        << "  lock_stripping  LockStrippingKeyValueStorage (partitioned with "
+           "lock striping, no repartitioning)"
         << std::endl;
     std::cout << "\nStorage Engines:" << std::endl;
     std::cout
@@ -849,9 +902,10 @@ int run_repart_kv(int argc, char *argv[]) {
         STORAGE_TYPE = argv[4];
         if (STORAGE_TYPE != "hard" && STORAGE_TYPE != "soft" &&
             STORAGE_TYPE != "threaded" && STORAGE_TYPE != "hard_threaded" &&
-            STORAGE_TYPE != "engine") {
+            STORAGE_TYPE != "engine" && STORAGE_TYPE != "lock_stripping") {
             std::cerr << "Error: storage_type must be 'hard', 'soft', "
-                         "'threaded', 'hard_threaded', or 'engine', got: "
+                         "'threaded', 'hard_threaded', 'engine', or "
+                         "'lock_stripping', got: "
                       << STORAGE_TYPE << std::endl;
             return 1;
         }

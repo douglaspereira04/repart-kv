@@ -5,6 +5,7 @@
 #include "../../storage/MapStorageEngine.h"
 #include "../../keystorage/MapKeyStorage.h"
 #include "../../utils/test_assertions.h"
+#include "../LockStrippingKeyValueStorage.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -460,6 +461,7 @@ int main() {
     using HardThreadedRepartitioningStorage =
         HardThreadedRepartitioningKeyValueStorage<MapStorageEngine,
                                                   MapKeyStorage, MapKeyStorage>;
+    using LockStrippingStorage = LockStrippingKeyValueStorage<MapStorageEngine>;
 
     // Test SoftRepartitioningKeyValueStorage
     run_partitioned_kv_test_suite<SoftRepartitioningStorage>(
@@ -476,6 +478,10 @@ int main() {
     // Test HardThreadedRepartitioningKeyValueStorage
     run_partitioned_kv_test_suite<HardThreadedRepartitioningStorage>(
         "HardThreadedRepartitioningKeyValueStorage");
+
+    // Test LockStrippingKeyValueStorage
+    run_partitioned_kv_test_suite<LockStrippingStorage>(
+        "LockStrippingKeyValueStorage");
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;
@@ -495,6 +501,7 @@ int main() {
                   << std::endl;
         std::cout << "✓ HardThreadedRepartitioningKeyValueStorage: PASSED"
                   << std::endl;
+        std::cout << "✓ LockStrippingKeyValueStorage: PASSED" << std::endl;
         return 0;
     } else {
         std::cout << "✗ Some tests failed!" << std::endl;
