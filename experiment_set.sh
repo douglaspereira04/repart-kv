@@ -4,7 +4,7 @@
 
 # Function to run and move metrics
 # Arguments:
-# 1. Repetition
+# 1. Test number
 # 2. Workload file
 # 3. Partitions
 # 4. Test workers
@@ -15,7 +15,7 @@
 # Example:
 # run_and_move_metrics workload.txt 1 tkrzw_tree 1 1000 /tmp/path1
 function run_and_move_metrics {
-    local REP=$1
+    local TEST_NUMBER=$1
     local WORKLOAD_FILE=$2
     local PARTITIONS=$3
     local W=$4
@@ -49,26 +49,22 @@ function run_and_move_metrics {
 
     local BASENAME=${WORKLOAD}__${W}__${KV_STORAGE_TYPE}__${PARTITIONS}__${STORAGE_ENGINE}__${NUMBER_OF_PATHS}__${REPARTITIONING_INTERVAL}
     
-    local SUCCESS=false
-    #run the experiment, and in case of error try again
-    for i in {1..5}; do
-        ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL > "${BASENAME}(${i}).log"
-        #deletes directories repart_kv_storage in each path
-        for p in "${PATHS[@]}"; do
-            rm -rf "$p/repart_kv_storage"
-        done
-        if [ $? -eq 0 ]; then
-            SUCCESS=true
-            break
-        fi
-    done
-    if [ $SUCCESS = false ]; then
+    # Create results folder if it doesn't exist
+    mkdir -p results
+
+    #try run the experiment
+    ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL > "results/${BASENAME}(${TEST_NUMBER}).log"
+    
+    if [ $? -ne 0 ]; then
         echo "Error: experiment failed"
         exit 1
     fi
-    # Create results folder if it doesn't exist
-    mkdir -p results
-    mv "${BASENAME}.csv" "results/${BASENAME}(${REP}).csv"
+
+    #deletes directories repart_kv_storage in each path
+    for p in "${PATHS[@]}"; do
+        rm -rf "$p/repart_kv_storage"
+    done
+    mv "${BASENAME}.csv" "results/${BASENAME}(${TEST_NUMBER}).csv"
 
     #echo $BASENAME
     #echo ""
@@ -77,7 +73,7 @@ function run_and_move_metrics {
 
 # Function to run hard experiments
 # Arguments:
-# 1. Repetition count
+# 1. Test number
 # 2. Workload file
 # 3. Storage engine
 # 4. Comma separated numbers of test workers
@@ -86,7 +82,7 @@ function run_and_move_metrics {
 # Example:
 # run_hard_experiments 10 workload.txt 1000 tkrzw_tree 1,2,4 1,2,4 /tmp/path1 /tmp/path2
 function run_hard_experiments {
-    local REPETITIONS=$1
+    local TEST_NUMBER=$1
     local WORKLOAD_FILE=$2
     local STORAGE_ENGINE=$3
     local COMMA_SEPARATED_TEST_WORKERS=$4
@@ -105,31 +101,35 @@ function run_hard_experiments {
 
     local REPARTITIONING_INTERVALS=(0 5000)
 
-    # for each repetition run the experiment
-    for REP in $(seq 1 $REPETITIONS); do
-        # for each worker count run experiment with pure engine
-        for W in ${TEST_WORKERS[@]}; do
+    # for each worker count run experiment with pure engine
+    for W in ${TEST_WORKERS[@]}; do
+        #test repart-kv varying number of test workers, ...
 
-            # test engine varying number of test workers
-            run_and_move_metrics $REP $WORKLOAD_FILE 1 $W engine $STORAGE_ENGINE 0 ${PATHS[0]}
+        # test engine
+        run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE 1 $W engine $STORAGE_ENGINE 0 ${PATHS[0]}
 
-            #test repart-kv varying number of test workers, ...
+        for P in ${PARTITIONS[@]}; do
+            # test lock stripping
+            run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE 0 ${PATHS[0]}
+        
+            # if number of partitions is greater than 1 and number of paths is greater than 1
+            if [ $P -gt 1 ] && [ ${#PATHS[@]} -gt 1 ]; then
+                # ... and usage of multiple storage drives
+                run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE 0 ${PATHS[@]}
+            fi
+
+            # test hard repartitioning
+            # ... repartition interval, ...
             for INTERVAL in ${REPARTITIONING_INTERVALS[@]}; do
-                # ... repartition interval, ...
-                for P in ${PARTITIONS[@]}; do
-                    # ... number of partitions, ...
-                    run_and_move_metrics $REP $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE $INTERVAL ${PATHS[0]}
-                    run_and_move_metrics $REP $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE $INTERVAL ${PATHS[0]}
+                # ... number of partitions, ...
+                run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE $INTERVAL ${PATHS[0]}
 
-            
-                    # if number of partitions is greater than 1 and number of paths is greater than 1
-                    if [ $P -gt 1 ] && [ ${#PATHS[@]} -gt 1 ]; then
-                        # ... and usage of multiple storage drives
-                        run_and_move_metrics $REP $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE $INTERVAL ${PATHS[@]}
-                        run_and_move_metrics $REP $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE $INTERVAL ${PATHS[@]}
-                    fi
-                done 
-            done
+                # if number of partitions is greater than 1 and number of paths is greater than 1
+                if [ $P -gt 1 ] && [ ${#PATHS[@]} -gt 1 ]; then
+                    # ... and usage of multiple storage drives
+                    run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE $INTERVAL ${PATHS[@]}
+                fi
+            done 
         done
     done
 
@@ -140,22 +140,25 @@ TMP=("/tmp")
 
 REPETITIONS=5
 
-#invoke run_hard_experiments function with arguments
-run_hard_experiments $REPETITIONS ycsb_a.toml lmdb 1,2,4 1,8 $TMP
-run_hard_experiments $REPETITIONS ycsb_a.toml tkrzw_tree 1,2,4 1,8 $TMP
+for TEST_NUMBER in $(seq 1 $REPETITIONS); do
 
-#invoke run_hard_experiments function with arguments
-run_hard_experiments $REPETITIONS ycsb_d.toml lmdb 1,2,4 1,8 $TMP
-run_hard_experiments $REPETITIONS ycsb_d.toml tkrzw_tree 1,2,4 1,8 $TMP
+    #invoke run_hard_experiments function with arguments
+    run_hard_experiments $TEST_NUMBER ycsb_a.toml lmdb 1,2,4 1,8 $TMP
+    run_hard_experiments $TEST_NUMBER ycsb_a.toml tkrzw_tree 1,2,4 1,8 $TMP
 
-#invoke run_hard_experiments function with arguments
-run_hard_experiments $REPETITIONS ycsb_e.toml lmdb 1,2,4 1,8 $TMP
-run_hard_experiments $REPETITIONS ycsb_e.toml tkrzw_tree 1,2,4 1,8 $TMP
+    #invoke run_hard_experiments function with arguments
+    run_hard_experiments $TEST_NUMBER ycsb_d.toml lmdb 1,2,4 1,8 $TMP
+    run_hard_experiments $TEST_NUMBER ycsb_d.toml tkrzw_tree 1,2,4 1,8 $TMP
 
-#invoke run_hard_experiments function with arguments
-run_hard_experiments $REPETITIONS ycsb_b.toml lmdb 1,2,4 1,8 $TMP
-run_hard_experiments $REPETITIONS ycsb_b.toml tkrzw_tree 1,2,4 1,8 $TMP
+    #invoke run_hard_experiments function with arguments
+    run_hard_experiments $TEST_NUMBER ycsb_e.toml lmdb 1,2,4 1,8 $TMP
+    run_hard_experiments $TEST_NUMBER ycsb_e.toml tkrzw_tree 1,2,4 1,8 $TMP
 
-#invoke run_hard_experiments function with arguments
-run_hard_experiments $REPETITIONS ycsb_c.toml lmdb 1,2,4 1,8 $TMP
-run_hard_experiments $REPETITIONS ycsb_c.toml tkrzw_tree 1,2,4 1,8 $TMP
+    #invoke run_hard_experiments function with arguments
+    run_hard_experiments $TEST_NUMBER ycsb_b.toml lmdb 1,2,4 1,8 $TMP
+    run_hard_experiments $TEST_NUMBER ycsb_b.toml tkrzw_tree 1,2,4 1,8 $TMP
+
+    #invoke run_hard_experiments function with arguments
+    run_hard_experiments $TEST_NUMBER ycsb_c.toml lmdb 1,2,4 1,8 $TMP
+    run_hard_experiments $TEST_NUMBER ycsb_c.toml tkrzw_tree 1,2,4 1,8 $TMP
+done
