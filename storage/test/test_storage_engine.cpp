@@ -3,6 +3,7 @@
 #include "../TkrzwHashStorageEngine.h"
 #include "../TkrzwTreeStorageEngine.h"
 #include "../LmdbStorageEngine.h"
+#include "../LevelDBStorageEngine.h"
 #include "../TbbStorageEngine.h"
 #include "../../utils/test_assertions.h"
 #include <iostream>
@@ -529,6 +530,7 @@ int main() {
     run_storage_engine_test_suite<TkrzwTreeStorageEngine>(
         "TkrzwTreeStorageEngine");
     run_storage_engine_test_suite<LmdbStorageEngine>("LmdbStorageEngine");
+    run_storage_engine_test_suite<LevelDBStorageEngine>("LevelDBStorageEngine");
     run_storage_engine_test_suite<TbbStorageEngine>("TbbStorageEngine");
 
     // Iterator tests (only for engines that implement iterator_impl)
@@ -536,6 +538,7 @@ int main() {
     run_iterator_tests<AbslBtreeStorageEngine>("AbslBtreeStorageEngine");
     run_iterator_tests<TkrzwHashStorageEngine>("TkrzwHashStorageEngine");
     run_iterator_tests<LmdbStorageEngine>("LmdbStorageEngine");
+    run_iterator_tests<LevelDBStorageEngine>("LevelDBStorageEngine");
     run_iterator_tests<TkrzwTreeStorageEngine>("TkrzwTreeStorageEngine");
     run_iterator_tests<TbbStorageEngine>("TbbStorageEngine");
 

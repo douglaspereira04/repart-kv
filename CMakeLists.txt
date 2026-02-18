@@ -59,6 +59,15 @@ else()
     message(WARNING "LMDB library not found. Install liblmdb++-dev to enable LMDB storage engine.")
 endif()
 
+# Find LevelDB library (libleveldb-dev)
+find_library(LEVELDB_LIB NAMES leveldb)
+find_path(LEVELDB_INCLUDE_DIR NAMES leveldb/db.h)
+if(LEVELDB_LIB AND LEVELDB_INCLUDE_DIR)
+    message(STATUS "LevelDB library found: ${LEVELDB_LIB}")
+else()
+    message(WARNING "LevelDB library not found. Install libleveldb-dev to enable LevelDB storage engine.")
+endif()
+
 # TKRZW compression dependencies (optional, used if available)
 find_library(LZMA_LIB NAMES lzma)
 find_library(LZ4_LIB NAMES lz4)
@@ -158,16 +167,18 @@ target_link_libraries(test_storage_engine PRIVATE
     Threads::Threads
     ${TKRZW_ALL_LIBS}
     ${LMDB_LIB}
+    ${LEVELDB_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     absl::btree
 )
-target_compile_features(test_storage_engine PRIVATE cxx_std_20)
-target_compile_options(test_storage_engine PRIVATE -Wall -Wextra -Wpedantic)
 target_include_directories(test_storage_engine PRIVATE 
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
+    ${LEVELDB_INCLUDE_DIR}
 )
+target_compile_features(test_storage_engine PRIVATE cxx_std_20)
+target_compile_options(test_storage_engine PRIVATE -Wall -Wextra -Wpedantic)
 
 # Interactive storage engine tester
 add_executable(interactive_storage_test 
