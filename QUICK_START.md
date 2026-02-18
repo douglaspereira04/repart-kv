@@ -18,7 +18,7 @@ sudo apt-get install -y \
 
 Notes:
 
-- `libtbb-dev` and `liblmdb-dev` are only needed if you use the `tbb` or `lmdb` storage engines.
+- `libtbb-dev`, `liblmdb-dev`, and `libleveldb-dev` are only needed if you use the `tbb`, `lmdb`, or `leveldb` storage engines.
 - `clang-format` is used by `build.sh`. If you build manually, it is optional.
 
 For other platforms and minimal installs, see [INSTALL_DEPENDENCIES.md](INSTALL_DEPENDENCIES.md).

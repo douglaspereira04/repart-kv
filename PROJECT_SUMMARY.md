@@ -19,6 +19,7 @@ String key/value backends used by the runner:
 - `TkrzwHashStorageEngine`: TKRZW HashDBM
 - `TkrzwTreeStorageEngine`: TKRZW TreeDBM
 - `LmdbStorageEngine`: LMDB
+- `LevelDBStorageEngine`: LevelDB (LSM-tree, sorted keys)
 - `TbbStorageEngine`: in-memory `tbb::concurrent_hash_map`
 
 ### KeyStorage (`keystorage/`)

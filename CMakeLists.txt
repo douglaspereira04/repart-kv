@@ -127,6 +127,7 @@ target_link_libraries(repart-kv-core PUBLIC
     ${TKRZW_ALL_LIBS}
     ${METIS_LIB}
     ${LMDB_LIB}
+    ${LEVELDB_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     absl::btree
@@ -143,6 +144,7 @@ target_compile_options(repart-kv-core PRIVATE
 target_include_directories(repart-kv-core PUBLIC 
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
+    ${LEVELDB_INCLUDE_DIR}
 )
 
 if(BUILD_REPART_KV_RUNNER)

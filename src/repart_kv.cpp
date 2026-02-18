@@ -31,6 +31,7 @@
 #include "storage/TkrzwTreeStorageEngine.h"
 #include "storage/TkrzwHashStorageEngine.h"
 #include "storage/LmdbStorageEngine.h"
+#include "storage/LevelDBStorageEngine.h"
 #include "storage/MapStorageEngine.h"
 #include "storage/TbbStorageEngine.h"
 #include "keystorage/TkrzwTreeKeyStorage.h"
@@ -696,6 +697,47 @@ void execute_with_storage_config(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "LockStrippingKeyValueStorage<LmdbStorageEngine>");
         }
+    } else if (STORAGE_ENGINE == "leveldb") {
+        if (STORAGE_TYPE == "hard") {
+            using StorageType =
+                HardRepartitioningKeyValueStorage<LevelDBStorageEngine,
+                                                  AbslBtreeKeyStorage,
+                                                  UnorderedDenseKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "HardRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "soft") {
+            using StorageType = SoftRepartitioningKeyValueStorage<
+                LevelDBStorageEngine, AbslBtreeKeyStorage, AbslBtreeKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "SoftRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "threaded") {
+            using StorageType =
+                SoftThreadedRepartitioningKeyValueStorage<LevelDBStorageEngine,
+                                                          AbslBtreeKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "SoftThreadedRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "hard_threaded") {
+            using StorageType = HardThreadedRepartitioningKeyValueStorage<
+                LevelDBStorageEngine, AbslBtreeKeyStorage,
+                UnorderedDenseKeyStorage>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "HardThreadedRepartitioningKeyValueStorage");
+        } else if (STORAGE_TYPE == "engine") {
+            using StorageType = LevelDBStorageEngine;
+            run_workload_with_storage<StorageType>(generators, PARTITION_COUNT,
+                                                   TEST_WORKERS,
+                                                   "LevelDBStorageEngine");
+        } else if (STORAGE_TYPE == "lock_stripping") {
+            using StorageType =
+                LockStrippingKeyValueStorage<LevelDBStorageEngine>;
+            run_workload_with_storage<StorageType>(
+                generators, PARTITION_COUNT, TEST_WORKERS,
+                "LockStrippingKeyValueStorage<LevelDBStorageEngine>");
+        }
     } else if (STORAGE_ENGINE == "map") {
         if (STORAGE_TYPE == "hard") {
             using StorageType =
@@ -801,7 +843,7 @@ void print_usage(const char *program_name) {
               << std::endl;
     std::cout << "  storage_engine   Storage engine backend: 'tkrzw_tree', "
                  "'tkrzw_hash', "
-                 "'lmdb', 'map', or 'tbb' (default: tkrzw_tree)"
+                 "'lmdb', 'leveldb', 'map', or 'tbb' (default: tkrzw_tree)"
               << std::endl;
     std::cout
         << "  storage_paths    Comma-separated paths for embedded database "
@@ -841,6 +883,9 @@ void print_usage(const char *program_name) {
               << std::endl;
     std::cout << "  lmdb            LmdbStorageEngine (LMDB-based storage)"
               << std::endl;
+    std::cout
+        << "  leveldb         LevelDBStorageEngine (LevelDB LSM-tree storage)"
+        << std::endl;
     std::cout
         << "  map             MapStorageEngine (in-memory std::map storage)"
         << std::endl;
@@ -914,11 +959,11 @@ int run_repart_kv(int argc, char *argv[]) {
     if (argc >= 6) {
         STORAGE_ENGINE = argv[5];
         if (STORAGE_ENGINE != "tkrzw_tree" && STORAGE_ENGINE != "tkrzw_hash" &&
-            STORAGE_ENGINE != "lmdb" && STORAGE_ENGINE != "map" &&
-            STORAGE_ENGINE != "tbb") {
+            STORAGE_ENGINE != "lmdb" && STORAGE_ENGINE != "leveldb" &&
+            STORAGE_ENGINE != "map" && STORAGE_ENGINE != "tbb") {
             std::cerr
                 << "Error: storage_engine must be 'tkrzw_tree', 'tkrzw_hash', "
-                   "'lmdb', 'map', or 'tbb', got: "
+                   "'lmdb', 'leveldb', 'map', or 'tbb', got: "
                 << STORAGE_ENGINE << std::endl;
             return 1;
         }

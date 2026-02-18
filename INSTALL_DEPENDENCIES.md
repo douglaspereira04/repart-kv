@@ -29,11 +29,12 @@ Notes:
 - **Boost Lockfree** (`libboost-dev`): used by threaded worker implementations (`boost::lockfree::spsc_queue`)
 - **Intel TBB** (`libtbb-dev`): required for `tbb` storage engine and some internal queues
 - **LMDB** (`liblmdb-dev`): required for `lmdb` storage engine and LMDB-based KeyStorage
+- **LevelDB** (`libleveldb-dev`): required for `leveldb` storage engine
 
 On Ubuntu/Debian:
 
 ```bash
-sudo apt-get install -y libboost-dev libtbb-dev liblmdb-dev
+sudo apt-get install -y libboost-dev libtbb-dev liblmdb-dev libleveldb-dev
 ```
 
 ## Optional (developer convenience)
@@ -52,7 +53,7 @@ sudo apt-get install -y clang-format
 sudo dnf install -y cmake gcc-c++ pkgconfig \
   tkrzw-devel xz-devel lz4-devel libzstd-devel \
   metis-devel \
-  boost-devel tbb-devel lmdb-devel
+  boost-devel tbb-devel lmdb-devel leveldb-devel
 ```
 
 ### Arch Linux
@@ -60,14 +61,14 @@ sudo dnf install -y cmake gcc-c++ pkgconfig \
 ```bash
 sudo pacman -S --needed cmake base-devel pkgconf \
   tkrzw xz lz4 zstd metis \
-  boost tbb lmdb \
+  boost tbb lmdb leveldb \
   clang-format
 ```
 
 ### macOS (Homebrew)
 
 ```bash
-brew install cmake pkg-config tkrzw xz lz4 zstd metis boost tbb lmdb llvm
+brew install cmake pkg-config tkrzw xz lz4 zstd metis boost tbb lmdb leveldb llvm
 ```
 
 ## Verify installation

@@ -25,6 +25,7 @@ Implemented backends:
 - **`TkrzwHashStorageEngine`**: TKRZW HashDBM (persistent)
 - **`TkrzwTreeStorageEngine`**: TKRZW TreeDBM (persistent, ordered keys)
 - **`LmdbStorageEngine`**: LMDB (persistent, ordered keys)
+- **`LevelDBStorageEngine`**: LevelDB (persistent, ordered keys, LSM-tree)
 - **`TbbStorageEngine`**: in-memory `tbb::concurrent_hash_map`
 
 Operational note:

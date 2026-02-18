@@ -137,28 +137,18 @@ function run_hard_experiments {
 
 TMP=("/tmp")
 
-
 REPETITIONS=5
 
+WORKLOADS=(ycsb_a.toml ycsb_d.toml ycsb_e.toml ycsb_b.toml ycsb_c.toml)
+STORAGE_ENGINES=(leveldb lmdb tkrzw_tree)
+TEST_WORKERS="1,2,4"
+PARTITIONS="1,8"
+
 for TEST_NUMBER in $(seq 1 $REPETITIONS); do
-
-    #invoke run_hard_experiments function with arguments
-    run_hard_experiments $TEST_NUMBER ycsb_a.toml lmdb 1,2,4 1,8 $TMP
-    run_hard_experiments $TEST_NUMBER ycsb_a.toml tkrzw_tree 1,2,4 1,8 $TMP
-
-    #invoke run_hard_experiments function with arguments
-    run_hard_experiments $TEST_NUMBER ycsb_d.toml lmdb 1,2,4 1,8 $TMP
-    run_hard_experiments $TEST_NUMBER ycsb_d.toml tkrzw_tree 1,2,4 1,8 $TMP
-
-    #invoke run_hard_experiments function with arguments
-    run_hard_experiments $TEST_NUMBER ycsb_e.toml lmdb 1,2,4 1,8 $TMP
-    run_hard_experiments $TEST_NUMBER ycsb_e.toml tkrzw_tree 1,2,4 1,8 $TMP
-
-    #invoke run_hard_experiments function with arguments
-    run_hard_experiments $TEST_NUMBER ycsb_b.toml lmdb 1,2,4 1,8 $TMP
-    run_hard_experiments $TEST_NUMBER ycsb_b.toml tkrzw_tree 1,2,4 1,8 $TMP
-
-    #invoke run_hard_experiments function with arguments
-    run_hard_experiments $TEST_NUMBER ycsb_c.toml lmdb 1,2,4 1,8 $TMP
-    run_hard_experiments $TEST_NUMBER ycsb_c.toml tkrzw_tree 1,2,4 1,8 $TMP
+    for WORKLOAD in ${WORKLOADS[@]}; do
+        for STORAGE_ENGINE in ${STORAGE_ENGINES[@]}; do
+            echo "run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITION $TMP"
+            run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $TMP
+        done
+    done
 done

@@ -28,6 +28,7 @@ Module docs:
 - `storage/TkrzwHashStorageEngine.h`: TKRZW HashDBM
 - `storage/TkrzwTreeStorageEngine.h`: TKRZW TreeDBM
 - `storage/LmdbStorageEngine.h`: LMDB backend
+- `storage/LevelDBStorageEngine.h`: LevelDB LSM-tree backend
 - `storage/TbbStorageEngine.h`: in-memory `tbb::concurrent_hash_map`
 
 ### `keystorage/` (String to integral/pointer)

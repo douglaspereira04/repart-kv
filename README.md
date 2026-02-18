@@ -44,7 +44,7 @@ cd build
 - **partition_count**: number of partitions (default: `4`)
 - **test_workers**: worker threads for workload execution (default: `1`)
 - **storage_type**: `hard`, `soft`, `threaded`, `hard_threaded`, or `engine` (default: `soft`)
-- **storage_engine**: `tkrzw_tree`, `tkrzw_hash`, `lmdb`, `map`, or `tbb` (default: `tkrzw_tree`)
+- **storage_engine**: `tkrzw_tree`, `tkrzw_hash`, `lmdb`, `leveldb`, `map`, or `tbb` (default: `tkrzw_tree`)
 - **storage_paths**: comma-separated directories used for embedded DB files (default: `/tmp`)
 - **repartition_interval_ms**: interval in milliseconds between repartitioning cycles and tracking duration (default: `1000`). Sets both `TRACKING_DURATION` and `REPARTITION_INTERVAL` to this value.
 
@@ -139,7 +139,7 @@ See:
 See [INSTALL_DEPENDENCIES.md](INSTALL_DEPENDENCIES.md) for full instructions.
 
 - **Required**: CMake ≥ 3.20, C++20 compiler, `pkg-config`, TKRZW, METIS
-- **Used for specific backends/features**: LMDB (`lmdb`), Intel TBB (`tbb`), Boost Lockfree (threaded workers)
+- **Used for specific backends/features**: LMDB (`lmdb`), LevelDB (`leveldb`), Intel TBB (`tbb`), Boost Lockfree (threaded workers)
 - **Build script convenience**: `clang-format` (used by `build.sh`)
 
 ## Extending: adding a new storage engine backend
