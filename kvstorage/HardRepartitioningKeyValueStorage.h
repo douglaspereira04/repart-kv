@@ -253,7 +253,9 @@ public:
 
         // Track key access if enabled
         if (enable_tracking_) {
-            tracker_.update(key);
+            int thread_id =
+                std::hash<std::thread::id>()(std::this_thread::get_id());
+            tracker_.update(key, thread_id);
         }
         return status;
     }

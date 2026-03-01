@@ -18,8 +18,14 @@
  * method) and consumer (tracking_loop method).
  */
 template <typename PartitionMapType> class Tracker {
+
+    struct TrackingItem {
+        std::vector<std::string> keys;
+        int thread_id;
+    };
+
 private:
-    tbb::concurrent_bounded_queue<std::vector<std::string>>
+    tbb::concurrent_bounded_queue<TrackingItem>
         queue_;    // High-performance thread-safe bounded queue from TBB with
                    // blocking pop
     Graph graph_;  // Graph for tracking access patterns
@@ -36,10 +42,10 @@ private:
      * the queue is empty.
      */
     void tracking_loop() {
-        std::vector<std::string> keys;
+        TrackingItem item;
         while (running_) {
             // Blocking pop: waits until an item is available
-            queue_.pop(keys);
+            queue_.pop(item);
 
             // Check if we should stop after getting the item
             if (!running_) {
@@ -50,19 +56,28 @@ private:
             std::lock_guard<std::mutex> lock(graph_lock_);
 
             // Process the item based on size
-            if (keys.size() == 1) {
+            if (item.keys.size() == 1) {
                 // Single key: increment vertex weight
-                graph_.increment_vertex_weight(keys[0]);
-            } else if (keys.size() > 1) {
+                graph_.increment_vertex_weight(item.keys[0]);
+                if (item.thread_id != -1) {
+                    graph_.increment_vertex_weight(
+                        "thread_" + std::to_string(item.thread_id));
+                }
+            } else if (item.keys.size() > 1) {
                 // Multiple keys: increment vertex weights and create edges
-                for (size_t i = 0; i < keys.size(); ++i) {
-                    graph_.increment_vertex_weight(keys[i]);
+                for (size_t i = 0; i < item.keys.size(); ++i) {
+                    graph_.increment_vertex_weight(item.keys[i]);
+                    if (item.thread_id != -1) {
+                        graph_.increment_vertex_weight(
+                            "thread_" + std::to_string(item.thread_id));
+                    }
                 }
 
                 // Add or increment edges between all pairs of keys
-                for (size_t i = 0; i < keys.size(); ++i) {
-                    for (size_t j = i + 1; j < keys.size(); ++j) {
-                        graph_.increment_edge_weight(keys[i], keys[j]);
+                for (size_t i = 0; i < item.keys.size(); ++i) {
+                    for (size_t j = i + 1; j < item.keys.size(); ++j) {
+                        graph_.increment_edge_weight(item.keys[i],
+                                                     item.keys[j]);
                     }
                 }
             }
@@ -93,7 +108,8 @@ public:
         running_ = false;
 
         // Insert a dummy vector to wake up the blocking pop() in tracking_loop
-        queue_.push(std::vector<std::string>()); // Empty vector
+        queue_.push(
+            TrackingItem{std::vector<std::string>(), -1}); // Empty vector
     }
 
     /**
@@ -123,7 +139,25 @@ public:
 
         // Insert into queue (thread-safe, blocking pop() will wake up
         // automatically)
-        queue_.push(std::move(keys));
+        queue_.push(TrackingItem{std::move(keys), -1});
+    }
+
+    /**
+     * @brief Update method to insert a single key into the queue
+     * @param key Reference to the string key
+     * @param thread_id Identifier of the thread that is updating the key
+     *
+     * Copies the string into a vector and inserts it into the queue. The
+     * thread_id is used to identify the thread that is updating the key.
+     */
+    void update(const std::string &key, int thread_id) {
+        // Create a vector with a single key (copy the string)
+        std::vector<std::string> keys;
+        keys.push_back(key);
+
+        // Insert into queue (thread-safe, blocking pop() will wake up
+        // automatically)
+        queue_.push(TrackingItem{std::move(keys), thread_id});
     }
 
     /**
@@ -138,7 +172,24 @@ public:
 
         // Insert into queue (thread-safe, blocking pop() will wake up
         // automatically)
-        queue_.push(std::move(keys_copy));
+        queue_.push(TrackingItem{std::move(keys_copy), -1});
+    }
+
+    /**
+     * @brief Multi-update method to insert multiple keys into the queue
+     * @param keys Reference to the vector of keys
+     * @param thread_id Identifier of the thread that is updating the keys
+     *
+     * Copies the vector of keys and inserts it into the queue. The thread_id is
+     * used to identify the thread that is updating the keys.
+     */
+    void multi_update(const std::vector<std::string> &keys, int thread_id) {
+        // Copy the vector of keys
+        std::vector<std::string> keys_copy = keys;
+
+        // Insert into queue (thread-safe, blocking pop() will wake up
+        // automatically)
+        queue_.push(TrackingItem{std::move(keys_copy), thread_id});
     }
 
     /**
@@ -150,12 +201,12 @@ public:
     void multi_move_update(std::vector<std::string> &&keys) {
         // Insert into queue by moving (no copy, thread-safe, blocking pop()
         // will wake up automatically)
-        queue_.push(std::move(keys));
+        queue_.push(TrackingItem{std::move(keys), -1});
     }
 
     void clear_graph() {
         // Drain the queue (thread-safe, no mutex needed)
-        std::vector<std::string> dummy;
+        TrackingItem dummy;
         while (queue_.try_pop(dummy)) {
             // Keep popping until empty
         }
@@ -182,7 +233,7 @@ public:
         // current repartioning
         // Note: concurrent_bounded_queue.size() is approximate, so we use
         // try_pop to check
-        std::vector<std::string> dummy;
+        TrackingItem dummy;
         while (queue_.try_pop(dummy)) {
             // Keep popping until empty
         }
