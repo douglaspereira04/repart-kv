@@ -195,16 +195,16 @@ public:
         // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock_shared();
 
-        // Track key access if enabled
-        if (enable_tracking_) {
-            tracker_.update(key);
-        }
-
         // Read value from storage
         Status status = storage->read(key, value);
 
         // Unlock storage
         partition_locks_[partition_idx]->unlock_shared();
+
+        // Track key access if enabled
+        if (enable_tracking_) {
+            tracker_.update(key);
+        }
         return status;
     }
 
@@ -245,16 +245,16 @@ public:
         // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock();
 
-        // Track key access if enabled
-        if (enable_tracking_) {
-            tracker_.update(key);
-        }
-
         // Write value to storage
         Status status = storage->write(key, value);
 
         // Unlock storage
         partition_locks_[partition_idx]->unlock();
+
+        // Track key access if enabled
+        if (enable_tracking_) {
+            tracker_.update(key);
+        }
         return status;
     }
 
