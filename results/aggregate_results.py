@@ -6,8 +6,10 @@ import sys
 from collections import defaultdict
 
 def parse_filename(filename):
-    # Format: workload__testworkers__storagetype__partitions__storageengine__paths__interval(REP).csv
-    # Example: ycsb_a__1__engine__1__tkrzw_tree__1__0(1).csv
+    # Format: workload__testworkers__storagetype__partitions__storageengine__paths__interval__thinking(REP).csv
+    # Example: ycsb_a__1__engine__1__tkrzw_tree__1__0__10000(1).csv
+    # thinking is in nanoseconds (ns)
+    # Backward compat: 7 parts (no thinking) -> thinking_time=0
     
     # Remove extension
     name = filename.rsplit('.', 1)[0]
@@ -22,8 +24,10 @@ def parse_filename(filename):
     name_no_rep = name[:match.start()]
     
     parts = name_no_rep.split('__')
-    if len(parts) != 7:
+    if len(parts) not in (7, 8):
         return None
+
+    thinking_time = int(parts[7]) if len(parts) == 8 else 0
         
     return {
         'workload': parts[0],
@@ -33,8 +37,9 @@ def parse_filename(filename):
         'storage_engine': parts[4],
         'paths': int(parts[5]),
         'interval': int(parts[6]),
+        'thinking_time': thinking_time,
         'rep': rep,
-        'key': name_no_rep # Unique key for the experiment configuration
+        'key': name_no_rep  # Unique key for the experiment configuration
     }
 
 def calculate_metrics(filepath):
@@ -87,7 +92,7 @@ def main():
     # experiment_key -> metadata
     metadata = {}
     
-    files = [f for f in os.listdir(input_dir) if f.endswith('.csv') and '(' in f]
+    files = [f for f in os.listdir(input_dir) if f.endswith('.csv') and '(' in f and '_latency' not in f]
     
     for f in files:
         params = parse_filename(f)
@@ -121,6 +126,7 @@ def main():
             'storage_engine': meta['storage_engine'],
             'paths': meta['paths'],
             'interval': meta['interval'],
+            'thinking_time': meta['thinking_time'],
         }
         
         grouped_throughput[output_key].append({**common_meta, 'ops_per_second': mean_ops})
@@ -130,9 +136,9 @@ def main():
     for output_key, data_list in grouped_throughput.items():
         output_file = os.path.join(throughput_dir, f"{output_key}.csv")
         with open(output_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'ops_per_second'])
+            writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'thinking_time', 'ops_per_second'])
             writer.writeheader()
-            sorted_data = sorted(data_list, key=lambda x: (x['workers'], x['storage_type'], x['partitions']))
+            sorted_data = sorted(data_list, key=lambda x: (x['workers'], x['storage_type'], x['partitions'], x['thinking_time']))
             writer.writerows(sorted_data)
         print(f"Created throughput CSV: {output_file}")
 
@@ -140,9 +146,9 @@ def main():
     for output_key, data_list in grouped_makespan.items():
         output_file = os.path.join(makespan_dir, f"{output_key}.csv")
         with open(output_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'makespan_s'])
+            writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'thinking_time', 'makespan_s'])
             writer.writeheader()
-            sorted_data = sorted(data_list, key=lambda x: (x['workers'], x['storage_type'], x['partitions']))
+            sorted_data = sorted(data_list, key=lambda x: (x['workers'], x['storage_type'], x['partitions'], x['thinking_time']))
             writer.writerows(sorted_data)
         print(f"Created makespan CSV: {output_file}")
 

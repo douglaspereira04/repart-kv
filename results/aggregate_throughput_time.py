@@ -6,7 +6,9 @@ import sys
 from collections import defaultdict
 
 def parse_filename(filename):
-    # Format: workload__testworkers__storagetype__partitions__storageengine__paths__interval(REP).csv
+    # Format: workload__testworkers__storagetype__partitions__storageengine__paths__interval__thinking(REP).csv
+    # thinking is in nanoseconds (ns)
+    # Backward compat: 7 parts (no thinking) -> thinking_time=0
     name = filename.rsplit('.', 1)[0]
     match = re.search(r'\((\d+)\)$', name)
     if not match:
@@ -16,9 +18,11 @@ def parse_filename(filename):
     name_no_rep = name[:match.start()]
     
     parts = name_no_rep.split('__')
-    if len(parts) != 7:
+    if len(parts) not in (7, 8):
         return None
-        
+
+    thinking_time = int(parts[7]) if len(parts) == 8 else 0
+
     return {
         'workload': parts[0],
         'workers': int(parts[1]),
@@ -27,9 +31,10 @@ def parse_filename(filename):
         'storage_engine': parts[4],
         'paths': int(parts[5]),
         'interval': int(parts[6]),
+        'thinking_time': thinking_time,
         'rep': rep,
         'config_key': name_no_rep,
-        'chart_key': f"{parts[0]}__{parts[4]}__{parts[1]}" # workload, engine, workers
+        'chart_key': f"{parts[0]}__{parts[4]}__{parts[1]}__{thinking_time}"  # workload, engine, workers, thinking
     }
 
 def process_file(filepath):
@@ -41,14 +46,12 @@ def process_file(filepath):
             prev_count = None
             
             for row in reader:
-                # Handle thousand separators (dots)
-                time_ms = float(row['elapsed_time_ms'].replace('.', ''))
-                count = float(row['executed_count'].replace('.', ''))
+                time_ms = parse_number(row['elapsed_time_ms'])
+                count = parse_number(row['executed_count'])
                 
-                # Check for tracking and repartitioning flags
-                # Assuming 'x' means active, empty or other means inactive
-                tracking = 1 if row.get('Tracking', '').strip().lower() == 'x' else 0
-                repartitioning = 1 if row.get('Repartitioning', '').strip().lower() == 'x' else 0
+                # C++ writes 'o' for active, 'x' for inactive
+                tracking = 1 if row.get('Tracking', '').strip().lower() == 'o' else 0
+                repartitioning = 1 if row.get('Repartitioning', '').strip().lower() == 'o' else 0
                 
                 if prev_time is not None:
                     delta_time_s = (time_ms - prev_time) / 1000.0
@@ -56,8 +59,9 @@ def process_file(filepath):
                     
                     if delta_time_s > 0:
                         throughput = delta_count / delta_time_s
-                        # Round time to 1 decimal place (100ms) for alignment
-                        elapsed_s = round(time_ms / 1000.0, 1)
+                        # Round time to 2 decimal places (100ms) for alignment
+                        # (metrics are sampled every 100ms)
+                        elapsed_s = round(time_ms / 1000.0, 2)
                         results.append({
                             'elapsed_s': elapsed_s,
                             'throughput': throughput,
@@ -72,15 +76,28 @@ def process_file(filepath):
         print(f"Error processing {filepath}: {e}")
         return None
 
+def parse_number(s):
+    """Parse number with dot as thousand separator (C++ format_with_separators output)."""
+    s = str(s).strip().replace('.', '')
+    return float(s) if s else 0.0
+
 def main():
-    input_dir = "/home/douglas/Documentos/repart-kv/results"
-    output_dir = "/home/douglas/Documentos/repart-kv/results/aggregated_throughput_time"
-    
+    input_dir = sys.argv[1] if len(sys.argv) > 1 else "."
+    output_dir = sys.argv[2] if len(sys.argv) > 2 else "aggregated_throughput_time"
+
+    # Resolve to absolute paths for consistent behavior
+    input_dir = os.path.abspath(input_dir)
+    output_dir = os.path.abspath(output_dir)
+
+    if not os.path.exists(input_dir):
+        print(f"Error: Input directory does not exist: {input_dir}", file=sys.stderr)
+        sys.exit(1)
+
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
         
     config_groups = defaultdict(list)
-    files = [f for f in os.listdir(input_dir) if f.endswith('.csv') and '(' in f]
+    files = [f for f in os.listdir(input_dir) if f.endswith('.csv') and '(' in f and '_latency' not in f]
     
     for f in files:
         params = parse_filename(f)
@@ -130,7 +147,8 @@ def main():
                 'partitions': params['partitions'],
                 'paths': params['paths'],
                 'interval': params['interval'],
-                'line_label': f"{params['storage_type']}_p{params['partitions']}_w{params['paths']}_i{params['interval']}"
+                'thinking_time': params['thinking_time'],
+                'line_label': f"{params['storage_type']}_p{params['partitions']}_w{params['paths']}_i{params['interval']}_t{params['thinking_time']}"
             })
         
         chart_data[params['chart_key']].extend(aggregated_rows)
@@ -142,7 +160,7 @@ def main():
         fieldnames = [
             'elapsed_s', 'mean', 'min', 'max', 
             'tracking_prob', 'repartitioning_prob',
-            'storage_type', 'partitions', 'paths', 'interval', 'line_label'
+            'storage_type', 'partitions', 'paths', 'interval', 'thinking_time', 'line_label'
         ]
         with open(output_file, 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)

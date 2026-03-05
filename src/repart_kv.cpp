@@ -41,6 +41,7 @@
 #include "repart_kv_api.h"
 #include <cassert>
 #include <barrier>
+#include <random>
 
 // Global parameters
 size_t PARTITION_COUNT = 4;
@@ -53,9 +54,92 @@ std::string LOADGEN_CONFIG_FILE;
 std::string WORKLOAD_NAME;
 // Repartitioning parameters
 std::chrono::milliseconds TRACKING_DURATION(
-    1000); // Duration to track key accesses before repartitioning
+    100); // Duration to track key accesses before repartitioning
 std::chrono::milliseconds
-    REPARTITION_INTERVAL(1000); // Interval between repartitioning cycles
+    REPARTITION_INTERVAL(100); // Interval between repartitioning cycles
+std::chrono::nanoseconds THINKING_TIME(0); // Thinking time delay (ns)
+long THINKING_SEED = 0;                    // Thinking seed
+
+std::chrono::high_resolution_clock::time_point **START_TIMES = nullptr;
+std::chrono::high_resolution_clock::time_point **END_TIMES = nullptr;
+size_t *TIMES_INDEX = nullptr;
+
+/**
+ * @brief Write operation latency data (start,end pairs) to CSV after experiment
+ * ends. Pairs are sorted by start time; times are relative to experiment start.
+ * @param metrics_file Base metrics filename (same naming, .csv replaced with
+ * _latency.csv)
+ * @param experiment_start Reference time point for relative timestamps
+ * @param test_workers Number of workers
+ */
+void output_latency_csv(
+    const std::string &metrics_file,
+    std::chrono::high_resolution_clock::time_point experiment_start,
+    size_t test_workers) {
+    if (START_TIMES == nullptr || END_TIMES == nullptr ||
+        TIMES_INDEX == nullptr) {
+        return;
+    }
+
+    std::string latency_file = metrics_file;
+    const size_t csv_pos = latency_file.rfind(".csv");
+    if (csv_pos != std::string::npos) {
+        latency_file = latency_file.substr(0, csv_pos) + "__latency.csv";
+    } else {
+        latency_file += "__latency.csv";
+    }
+
+    std::ofstream file(latency_file);
+    if (!file.is_open()) {
+        std::cerr << "Warning: Failed to open latency file: " << latency_file
+                  << std::endl;
+        return;
+    }
+
+    file << "start_ns,end_ns" << std::endl;
+
+    // K-way merge: each worker's array is sorted by start time; use counters
+    // to merge by repeatedly picking the smallest start among current heads
+    std::vector<size_t> worker_idx(test_workers, 0);
+    size_t total = 0;
+    for (size_t w = 0; w < test_workers; ++w) {
+        total += TIMES_INDEX[w];
+    }
+
+    for (size_t written = 0; written < total; ++written) {
+        size_t best_worker = test_workers;
+        std::chrono::high_resolution_clock::time_point best_start{};
+
+        for (size_t w = 0; w < test_workers; ++w) {
+            if (worker_idx[w] < TIMES_INDEX[w]) {
+                auto s = START_TIMES[w][worker_idx[w]];
+                if (best_worker == test_workers || s < best_start) {
+                    best_worker = w;
+                    best_start = s;
+                }
+            }
+        }
+
+        if (best_worker == test_workers) {
+            break;
+        }
+
+        auto start_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                            START_TIMES[best_worker][worker_idx[best_worker]] -
+                            experiment_start)
+                            .count();
+        auto end_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
+                          END_TIMES[best_worker][worker_idx[best_worker]] -
+                          experiment_start)
+                          .count();
+        file << start_ns << "," << end_ns << "\n";
+        worker_idx[best_worker]++;
+    }
+    file.flush();
+    file.close();
+
+    std::cout << "Latency data saved to: " << latency_file << std::endl;
+}
 
 /**
  * @brief Format a number with thousand separators (dots)
@@ -285,8 +369,8 @@ void metrics_loop(const std::vector<size_t> &executed_counts,
         // Flush to ensure data is written
         file.flush();
 
-        // Sleep for 1 second
-        std::this_thread::sleep_for(std::chrono::seconds(1));
+        // Sleep for 100 milliseconds
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
     }
 
     file.close();
@@ -390,9 +474,36 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
 
     start_barrier.arrive_and_wait();
 
-    for (const auto &operation : operations) {
-        execute_operation(operation, storage);
-        executed_counts[worker_id]++;
+    std::mt19937 rng(
+        static_cast<std::mt19937::result_type>(worker_id + THINKING_SEED));
+
+    if (THINKING_TIME.count() > 0) {
+        std::exponential_distribution<double> thinking_dist(
+            1.0 / static_cast<double>(THINKING_TIME.count()));
+        for (const auto &operation : operations) {
+            auto op_start = std::chrono::high_resolution_clock::now();
+            execute_operation(operation, storage);
+            auto op_end = std::chrono::high_resolution_clock::now();
+            executed_counts[worker_id]++;
+            double delay_ns = thinking_dist(rng);
+            START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
+            END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
+            TIMES_INDEX[worker_id]++;
+            auto target = std::chrono::duration<double, std::nano>(delay_ns);
+            while (std::chrono::high_resolution_clock::now() - op_end <
+                   target) {
+            }
+        }
+    } else {
+        for (const auto &operation : operations) {
+            auto op_start = std::chrono::high_resolution_clock::now();
+            execute_operation(operation, storage);
+            auto op_end = std::chrono::high_resolution_clock::now();
+            executed_counts[worker_id]++;
+            START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
+            END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
+            TIMES_INDEX[worker_id]++;
+        }
     }
 }
 
@@ -468,7 +579,8 @@ template <typename StorageType> void run_workload_with_storage(
         workload_filename + "__" + std::to_string(test_workers) + "__" +
         STORAGE_TYPE + "__" + std::to_string(partition_count) + "__" +
         STORAGE_ENGINE + "__" + std::to_string(STORAGE_PATHS.size()) + "__" +
-        std::to_string(REPARTITION_INTERVAL.count()) + ".csv";
+        std::to_string(REPARTITION_INTERVAL.count()) + "__" +
+        std::to_string(THINKING_TIME.count()) + ".csv";
 
     // Execute operations
     std::cout << "\n=== Executing Workload ===" << std::endl;
@@ -559,6 +671,8 @@ template <typename StorageType> void run_workload_with_storage(
     std::cout << "Operations per second: "
               << format_with_separators(operations_per_second, 2) << std::endl;
     std::cout << "Metrics saved to: " << metrics_file << std::endl;
+
+    output_latency_csv(metrics_file, start_time, test_workers);
 
     // Display per-worker statistics
     std::cout << "\nPer-worker statistics:" << std::endl;
@@ -826,7 +940,7 @@ void print_usage(const char *program_name) {
     std::cout << "Usage: " << program_name
               << " <loadgen_config.toml> [partition_count] [test_workers] "
                  "[storage_type] [storage_engine] "
-                 "[storage_paths] "
+                 "[thinking_time_ns] [storage_paths] "
                  "[repartition_interval_ms]"
               << std::endl;
     std::cout << "\nArguments:" << std::endl;
@@ -845,6 +959,9 @@ void print_usage(const char *program_name) {
                  "'tkrzw_hash', "
                  "'lmdb', 'leveldb', 'map', or 'tbb' (default: tkrzw_tree)"
               << std::endl;
+    std::cout
+        << "  thinking_time_ns Thinking time delay in nanoseconds (default: 0)"
+        << std::endl;
     std::cout
         << "  storage_paths    Comma-separated paths for embedded database "
            "files "
@@ -970,7 +1087,19 @@ int run_repart_kv(int argc, char *argv[]) {
     }
 
     if (argc >= 7) {
-        std::string paths_str = argv[6];
+        try {
+            int64_t thinking_ns = std::stoll(argv[6]);
+            THINKING_TIME =
+                std::chrono::nanoseconds(thinking_ns >= 0 ? thinking_ns : 0);
+        } catch (const std::exception &e) {
+            std::cerr << "Error: Invalid thinking_time_ns: " << argv[6]
+                      << std::endl;
+            return 1;
+        }
+    }
+
+    if (argc >= 8) {
+        std::string paths_str = argv[7];
         STORAGE_PATHS.clear();
         std::stringstream ss(paths_str);
         std::string path;
@@ -986,15 +1115,15 @@ int run_repart_kv(int argc, char *argv[]) {
         }
     }
 
-    if (argc >= 8) {
+    if (argc >= 9) {
         try {
-            int64_t interval_ms = std::stoll(argv[7]);
+            int64_t interval_ms = std::stoll(argv[8]);
             REPARTITION_INTERVAL = std::chrono::milliseconds(interval_ms);
             if (interval_ms == 0) {
                 TRACKING_DURATION = std::chrono::milliseconds(interval_ms);
             }
         } catch (const std::exception &e) {
-            std::cerr << "Error: Invalid repartition_interval_ms: " << argv[7]
+            std::cerr << "Error: Invalid repartition_interval_ms: " << argv[8]
                       << std::endl;
             return 1;
         }
@@ -1012,6 +1141,8 @@ int run_repart_kv(int argc, char *argv[]) {
     std::cout << "Test workers: " << TEST_WORKERS << std::endl;
     std::cout << "Storage type: " << STORAGE_TYPE << std::endl;
     std::cout << "Storage engine: " << STORAGE_ENGINE << std::endl;
+    std::cout << "Thinking time: " << THINKING_TIME.count() << "ns"
+              << std::endl;
     std::cout << "Storage paths: ";
     for (size_t i = 0; i < STORAGE_PATHS.size(); ++i) {
         std::cout << STORAGE_PATHS[i];
@@ -1039,6 +1170,22 @@ int run_repart_kv(int argc, char *argv[]) {
         generator->initialize();
         generators.push_back(std::move(generator));
     }
+
+    size_t n_operations = generators[0]->config().n_operations * TEST_WORKERS;
+    START_TIMES =
+        new std::chrono::high_resolution_clock::time_point *[TEST_WORKERS];
+    END_TIMES =
+        new std::chrono::high_resolution_clock::time_point *[TEST_WORKERS];
+    TIMES_INDEX = new size_t[TEST_WORKERS];
+
+    for (size_t worker = 0; worker < TEST_WORKERS; ++worker) {
+        START_TIMES[worker] =
+            new std::chrono::high_resolution_clock::time_point[n_operations];
+        END_TIMES[worker] =
+            new std::chrono::high_resolution_clock::time_point[n_operations];
+        TIMES_INDEX[worker] = 0;
+    }
+    THINKING_SEED = generators[0]->config().operation_seed;
 
     if (generators.empty()) {
         std::cerr << "Error: No request generators created" << std::endl;

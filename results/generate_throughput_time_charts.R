@@ -1,6 +1,7 @@
 #!/usr/bin/env Rscript
 #
 # Generate throughput-over-time charts with range bands from aggregated CSV files.
+# Data points are sampled every 100ms (elapsed_s has 0.01s resolution).
 #
 # Usage:
 #   Rscript generate_throughput_time_charts.R [input_path] [output_path]
@@ -41,21 +42,27 @@ for (csv_file in csv_files) {
   data <- read.csv(csv_file)
   if (nrow(data) == 0) next
   
-  # Extract info from filename (e.g., ycsb_a__lmdb__1.csv)
+  # Extract info from filename (e.g., ycsb_a__lmdb__1__10.csv or ycsb_a__lmdb__1.csv for backward compat)
   filename <- basename(csv_file)
   parts <- str_split(str_remove(filename, "\\.csv$"), "__")[[1]]
   workload <- parts[1]
   storage_engine <- parts[2]
   num_workers <- parts[3]
+  thinking_time <- if (length(parts) >= 4) parts[4] else "0"
+
+  cat(paste("Generating chart for", workload, "-", storage_engine, "(Workers:", num_workers, ", Thinking:", thinking_time, "ns) ...\n"))
   
-  cat(paste("Generating chart for", workload, "-", storage_engine, "(Workers:", num_workers, ") ...\n"))
-  
+  if (!"thinking_time" %in% names(data)) {
+    data$thinking_time <- 0
+  }
+
   # Create nice labels for the legend
   data$label <- paste0(
     data$storage_type, 
     " (p=", data$partitions, 
     ", d=", data$paths, 
-    ", i=", data$interval / 1000, "s)"
+    ", i=", data$interval / 1000, "s",
+    ", t=", data$thinking_time, "ns)"
   )
   
   # Identify start and end points for repartitioning
@@ -94,7 +101,7 @@ for (csv_file in csv_files) {
       x = "Elapsed Time (s)",
       y = "Thousand Operations per Second",
       title = paste("Throughput over Time:", workload, "-", storage_engine),
-      subtitle = paste("Number of Test Workers:", num_workers),
+      subtitle = paste("Workers:", num_workers, "| Thinking time:", thinking_time, "ns"),
       color = "Configuration",
       fill = "Configuration"
     ) +
@@ -113,6 +120,10 @@ for (csv_file in csv_files) {
     ) +
     scale_color_brewer(palette = "Set1") +
     scale_fill_brewer(palette = "Set1") +
+    scale_x_continuous(
+      breaks = pretty_breaks(n = 10),
+      expand = expansion(mult = c(0.02, 0))
+    ) +
     scale_y_continuous(
       expand = expansion(mult = c(0, 0.1)), 
       limits = c(0, NA),
@@ -120,7 +131,7 @@ for (csv_file in csv_files) {
     )
   
   # Save chart
-  output_file <- file.path(output_path, paste(workload, storage_engine, num_workers, "throughput_time.png", sep = "."))
+  output_file <- file.path(output_path, paste(workload, storage_engine, num_workers, thinking_time, "throughput_time.png", sep = "."))
   
   ggsave(output_file, plot = p, width = 12, height = 8, dpi = 300, bg = "white")
   

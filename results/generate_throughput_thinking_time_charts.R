@@ -1,13 +1,17 @@
 #!/usr/bin/env Rscript
 #
-# Generate charts from aggregated CSV metrics files.
+# Generate throughput vs thinking-time charts from aggregated throughput CSV files.
 #
 # Usage:
-#   Rscript generate_charts.R [input_path] [output_path]
+#   Rscript generate_throughput_thinking_time_charts.R [input_path] [output_path]
 #
 # Arguments:
-#   input_path:  Directory containing aggregated throughput CSV files (default: ./aggregated_results/throughput)
-#   output_path: Directory to save charts (default: ./charts/throughput)
+#   input_path:  Directory containing aggregated throughput CSV files
+#                (default: ./aggregated_results/throughput)
+#   output_path: Directory to save charts (default: ./charts/throughput_thinking_time)
+#
+# Creates one chart per (workload, storage_engine, workers) combination:
+#   Throughput (ops/s) vs Thinking time (ns)
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -19,7 +23,7 @@ suppressPackageStartupMessages({
 # Parse command line arguments
 args <- commandArgs(trailingOnly = TRUE)
 input_path <- if (length(args) >= 1) args[1] else "./aggregated_results/throughput"
-output_path <- if (length(args) >= 2) args[2] else "./charts/throughput"
+output_path <- if (length(args) >= 2) args[2] else "./charts/throughput_thinking_time"
 
 # Validate input path
 if (!dir.exists(input_path)) {
@@ -34,7 +38,7 @@ if (length(csv_files) == 0) {
   quit(status = 0)
 }
 
-cat(paste("Found", length(csv_files), "aggregated CSV file(s)\n"))
+cat(paste("Found", length(csv_files), "aggregated throughput CSV file(s)\n"))
 
 # Create output directory
 dir.create(output_path, showWarnings = FALSE, recursive = TRUE)
@@ -50,38 +54,45 @@ for (csv_file in csv_files) {
 
   workload <- unique(data$workload)
   storage_engine <- unique(data$storage_engine)
-  thinking_times <- sort(unique(data$thinking_time))
 
-  for (tt in thinking_times) {
-    subset_data <- data %>% filter(thinking_time == tt)
+  # Create storage type labels (p=partitions, d=paths, i=interval)
+  data$storage_type_label <- paste0(
+    data$storage_type,
+    " (p=", data$partitions,
+    ", d=", data$paths,
+    ", i=", data$interval / 1000, "s)"
+  )
+
+  # Get unique workers for this workload+engine
+  workers_list <- sort(unique(data$workers))
+
+  for (num_workers in workers_list) {
+    subset_data <- data %>% filter(workers == num_workers)
     if (nrow(subset_data) == 0) next
 
-    cat(paste("Generating throughput chart for", workload, "-", storage_engine, "(Thinking time:", tt, "ns) ...\n"))
-
-    # Create storage type labels (p=partitions, d=paths, i=interval) - exclude thinking_time since it's fixed per chart
-    subset_data$storage_type_label <- paste0(
-      subset_data$storage_type,
-      " (p=", subset_data$partitions,
-      ", d=", subset_data$paths,
-      ", i=", subset_data$interval / 1000, "s)"
+    # Factor for thinking_time to ensure proper ordering on X-axis
+    subset_data$thinking_time_factor <- factor(
+      subset_data$thinking_time,
+      levels = sort(unique(subset_data$thinking_time))
     )
 
-    # Create a factor for workers to ensure equal spacing
-    subset_data$workers_factor <- factor(subset_data$workers, levels = sort(unique(subset_data$workers)))
+    safe_workload <- str_replace_all(workload, "[^\\w\\-_]", "_")
+    safe_engine <- str_replace_all(storage_engine, "[^\\w\\-_]", "_")
 
-    # Create the plot
-    p <- ggplot(subset_data, aes(x = workers_factor, y = ops_per_second / 1000,
-                        color = storage_type_label,
-                        linetype = storage_type_label,
-                        shape = storage_type_label,
-                        group = storage_type_label)) +
+    cat(paste("Generating throughput vs thinking-time chart for", workload, "-", storage_engine, "(Workers:", num_workers, ") ...\n"))
+
+    p <- ggplot(subset_data, aes(x = thinking_time_factor, y = ops_per_second / 1000,
+                                color = storage_type_label,
+                                linetype = storage_type_label,
+                                shape = storage_type_label,
+                                group = storage_type_label)) +
       geom_line(linewidth = 1.2, alpha = 0.8) +
       geom_point(size = 4, alpha = 0.8) +
       labs(
-        x = "Number of Workers",
+        x = "Thinking Time (ns)",
         y = "Thousand Operations per Second",
-        title = paste(workload, "-", storage_engine),
-        subtitle = paste("Thinking time:", tt, "ns"),
+        title = paste("Throughput vs Thinking Time:", workload, "-", storage_engine),
+        subtitle = paste("Workers:", num_workers),
         color = "Storage Type",
         linetype = "Storage Type",
         shape = "Storage Type"
@@ -107,15 +118,10 @@ for (csv_file in csv_files) {
         breaks = pretty_breaks(n = 10)
       )
 
-    # Save chart: one file per workload, storage_engine, thinking_time
-    safe_workload <- str_replace_all(workload, "[^\\w\\-_]", "_")
-    safe_engine <- str_replace_all(storage_engine, "[^\\w\\-_]", "_")
-    output_file <- file.path(output_path, paste(safe_workload, safe_engine, tt, "throughput.png", sep = "."))
-
+    output_file <- file.path(output_path, paste(safe_workload, safe_engine, num_workers, "throughput_thinking_time.png", sep = "."))
     ggsave(output_file, plot = p, width = 12, height = 6, dpi = 300, bg = "white")
-
     cat(paste("Generated chart:", output_file, "\n"))
   }
 }
 
-cat(paste("\nAll charts saved to:", output_path, "\n"))
+cat(paste("\nAll throughput vs thinking-time charts saved to:", output_path, "\n"))
