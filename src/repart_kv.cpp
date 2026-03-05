@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <iomanip>
 #include <sstream>
+#include <semaphore>
 #include <memory>
 #include "keystorage/AbslBtreeKeyStorage.h"
 #include "workload/Workload.h"
@@ -42,7 +43,9 @@
 #include <cassert>
 #include <barrier>
 #include <random>
+#include <boost/lockfree/spsc_queue.hpp>
 
+const size_t QUEUE_CAPACITY = 10000000;
 // Global parameters
 size_t PARTITION_COUNT = 4;
 size_t TEST_WORKERS = 1;
@@ -63,6 +66,44 @@ long THINKING_SEED = 0;                    // Thinking seed
 std::chrono::high_resolution_clock::time_point **START_TIMES = nullptr;
 std::chrono::high_resolution_clock::time_point **END_TIMES = nullptr;
 size_t *TIMES_INDEX = nullptr;
+
+/**
+ * @brief Operation with start timestamp for open-loop producer-consumer model
+ */
+struct QueuedOperation {
+    workload::Operation op;
+    std::chrono::high_resolution_clock::time_point start_time;
+};
+
+/**
+ * @brief Thread-safe blocking queue for producer-consumer
+ */
+template <typename T, size_t C> class BlockingSPSCQueue {
+    boost::lockfree::spsc_queue<T> q_;
+    std::counting_semaphore<C> available_sem_;
+    bool done_ = false;
+
+public:
+    BlockingSPSCQueue() : q_(C), available_sem_(0) {}
+    void wait() { available_sem_.acquire(); }
+    void push(T item) {
+        q_.push(std::move(item));
+        available_sem_.release();
+    }
+    T try_pop() {
+        T value = q_.front();
+        q_.pop();
+        return value;
+    }
+    void set_done() {
+        done_ = true;
+        available_sem_.release();
+    }
+
+    bool done() const { return done_; }
+
+    size_t size() const { return q_.read_available(); }
+};
 
 /**
  * @brief Write operation latency data (start,end pairs) to CSV after experiment
@@ -438,19 +479,14 @@ make_operation_from_request(loadgen::types::Type type, long key,
 }
 
 /**
- * @brief Worker function that executes a subset of operations
- * @param worker_id ID of this worker (0-indexed)
- * @param operations Reference to the operations vector for this worker
- * @param storage Reference to the storage instance
- * @param executed_counts Array of counters (one per worker, no synchronization
- * needed)
- * @param start_barrier Barrier to wait for before starting the workload
- * @return void
+ * @brief Producer thread: "thinks" (exponential sleep), then pushes operation
+ *        with start timestamp to queue. Open-loop: request rate independent of
+ *        service time.
  */
-template <typename StorageType>
-void worker_function(size_t worker_id, workload::RequestGenerator &generator,
-                     StorageType &storage, std::vector<size_t> &executed_counts,
-                     std::barrier<> &start_barrier) {
+void producer_function(
+    size_t pair_id, workload::RequestGenerator &generator,
+    BlockingSPSCQueue<QueuedOperation, QUEUE_CAPACITY> &queue,
+    std::barrier<> &start_barrier) {
     loadgen::types::Type type;
     long key;
     std::string value;
@@ -475,35 +511,53 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
     start_barrier.arrive_and_wait();
 
     std::mt19937 rng(
-        static_cast<std::mt19937::result_type>(worker_id + THINKING_SEED));
+        static_cast<std::mt19937::result_type>(pair_id + THINKING_SEED));
 
     if (THINKING_TIME.count() > 0) {
+        auto interval_begin = std::chrono::high_resolution_clock::now();
         std::exponential_distribution<double> thinking_dist(
             1.0 / static_cast<double>(THINKING_TIME.count()));
         for (const auto &operation : operations) {
-            auto op_start = std::chrono::high_resolution_clock::now();
-            execute_operation(operation, storage);
-            auto op_end = std::chrono::high_resolution_clock::now();
-            executed_counts[worker_id]++;
             double delay_ns = thinking_dist(rng);
-            START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
-            END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
-            TIMES_INDEX[worker_id]++;
             auto target = std::chrono::duration<double, std::nano>(delay_ns);
-            while (std::chrono::high_resolution_clock::now() - op_end <
-                   target) {
+            auto curr_time = std::chrono::high_resolution_clock::now();
+            while (curr_time - interval_begin < target) {
             }
+            queue.push(QueuedOperation{operation, curr_time});
+            interval_begin = curr_time;
         }
     } else {
         for (const auto &operation : operations) {
-            auto op_start = std::chrono::high_resolution_clock::now();
-            execute_operation(operation, storage);
-            auto op_end = std::chrono::high_resolution_clock::now();
-            executed_counts[worker_id]++;
-            START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
-            END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
-            TIMES_INDEX[worker_id]++;
+            auto start_time = std::chrono::high_resolution_clock::now();
+            queue.push(QueuedOperation{operation, start_time});
         }
+    }
+    queue.set_done();
+}
+
+/**
+ * @brief Consumer thread: pops from queue, executes operation, records end
+ * time, saves (start, end) for latency.
+ */
+template <typename StorageType> void
+consumer_function(size_t pair_id,
+                  BlockingSPSCQueue<QueuedOperation, QUEUE_CAPACITY> &queue,
+                  StorageType &storage, std::vector<size_t> &executed_counts,
+                  std::barrier<> &start_barrier) {
+    start_barrier.arrive_and_wait();
+
+    while (true) {
+        queue.wait();
+        if (queue.size() == 0 && queue.done()) {
+            break;
+        }
+        QueuedOperation item = queue.try_pop();
+        execute_operation(item.op, storage);
+        auto op_end = std::chrono::high_resolution_clock::now();
+        executed_counts[pair_id]++;
+        START_TIMES[pair_id][TIMES_INDEX[pair_id]] = item.start_time;
+        END_TIMES[pair_id][TIMES_INDEX[pair_id]] = op_end;
+        TIMES_INDEX[pair_id]++;
     }
 }
 
@@ -608,24 +662,32 @@ template <typename StorageType> void run_workload_with_storage(
     assert(primary_generator->current_phase() ==
            workload::RequestGenerator::Phase::OPERATIONS);
     std::cout << " [DONE]" << std::endl;
-    std::barrier start_barrier(test_workers + 2);
 
-    // Execute workload
+    // Open-loop: N producer-consumer pairs, each with its own queue
+    std::vector<BlockingSPSCQueue<QueuedOperation, QUEUE_CAPACITY>> queues(
+        test_workers);
+    std::barrier start_barrier(2 * test_workers + 2);
+
     // Start metrics logging thread
     std::thread metrics_thread(metrics_loop<StorageType>,
                                std::ref(executed_counts),
                                std::ref(metrics_running), metrics_file,
                                std::ref(storage), std::ref(start_barrier));
 
-    // Create and start worker threads
-    std::vector<std::thread> worker_threads;
-    worker_threads.reserve(test_workers);
+    // Create producer and consumer threads
+    std::vector<std::thread> producer_threads;
+    std::vector<std::thread> consumer_threads;
+    producer_threads.reserve(test_workers);
+    consumer_threads.reserve(test_workers);
 
     for (size_t i = 0; i < test_workers; ++i) {
-        worker_threads.emplace_back(worker_function<StorageType>, i,
-                                    std::ref(*generators[i]), std::ref(storage),
-                                    std::ref(executed_counts),
-                                    std::ref(start_barrier));
+        producer_threads.emplace_back(
+            producer_function, i, std::ref(*generators[i]), std::ref(queues[i]),
+            std::ref(start_barrier));
+        consumer_threads.emplace_back(consumer_function<StorageType>, i,
+                                      std::ref(queues[i]), std::ref(storage),
+                                      std::ref(executed_counts),
+                                      std::ref(start_barrier));
     }
 
     std::cout << "Loading workload into memory... " << std::flush;
@@ -634,9 +696,11 @@ template <typename StorageType> void run_workload_with_storage(
 
     auto start_time = std::chrono::high_resolution_clock::now();
 
-    std::cout << "Executing workload... " << std::flush;
-    // Wait for all worker threads to complete
-    for (auto &thread : worker_threads) {
+    std::cout << "Executing workload (open-loop)... " << std::flush;
+    for (auto &thread : producer_threads) {
+        thread.join();
+    }
+    for (auto &thread : consumer_threads) {
         thread.join();
     }
     std::cout << " [DONE]" << std::endl;
