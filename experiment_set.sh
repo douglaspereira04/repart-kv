@@ -54,7 +54,7 @@ function run_and_move_metrics {
     mkdir -p results
 
     #try run the experiment
-    ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL > "results/${BASENAME}(${TEST_NUMBER}).log"
+    ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL 60 > "results/${BASENAME}(${TEST_NUMBER}).log"
     
     if [ $? -ne 0 ]; then
         echo "Error: experiment failed"
@@ -102,7 +102,7 @@ function run_hard_experiments {
     # set PATHS as the subsequent arguments
     local PATHS=("$@")
 
-    local REPARTITIONING_INTERVALS=(0 500)
+    local REPARTITIONING_INTERVALS=(0 3000)
 
     # for each worker count run experiment with pure engine
     for W in ${TEST_WORKERS[@]}; do
@@ -144,9 +144,9 @@ REPETITIONS=5
 
 WORKLOADS=(ycsb_a.toml ycsb_d.toml ycsb_e.toml ycsb_b.toml ycsb_c.toml)
 STORAGE_ENGINES=(leveldb lmdb tkrzw_tree)
-TEST_WORKERS="1,2,4"
-PARTITIONS="1,8"
-THINKING_TIMES=(0 1000 2000 4000 000)
+TEST_WORKERS="1,2,4,6,8,10,12,14,16"
+PARTITIONS="16"
+THINKING_TIMES=(100000)
 
 for TEST_NUMBER in $(seq 1 $REPETITIONS); do
     for WORKLOAD in ${WORKLOADS[@]}; do
