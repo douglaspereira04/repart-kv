@@ -70,11 +70,9 @@ for (csv_file in csv_files) {
     subset_data <- data %>% filter(workers == num_workers)
     if (nrow(subset_data) == 0) next
 
-    # Convert latency from ns to ms if values appear to be in nanoseconds (> 1e5)
-    if (mean(subset_data$latency_median, na.rm = TRUE) > 1e5) {
-      subset_data$latency_median <- subset_data$latency_median / 1e6
-      subset_data$latency_95 <- subset_data$latency_95 / 1e6
-    }
+    # Convert latency from ns to µs (CSV data is always in nanoseconds)
+    subset_data$latency_median <- subset_data$latency_median / 1000
+    subset_data$latency_95 <- subset_data$latency_95 / 1000
 
     # Factor for thinking_time to ensure proper ordering
     subset_data$thinking_time_factor <- factor(subset_data$thinking_time, levels = sort(unique(subset_data$thinking_time)))
@@ -85,7 +83,7 @@ for (csv_file in csv_files) {
     # Generate separate charts for median and 95th percentile
     for (metric in c("median", "p95")) {
       y_col <- if (metric == "median") "latency_median" else "latency_95"
-      y_label <- if (metric == "median") "Latency Median (ms)" else "Latency 95th Percentile (ms)"
+      y_label <- if (metric == "median") "Latency Median (µs)" else "Latency 95th Percentile (µs)"
       metric_title <- if (metric == "median") "Latency (Median)" else "Latency (95th Percentile)"
 
       cat(paste("Generating", metric, "latency chart for", workload, "-", storage_engine, "(Workers:", num_workers, ") ...\n"))

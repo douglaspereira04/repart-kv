@@ -57,16 +57,15 @@ def parse_latency_filename(filename):
     }
 
 
-def calculate_latency_metrics(filepath):
-    """Compute latency_median and latency_95 (95th percentile) from a latency CSV.
-    Uses 1/SAMPLE_MOD sampling for speed (~0.1% of values when SAMPLE_MOD=1000).
+def load_latency_values(filepath):
+    """Load raw latency values from a latency CSV (sampled for speed).
+    Returns list of latency values in ns, or None if file cannot be read.
     """
     try:
         sampled = []
         with open(filepath, 'r') as f:
             reader = csv.DictReader(f)
             fields = reader.fieldnames or []
-            # Support both ns (new) and ms (legacy) column names
             start_col = 'start_ns' if 'start_ns' in fields else 'start_ms'
             end_col = 'end_ns' if 'end_ns' in fields else 'end_ms'
             if start_col not in fields or end_col not in fields:
@@ -80,17 +79,7 @@ def calculate_latency_metrics(filepath):
                     sampled.append(end - start)
                 except (ValueError, KeyError):
                     continue
-
-        if not sampled:
-            return None
-        arr = np.array(sampled)
-        latency_median = float(np.median(arr))
-        latency_95 = float(np.percentile(arr, 95))
-        print(f"Latency metrics{filepath}: {latency_median}, {latency_95}")
-        return {
-            'latency_median': latency_median,
-            'latency_95': latency_95,
-        }
+        return sampled if sampled else None
     except Exception as e:
         print(f"Error processing {filepath}: {e}", file=sys.stderr)
         return None
@@ -136,7 +125,7 @@ def main():
     os.makedirs(output_base_dir, exist_ok=True)
     throughput_lookup = load_throughput_data(throughput_dir)
 
-    # key -> list of metrics per rep
+    # key -> list of raw latency values (pooled across all reps)
     results = defaultdict(list)
     metadata = {}
 
@@ -147,21 +136,22 @@ def main():
         if not params:
             continue
 
-        metrics = calculate_latency_metrics(os.path.join(input_dir, f))
-        if metrics is not None:
+        values = load_latency_values(os.path.join(input_dir, f))
+        if values is not None:
             key = params['key']
-            results[key].append(metrics)
+            results[key].extend(values)
             if key not in metadata:
                 metadata[key] = params
 
     # Group by workload and engine for output files (same structure as aggregate_results)
     grouped = defaultdict(list)
 
-    for key, metrics_list in results.items():
+    for key, pooled_values in results.items():
         meta = metadata[key]
 
-        mean_median = sum(m['latency_median'] for m in metrics_list) / len(metrics_list)
-        mean_p95 = sum(m['latency_95'] for m in metrics_list) / len(metrics_list)
+        # Median and p95 across all raw latency values from all repetitions
+        latency_median = float(np.median(pooled_values))
+        latency_95 = float(np.percentile(pooled_values, 95))
         throughput_key = (
             meta['workload'], meta['workers'], meta['storage_type'], meta['partitions'],
             meta['storage_engine'], meta['paths'], meta['interval'], meta['thinking_time'],
@@ -183,8 +173,8 @@ def main():
 
         grouped[output_key].append({
             **common_meta,
-            'latency_median': mean_median,
-            'latency_95': mean_p95,
+            'latency_median': latency_median,
+            'latency_95': latency_95,
             'throughput_ops_per_sec': throughput_ops_per_sec if throughput_ops_per_sec is not None else '',
         })
 

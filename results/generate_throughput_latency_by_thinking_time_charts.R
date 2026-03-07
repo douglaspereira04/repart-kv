@@ -1,22 +1,24 @@
 #!/usr/bin/env Rscript
 #
 # Generate throughput vs latency charts from aggregated latency CSV files.
+# Each chart is for a fixed thinking_time; points on each line = different workers.
 #
 # Usage:
-#   Rscript generate_throughput_latency_charts.R [input_path] [output_path]
+#   Rscript generate_throughput_latency_by_thinking_time_charts.R [input_path] [output_path]
 #
 # Arguments:
 #   input_path:  Directory containing aggregated latency CSV files
 #                (default: ./aggregated_latency)
-#   output_path: Directory to save charts (default: ./charts/throughput_latency)
+#   output_path: Directory to save charts (default: ./charts/throughput_latency_by_thinking_time)
 #
-# Creates two charts per (workload, storage_engine, workers) combination:
+# Creates two charts per (workload, storage_engine, thinking_time) combination:
 #   - throughput_latency_median: X=throughput, Y=latency median
-#   - throughput_latency_p95:   X=throughput, Y=latency 95th percentile
+#   - throughput_latency_p95:     X=throughput, Y=latency 95th percentile
 #
 # Each line = (storage_type, partitions, paths, interval).
-# Points on each line = (throughput, latency) for each thinking_time setting.
-# Points are connected in order of increasing thinking_time.
+# Points on each line = (throughput, latency) for each workers setting.
+# Points are connected in order of increasing workers (geom_path preserves data order;
+# geom_line would reorder by x and hide the throughput "knee" when more threads = less throughput).
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -28,7 +30,7 @@ suppressPackageStartupMessages({
 # Parse command line arguments
 args <- commandArgs(trailingOnly = TRUE)
 input_path <- if (length(args) >= 1) args[1] else "./aggregated_latency"
-output_path <- if (length(args) >= 2) args[2] else "./charts/throughput_latency"
+output_path <- if (length(args) >= 2) args[2] else "./charts/throughput_latency_by_thinking_time"
 
 # Validate input path
 if (!dir.exists(input_path)) {
@@ -77,15 +79,16 @@ for (csv_file in csv_files) {
     ", i=", data$interval / 1000, "s)"
   )
 
-  # Get unique workers for this workload+engine
-  workers_list <- sort(unique(data$workers))
+  # Get unique thinking_time values for this workload+engine
+  thinking_times <- sort(unique(data$thinking_time))
 
-  for (num_workers in workers_list) {
-    subset_data <- data %>% filter(workers == num_workers)
+  for (think_time in thinking_times) {
+    subset_data <- data %>% filter(thinking_time == think_time)
     if (nrow(subset_data) == 0) next
 
-    # Sort by thinking_time within each line so geom_line connects points in order
-    subset_data <- subset_data %>% arrange(line_label, thinking_time)
+    # Sort by workers within each line so geom_path connects points in thread order
+    # (geom_path preserves data order; geom_line would reorder by x-axis/throughput)
+    subset_data <- subset_data %>% arrange(line_label, workers)
 
     # Convert latency from ns to µs (CSV data is always in nanoseconds)
     subset_data$latency_median <- subset_data$latency_median / 1000
@@ -100,20 +103,21 @@ for (csv_file in csv_files) {
       y_label <- if (metric == "median") "Latency Median (µs)" else "Latency 95th Percentile (µs)"
       metric_suffix <- if (metric == "median") "latency_median" else "latency_p95"
 
-      cat(paste("Generating throughput vs", metric, "latency chart for", workload, "-", storage_engine, "(Workers:", num_workers, ") ...\n"))
+      cat(paste("Generating throughput vs", metric, "latency chart for", workload, "-", storage_engine, "(Thinking time:", think_time, "ns) ...\n"))
 
       p <- ggplot(subset_data, aes(x = throughput_ops_per_sec / 1000, y = .data[[y_col]],
                                    color = line_label,
                                    linetype = line_label,
                                    shape = line_label,
                                    group = line_label)) +
-        geom_line(linewidth = 1.2, alpha = 0.8) +
+        geom_path(linewidth = 1.2, alpha = 0.8) +
         geom_point(size = 4, alpha = 0.8) +
+        geom_text(aes(label = workers), vjust = -0.5, size = 3.5, show.legend = FALSE) +
         labs(
           x = "Thousand Operations per Second",
           y = y_label,
           title = paste("Throughput vs Latency (", if (metric == "median") "Median" else "95th pctl", "):", workload, "-", storage_engine),
-          subtitle = paste("Workers:", num_workers, "| Points = thinking time settings"),
+          subtitle = paste("Thinking time:", think_time, "ns | Points = worker counts"),
           color = "Configuration",
           linetype = "Configuration",
           shape = "Configuration"
@@ -143,11 +147,11 @@ for (csv_file in csv_files) {
           breaks = pretty_breaks(n = 10)
         )
 
-      output_file <- file.path(output_path, paste(safe_workload, safe_engine, num_workers, "throughput", metric_suffix, "png", sep = "."))
+      output_file <- file.path(output_path, paste(safe_workload, safe_engine, think_time, "throughput", metric_suffix, "png", sep = "."))
       ggsave(output_file, plot = p, width = 12, height = 6, dpi = 300, bg = "white")
       cat(paste("Generated chart:", output_file, "\n"))
     }
   }
 }
 
-cat(paste("\nAll throughput vs latency charts saved to:", output_path, "\n"))
+cat(paste("\nAll throughput vs latency (by thinking time) charts saved to:", output_path, "\n"))
