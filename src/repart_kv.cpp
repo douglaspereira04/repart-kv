@@ -54,9 +54,9 @@ std::string LOADGEN_CONFIG_FILE;
 std::string WORKLOAD_NAME;
 // Repartitioning parameters
 std::chrono::milliseconds TRACKING_DURATION(
-    100); // Duration to track key accesses before repartitioning
+    1000); // Duration to track key accesses before repartitioning
 std::chrono::milliseconds
-    REPARTITION_INTERVAL(100); // Interval between repartitioning cycles
+    REPARTITION_INTERVAL(1000); // Interval between repartitioning cycles
 std::chrono::nanoseconds THINKING_TIME(0); // Thinking time delay (ns)
 long THINKING_SEED = 0;                    // Thinking seed
 
@@ -64,6 +64,9 @@ std::chrono::high_resolution_clock::time_point **START_TIMES = nullptr;
 std::chrono::high_resolution_clock::time_point **END_TIMES = nullptr;
 size_t *TIMES_INDEX = nullptr;
 
+long MAX_DURATION = 20; // Maximum duration of the experiment in seconds
+
+bool *RUNNING = nullptr;
 /**
  * @brief Write operation latency data (start,end pairs) to CSV after experiment
  * ends. Pairs are sorted by start time; times are relative to experiment start.
@@ -489,6 +492,9 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
             START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
             END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
             TIMES_INDEX[worker_id]++;
+            if (!RUNNING[worker_id]) {
+                break;
+            }
             auto target = std::chrono::duration<double, std::nano>(delay_ns);
             while (std::chrono::high_resolution_clock::now() - op_end <
                    target) {
@@ -503,8 +509,13 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
             START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
             END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
             TIMES_INDEX[worker_id]++;
+            if (!RUNNING[worker_id]) {
+                break;
+            }
         }
     }
+
+    RUNNING[worker_id] = false;
 }
 
 // Template function to run workload with any RepartitioningKeyValueStorage
@@ -635,6 +646,27 @@ template <typename StorageType> void run_workload_with_storage(
     auto start_time = std::chrono::high_resolution_clock::now();
 
     std::cout << "Executing workload... " << std::flush;
+
+    while (std::chrono::duration_cast<std::chrono::seconds>(
+               std::chrono::high_resolution_clock::now() - start_time)
+               .count() < MAX_DURATION) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+        // if any worker is running, continue
+        bool all_done = true;
+        for (size_t i = 0; i < TEST_WORKERS; ++i) {
+            if (RUNNING[i]) {
+                all_done = false;
+                break;
+            }
+        }
+        if (all_done) {
+            break;
+        }
+    }
+    for (size_t i = 0; i < TEST_WORKERS; ++i) {
+        RUNNING[i] = false;
+    }
+
     // Wait for all worker threads to complete
     for (auto &thread : worker_threads) {
         thread.join();
@@ -1129,6 +1161,16 @@ int run_repart_kv(int argc, char *argv[]) {
         }
     }
 
+    if (argc >= 10) {
+        try {
+            MAX_DURATION = std::stol(argv[9]);
+        } catch (const std::exception &e) {
+            std::cerr << "Error: Invalid max_duration: " << argv[9]
+                      << std::endl;
+            return 1;
+        }
+    }
+
     std::filesystem::path config_path(LOADGEN_CONFIG_FILE);
     WORKLOAD_NAME = config_path.stem().string();
     if (WORKLOAD_NAME.empty()) {
@@ -1190,6 +1232,11 @@ int run_repart_kv(int argc, char *argv[]) {
     if (generators.empty()) {
         std::cerr << "Error: No request generators created" << std::endl;
         return 1;
+    }
+
+    RUNNING = new bool[TEST_WORKERS];
+    for (size_t i = 0; i < TEST_WORKERS; ++i) {
+        RUNNING[i] = true;
     }
 
     const auto &summary_config = generators.front()->config();
