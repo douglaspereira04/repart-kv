@@ -2,6 +2,7 @@
 
 #include "KeyStorageConcepts.h"
 #include <string>
+#include <vector>
 
 /**
  * @brief CRTP base class for key-value storage
@@ -35,6 +36,17 @@ public:
      */
     void put(const std::string &key, const ValueType &value) {
         static_cast<Derived *>(this)->put_impl(key, value);
+    }
+
+    /**
+     * @brief Scan for key-value pairs from a starting point
+     * @param key_start The starting key
+     * @param limit Maximum number of key-value pairs to return
+     * @param results Reference to store the results
+     */
+    void scan(const std::string &key_start, size_t limit,
+              std::vector<std::pair<std::string, ValueType>> &results) {
+        static_cast<Derived *>(this)->scan_impl(key_start, limit, results);
     }
 
     /**

@@ -559,15 +559,20 @@ template <typename StorageType> void test_partition_map_consistency() {
 
     // Test with tracking enabled
     storage.enable_tracking(true);
+    std::cout << "    Tracking enabled" << std::endl;
     status = storage.write("tracked_key", "tracked_value");
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
+    std::cout << "    Written tracked key" << std::endl;
     status = storage.read("tracked_key", value);
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
+    std::cout << "    Read tracked key" << std::endl;
     ASSERT_STR_EQ("tracked_value", value);
+    std::cout << "    Tracked key value matches" << std::endl;
 
     // Scan should still work and include the new tracked key
     status = storage.scan("key", 10, results);
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
+    std::cout << "    Scanned keys" << std::endl;
     ASSERT_TRUE(results.size() >= 4); // Should find at least 4 keys now
     std::cout << "    Scan after tracking enabled found " << results.size()
               << " keys (expected >= 4)" << std::endl;

@@ -42,7 +42,7 @@ template <typename StorageType, typename ValueType> void test_basic_put_get() {
     storage.put("key3", static_cast<ValueType>(300));
 
     // Get them back
-    ValueType value;
+    ValueType value{};
     ASSERT_TRUE(storage.get("key1", value));
     ASSERT_EQ(static_cast<ValueType>(100), value);
 
@@ -59,7 +59,7 @@ void test_get_nonexistent_key() {
     TEST("get_nonexistent_key")
     StorageType storage;
 
-    ValueType value;
+    ValueType value{};
     ASSERT_FALSE(storage.get("nonexistent", value));
     END_TEST("get_nonexistent_key")
 }
@@ -70,7 +70,7 @@ void test_overwrite_value() {
     StorageType storage;
 
     storage.put("key", static_cast<ValueType>(100));
-    ValueType value = ValueType();
+    ValueType value{};
     ASSERT_TRUE(storage.get("key", value));
     ASSERT_EQ(static_cast<ValueType>(100), value);
 
@@ -289,7 +289,7 @@ template <typename StorageType, typename ValueType> void test_large_dataset() {
     }
 
     // Get some back
-    ValueType value;
+    ValueType value{};
     ASSERT_TRUE(storage.get("key:0", value));
     ASSERT_EQ(static_cast<ValueType>(0), value);
 
@@ -316,7 +316,7 @@ void test_special_characters() {
     storage.put("key_with_underscores", static_cast<ValueType>(4));
     storage.put("key.with.dots", static_cast<ValueType>(5));
 
-    ValueType value;
+    ValueType value{};
     ASSERT_TRUE(storage.get("key:with:colons", value));
     ASSERT_EQ(static_cast<ValueType>(1), value);
     ASSERT_TRUE(storage.get("key/with/slashes", value));
@@ -328,6 +328,133 @@ void test_special_characters() {
     ASSERT_TRUE(storage.get("key.with.dots", value));
     ASSERT_EQ(static_cast<ValueType>(5), value);
     END_TEST("special_characters")
+}
+
+template <typename StorageType, typename ValueType>
+void test_scan_method_basic() {
+    TEST("scan_method_basic")
+    StorageType storage;
+
+    storage.put("user:1001", static_cast<ValueType>(100));
+    storage.put("user:1002", static_cast<ValueType>(200));
+    storage.put("user:1003", static_cast<ValueType>(300));
+    storage.put("product:2001", static_cast<ValueType>(400));
+
+    std::vector<std::pair<std::string, ValueType>> results;
+    storage.scan("user:", 10, results);
+
+    ASSERT_EQ(3, results.size());
+    ASSERT_STR_EQ("user:1001", results[0].first);
+    ASSERT_EQ(static_cast<ValueType>(100), results[0].second);
+    ASSERT_STR_EQ("user:1002", results[1].first);
+    ASSERT_EQ(static_cast<ValueType>(200), results[1].second);
+    ASSERT_STR_EQ("user:1003", results[2].first);
+    ASSERT_EQ(static_cast<ValueType>(300), results[2].second);
+    END_TEST("scan_method_basic")
+}
+
+template <typename StorageType, typename ValueType>
+void test_scan_method_with_limit() {
+    TEST("scan_method_with_limit")
+    StorageType storage;
+
+    storage.put("item:001", static_cast<ValueType>(1));
+    storage.put("item:002", static_cast<ValueType>(2));
+    storage.put("item:003", static_cast<ValueType>(3));
+    storage.put("item:004", static_cast<ValueType>(4));
+    storage.put("item:005", static_cast<ValueType>(5));
+
+    std::vector<std::pair<std::string, ValueType>> results;
+    storage.scan("item:", 3, results);
+
+    ASSERT_EQ(3, results.size());
+    ASSERT_STR_EQ("item:001", results[0].first);
+    ASSERT_EQ(static_cast<ValueType>(1), results[0].second);
+    ASSERT_STR_EQ("item:002", results[1].first);
+    ASSERT_EQ(static_cast<ValueType>(2), results[1].second);
+    ASSERT_STR_EQ("item:003", results[2].first);
+    ASSERT_EQ(static_cast<ValueType>(3), results[2].second);
+    END_TEST("scan_method_with_limit")
+}
+
+template <typename StorageType, typename ValueType>
+void test_scan_method_zero_limit() {
+    TEST("scan_method_zero_limit")
+    StorageType storage;
+
+    storage.put("a", static_cast<ValueType>(1));
+    storage.put("b", static_cast<ValueType>(2));
+
+    std::vector<std::pair<std::string, ValueType>> results;
+    storage.scan("", 0, results);
+
+    ASSERT_EQ(0, results.size());
+    END_TEST("scan_method_zero_limit")
+}
+
+template <typename StorageType, typename ValueType>
+void test_scan_method_no_matches() {
+    TEST("scan_method_no_matches")
+    StorageType storage;
+
+    storage.put("apple", static_cast<ValueType>(10));
+    storage.put("banana", static_cast<ValueType>(20));
+
+    std::vector<std::pair<std::string, ValueType>> results;
+    storage.scan("orange", 10, results);
+
+    ASSERT_EQ(0, results.size());
+    END_TEST("scan_method_no_matches")
+}
+
+template <typename StorageType, typename ValueType>
+void test_scan_method_empty_storage() {
+    TEST("scan_method_empty_storage")
+    StorageType storage;
+
+    std::vector<std::pair<std::string, ValueType>> results;
+    storage.scan("any", 10, results);
+
+    ASSERT_EQ(0, results.size());
+    END_TEST("scan_method_empty_storage")
+}
+
+template <typename StorageType, typename ValueType>
+void test_scan_method_clears_results() {
+    TEST("scan_method_clears_results")
+    StorageType storage;
+
+    storage.put("x", static_cast<ValueType>(1));
+
+    std::vector<std::pair<std::string, ValueType>> results;
+    results.push_back({"old_key", static_cast<ValueType>(999)}); // Pre-populate
+
+    storage.scan("x", 1, results);
+
+    ASSERT_EQ(1, results.size()); // Should have cleared and added only "x"
+    ASSERT_STR_EQ("x", results[0].first);
+    ASSERT_EQ(static_cast<ValueType>(1), results[0].second);
+    END_TEST("scan_method_clears_results")
+}
+
+template <typename StorageType, typename ValueType>
+void test_scan_method_partial_prefix() {
+    TEST("scan_method_partial_prefix")
+    StorageType storage;
+
+    storage.put("user:1001", static_cast<ValueType>(100));
+    storage.put("user:1002", static_cast<ValueType>(200));
+    storage.put("user:1003", static_cast<ValueType>(300));
+
+    std::vector<std::pair<std::string, ValueType>> results;
+    storage.scan("user:1002", 10, results);
+
+    ASSERT_EQ(2, results.size());
+    ASSERT_STR_EQ("user:1002", results[0].first);
+    ASSERT_EQ(static_cast<ValueType>(200), results[0].second);
+    ASSERT_STR_EQ("user:1003", results[1].first);
+    ASSERT_EQ(static_cast<ValueType>(300), results[1].second);
+    END_TEST("scan_method_partial_prefix")
 }
 
 template <typename StorageType, typename ValueType>
@@ -353,7 +480,7 @@ void test_scan_after_updates() {
 
     // Update existing key
     storage.put("prefix:a", static_cast<ValueType>(999));
-    ValueType value;
+    ValueType value{};
     ASSERT_TRUE(storage.get("prefix:a", value));
     ASSERT_EQ(static_cast<ValueType>(999), value);
 
@@ -376,7 +503,7 @@ void test_numeric_value_ranges() {
     storage.put("medium", static_cast<ValueType>(1000));
     storage.put("large", static_cast<ValueType>(1000000));
 
-    ValueType value;
+    ValueType value{};
     ASSERT_TRUE(storage.get("min", value));
     ASSERT_EQ(static_cast<ValueType>(0), value);
 
@@ -454,6 +581,20 @@ void run_storage_test_suite(const std::string &storage_name,
          []() { test_scan_sorted_order<StorageType, ValueType>(); }},
         {"scan_partial_prefix",
          []() { test_scan_partial_prefix<StorageType, ValueType>(); }},
+        {"scan_method_basic",
+         []() { test_scan_method_basic<StorageType, ValueType>(); }},
+        {"scan_method_with_limit",
+         []() { test_scan_method_with_limit<StorageType, ValueType>(); }},
+        {"scan_method_zero_limit",
+         []() { test_scan_method_zero_limit<StorageType, ValueType>(); }},
+        {"scan_method_no_matches",
+         []() { test_scan_method_no_matches<StorageType, ValueType>(); }},
+        {"scan_method_empty_storage",
+         []() { test_scan_method_empty_storage<StorageType, ValueType>(); }},
+        {"scan_method_clears_results",
+         []() { test_scan_method_clears_results<StorageType, ValueType>(); }},
+        {"scan_method_partial_prefix",
+         []() { test_scan_method_partial_prefix<StorageType, ValueType>(); }},
         {"scan_after_updates",
          []() { test_scan_after_updates<StorageType, ValueType>(); }},
         {"large_dataset",

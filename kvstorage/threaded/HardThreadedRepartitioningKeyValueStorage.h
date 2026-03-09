@@ -324,8 +324,8 @@ public:
         // Each worker will scan the storage corresponding to its partition
         // index
         HardScanOperation<StorageEngineType> scan_operation(
-            initial_key_prefix, results, partition_set.size(), storage_array,
-            partition_array);
+            initial_key_prefix, results, partition_set.size(),
+            std::move(storage_array), std::move(partition_array));
         for (size_t partition_idx : partition_set) {
             workers_[partition_idx]->enqueue(&scan_operation);
         }

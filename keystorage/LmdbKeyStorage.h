@@ -4,6 +4,7 @@
 #include "KeyStorageIterator.h"
 #include <lmdb.h>
 #include <string>
+#include <vector>
 #include <filesystem>
 #include <atomic>
 #include <chrono>
@@ -271,6 +272,24 @@ public:
             mdb_txn_abort(txn);
             found_value = value_to_insert;
             return false;
+        }
+    }
+
+    /**
+     * @brief Implementation: Scan for key-value pairs from a starting key
+     * @param key_start The starting key (first key >= key_start)
+     * @param limit Maximum number of pairs to return
+     * @param results Output vector of (key, value) pairs
+     */
+    void scan_impl(const std::string &key_start, size_t limit,
+                   std::vector<std::pair<std::string, ValueType>> &results) {
+        results.clear();
+        if (!is_open_ || !env_ || limit == 0)
+            return;
+        auto it = lower_bound_impl(key_start);
+        while (!it.is_end() && results.size() < limit) {
+            results.emplace_back(it.get_key(), it.get_value());
+            ++it;
         }
     }
 

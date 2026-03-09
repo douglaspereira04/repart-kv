@@ -221,4 +221,27 @@ public:
         // Note that the queue was not cleared, thus, next repartitioning might
         // consider some realy old tracked keys
     }
+
+    template <template <typename> typename StorageMapType,
+              typename StorageEngineType, typename partition_index_t>
+    void update_storage_map(
+        StorageMapType<std::pair<StorageEngineType *, partition_index_t> *>
+            &storage_map) {
+        std::vector<idx_t> metis_partitions =
+            metis_graph_.get_partition_result();
+        const auto &idx_to_vertex = metis_graph_.get_idx_to_vertex();
+        for (size_t i = 0; i < metis_partitions.size(); ++i) {
+            std::pair<StorageEngineType *, partition_index_t> *index;
+            bool found = storage_map.get(idx_to_vertex[i], index);
+            if (found) {
+                index->second = static_cast<size_t>(metis_partitions[i]);
+            }
+        }
+        // Lock the graph to clear it
+        std::lock_guard<std::mutex> lock(graph_lock_);
+        graph_.clear();
+
+        // Note that the queue was not cleared, thus, next repartitioning might
+        // consider some realy old tracked keys
+    }
 };

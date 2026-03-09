@@ -16,10 +16,11 @@ public:
     HardScanOperation(const std::string &key,
                       std::vector<std::pair<std::string, std::string>> &values,
                       size_t partition_count,
-                      const std::vector<StorageEngineType *> &storages,
-                      const std::vector<size_t> &partition_array) :
-        ScanOperation(key, values, partition_count), storages_(storages),
-        partition_array_(partition_array) {}
+                      std::vector<StorageEngineType *> &&storages,
+                      std::vector<size_t> &&partition_array) :
+        ScanOperation(key, values, partition_count),
+        storages_(std::move(storages)),
+        partition_array_(std::move(partition_array)) {}
 
     // Destructor (default)
     ~HardScanOperation() = default;

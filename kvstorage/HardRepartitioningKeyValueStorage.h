@@ -7,6 +7,7 @@
 #include "../graph/MetisGraph.h"
 #include "Tracker.h"
 #include "storage/StorageEngineIterator.h"
+#include <bitset>
 #include <map>
 #include <string>
 #include <vector>
@@ -60,9 +61,9 @@ class HardRepartitioningKeyValueStorage
                                             PartitionMapType, HashFunc>,
           StorageEngineType> {
 private:
-    StorageMapType<StorageEngineType *>
+    typedef size_t partition_index_t;
+    StorageMapType<std::pair<StorageEngineType *, partition_index_t> *>
         storage_map_; // Maps partition IDs to storage engines
-    PartitionMapType<size_t> partition_map_; // Maps key ranges to partition IDs
     std::shared_mutex
         key_map_lock_;     // Mutex for thread-safe access to key mappers
     bool enable_tracking_; // Enable/disable tracking of key access patterns
@@ -92,6 +93,9 @@ private:
         paths_; // Paths for embedded database files (default: {/tmp})
 
     using IteratorType = typename StorageEngineType::IteratorType;
+
+    static constexpr size_t MAX_PARTITION_COUNT =
+        32; // Maximum number of partitions
 
 public:
     /**
@@ -172,22 +176,18 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status read_impl(const std::string &key, std::string &value) {
-        // Lock key map for reading
-        key_map_lock_.lock_shared();
 
         // Look up which storage owns this key
-        StorageEngineType *storage;
-        bool found = storage_map_.get(key, storage);
+        std::pair<StorageEngineType *, partition_index_t> *index;
+        key_map_lock_.lock_shared();
+        bool found = storage_map_.get(key, index);
         if (!found) {
             // Key not found in any storage
             key_map_lock_.unlock_shared();
             return Status::NOT_FOUND;
         }
-
-        // Look up which partition owns this key
-        size_t partition_idx;
-        size_t next_partition_idx = hash_func_(key) % partition_count_;
-        partition_map_.get_or_insert(key, next_partition_idx, partition_idx);
+        StorageEngineType *storage = index->first;
+        size_t partition_idx = index->second;
 
         // Lock the partition for reading
         partition_locks_[partition_idx]->lock_shared();
@@ -215,28 +215,32 @@ public:
      * @return Status code indicating the result of the operation
      */
     Status write_impl(const std::string &key, const std::string &value) {
-        // Lock key map for writing
-        key_map_lock_.lock();
-        size_t partition_idx = 0;
         // Look up or assign storage for this key
-        StorageEngineType *storage;
 
-        size_t next_partition_idx = hash_func_(key) % partition_count_;
-        StorageEngineType *next_storage = storages_[next_partition_idx];
+        std::pair<StorageEngineType *, partition_index_t> *index;
 
-        bool found_storage =
-            storage_map_.get_or_insert(key, next_storage, storage);
-        if (found_storage) {
-            partition_map_.get(key, partition_idx);
-        } else {
-            partition_map_.get_or_insert(key, next_partition_idx,
-                                         partition_idx);
+        key_map_lock_.lock();
+
+        bool found_storage = storage_map_.get(key, index);
+
+        if (!found_storage) {
+            size_t next_partition_idx = hash_func_(key) % partition_count_;
+            StorageEngineType *next_storage = storages_[next_partition_idx];
+            std::pair<StorageEngineType *, partition_index_t> *next_index =
+                new std::pair<StorageEngineType *, partition_index_t>(
+                    next_storage, next_partition_idx);
+            storage_map_.put(key, next_index);
+            index = next_index;
         }
+
+        StorageEngineType *storage = index->first;
+        size_t partition_idx = index->second;
 
         if (storage->level() != level_) {
             // Storage is from a different level - reassign to current level
             storage = storages_[partition_idx];
-            storage_map_.put(key, storage);
+            index->first = storage;
+            index->second = partition_idx;
         }
 
         // Lock the partition for writing
@@ -268,82 +272,65 @@ public:
     Status
     scan_impl(const std::string &initial_key_prefix, size_t limit,
               std::vector<std::pair<std::string, std::string>> &results) {
-        std::set<size_t> partition_set;
-        std::vector<StorageEngineType *> storage_array;
-        std::vector<std::string> key_array;
-
-        // Lock key map for reading
-        key_map_lock_.lock_shared();
+        std::bitset<MAX_PARTITION_COUNT> partition_bitset;
 
         // Get iterator starting from initial_key
-        auto it = storage_map_.lower_bound(initial_key_prefix);
+        std::vector<std::pair<
+            std::string, std::pair<StorageEngineType *, partition_index_t> *>>
+            key_index_pairs;
+        key_map_lock_.lock_shared();
+        storage_map_.scan(initial_key_prefix, limit, key_index_pairs);
 
-        size_t count = 0;
-        // Collect storage pointers and keys up to limit
-        while (count < limit) {
-            if (it.is_end()) {
-                if (count == 0) {
-                    key_map_lock_.unlock_shared();
-                    return Status::NOT_FOUND;
-                }
-                break;
+        for (const auto &[key, index] : key_index_pairs) {
+            size_t partition_idx = index->second;
+            partition_bitset.set(partition_idx);
+        }
+
+        for (size_t i = 0; i < partition_count_; ++i) {
+            if (partition_bitset.test(i)) {
+                partition_locks_[i]->lock_shared();
             }
-
-            StorageEngineType *storage = it.get_value();
-            std::string key = it.get_key();
-            size_t partition_idx;
-            size_t next_partition_idx = hash_func_(key) % partition_count_;
-            partition_map_.get_or_insert(key, next_partition_idx,
-                                         partition_idx);
-            partition_set.insert(partition_idx);
-            storage_array.push_back(storage);
-            key_array.push_back(it.get_key());
-
-            ++it;
-            ++count;
         }
 
-        // Lock all unique storages in sorted order (by pointer address)
-        std::vector<size_t> sorted_partitions(partition_set.begin(),
-                                              partition_set.end());
-        std::sort(sorted_partitions.begin(), sorted_partitions.end());
-
-        for (size_t partition_idx : sorted_partitions) {
-            partition_locks_[partition_idx]->lock_shared();
-        }
-
-        // Unlock key map
         key_map_lock_.unlock_shared();
 
         std::map<StorageEngineType *, IteratorType> iterators;
-        for (size_t i = 0; i < storage_array.size(); ++i) {
-            iterators.try_emplace(storage_array[i],
-                                  storage_array[i]->iterator());
+        for (const auto &[key, index] : key_index_pairs) {
+            StorageEngineType *storage = index->first;
+            iterators.try_emplace(storage, storage->iterator());
         }
 
         // Read values from storages
-        results.reserve(key_array.size());
-        Status status;
-        for (size_t i = 0; i < storage_array.size(); ++i) {
+        results.reserve(key_index_pairs.size());
+        Status status = Status::NOT_FOUND;
+        for (const auto &[key, index] : key_index_pairs) {
+            StorageEngineType *storage = index->first;
             std::string value;
-            IteratorType &iterator = iterators.at(storage_array[i]);
-            status = iterator.find(key_array[i], value);
+            IteratorType &iterator = iterators.at(storage);
+            status = iterator.find(key, value);
             if (status != Status::SUCCESS) {
                 break;
             }
-            results.push_back({key_array[i], value});
+            results.push_back({key, value});
         }
 
         iterators.clear();
 
-        // Unlock all storages
-        for (size_t partition_idx : sorted_partitions) {
-            partition_locks_[partition_idx]->unlock_shared();
+        for (size_t i = 0; i < partition_count_; ++i) {
+            if (partition_bitset.test(i)) {
+                partition_locks_[i]->unlock_shared();
+            }
         }
 
         // Track key access patterns if enabled
         if (enable_tracking_) {
-            tracker_.multi_update(key_array);
+            std::vector<std::string> keys;
+            for (auto it = std::make_move_iterator(key_index_pairs.begin()),
+                      end = std::make_move_iterator(key_index_pairs.end());
+                 it != end; ++it) {
+                keys.push_back(std::move(it->first));
+            }
+            tracker_.multi_update(keys);
         }
 
         return status;
@@ -378,21 +365,15 @@ public:
         if (success) {
             // Step 3: Lock and update partition assignments
             key_map_lock_.lock();
+            for (size_t i = 0; i < partition_count_; ++i) {
+                partition_locks_[i]->lock();
+            }
 
             // Save old storages
             auto old_storages = storages_;
 
-            // Lock all old storages in sorted order (by pointer address) to
-            // avoid deadlocks
-            std::vector<StorageEngineType *> sorted_storages = old_storages;
-            std::sort(sorted_storages.begin(), sorted_storages.end());
-
-            for (auto *storage : sorted_storages) {
-                storage->lock();
-            }
-
             // Update partition_map with new assignments
-            tracker_.update_partition_map(partition_map_);
+            tracker_.update_storage_map(storage_map_);
 
             // Create new storage engines
             storages_.clear();
@@ -404,12 +385,9 @@ public:
                     new StorageEngineType(level_, paths_[i % paths_.size()]));
             }
 
-            // Unlock all old storages
-            for (auto *storage : sorted_storages) {
-                storage->unlock();
+            for (size_t i = 0; i < partition_count_; ++i) {
+                partition_locks_[partition_count_ - 1 - i]->unlock();
             }
-
-            // Unlock key map
             key_map_lock_.unlock();
         }
 

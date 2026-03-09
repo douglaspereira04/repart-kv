@@ -5,6 +5,7 @@
 #include <tkrzw_dbm_tree.h>
 #include <string>
 #include <memory>
+#include <vector>
 #include <sstream>
 #include <iomanip>
 #include <type_traits>
@@ -165,6 +166,24 @@ public:
         found_value = value_to_insert;
         db_->Set(key, value_to_string(value_to_insert), false);
         return false;
+    }
+
+    /**
+     * @brief Implementation: Scan for key-value pairs from a starting key
+     * @param key_start The starting key (first key >= key_start)
+     * @param limit Maximum number of pairs to return
+     * @param results Output vector of (key, value) pairs
+     */
+    void scan_impl(const std::string &key_start, size_t limit,
+                   std::vector<std::pair<std::string, ValueType>> &results) {
+        results.clear();
+        if (!is_open_ || limit == 0)
+            return;
+        auto it = lower_bound_impl(key_start);
+        while (!it.is_end() && results.size() < limit) {
+            results.emplace_back(it.get_key(), it.get_value());
+            ++it;
+        }
     }
 
     /**

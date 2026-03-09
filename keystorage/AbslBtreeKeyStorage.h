@@ -72,6 +72,23 @@ public:
     }
 
     /**
+     * @brief Implementation: Scan for key-value pairs from a starting key
+     * @param key_start The starting key (first key >= key_start)
+     * @param limit Maximum number of pairs to return
+     * @param results Output vector of (key, value) pairs
+     */
+    void scan_impl(const std::string &key_start, size_t limit,
+                   std::vector<std::pair<std::string, ValueType>> &results) {
+        results.clear();
+        if (limit == 0)
+            return;
+        auto it = storage_.lower_bound(key_start);
+        for (; it != storage_.end() && results.size() < limit; ++it) {
+            results.emplace_back(it->first, it->second);
+        }
+    }
+
+    /**
      * @brief Implementation: Find the first element with key not less than the
      * given key
      * @param key The key to search for
