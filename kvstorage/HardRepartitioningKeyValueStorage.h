@@ -22,6 +22,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
+#include "absl/synchronization/mutex.h"
 
 /**
  * @brief Hard repartitioning key-value storage implementation
@@ -61,19 +62,22 @@ class HardRepartitioningKeyValueStorage
                                             PartitionMapType, HashFunc>,
           StorageEngineType> {
 private:
-    typedef size_t partition_index_t;
-    StorageMapType<std::pair<StorageEngineType *, partition_index_t> *>
-        storage_map_; // Maps partition IDs to storage engines
-    std::shared_mutex
-        key_map_lock_;     // Mutex for thread-safe access to key mappers
-    bool enable_tracking_; // Enable/disable tracking of key access patterns
+    struct Index {
+        StorageEngineType *storage;
+        size_t partition_idx;
+    };
+
+    StorageMapType<Index *>
+        storage_map_;          // Maps partition IDs to storage engines
+    absl::Mutex key_map_lock_; // Mutex for thread-safe access to key mappers
+    bool enable_tracking_;     // Enable/disable tracking of key access patterns
     std::atomic<bool>
         is_repartitioning_;  // Flag indicating if repartitioning is in progress
     size_t partition_count_; // Number of partitions
     std::vector<StorageEngineType *>
         storages_; // Vector of storage engine instances
     size_t level_; // Current level (tree depth or hierarchy level)
-    std::vector<std::unique_ptr<std::shared_mutex>>
+    std::vector<std::unique_ptr<absl::Mutex>>
         partition_locks_; // Vector of partition locks
     HashFunc hash_func_;  // Hash function for key hashing
     Tracker<PartitionMapType<size_t>>
@@ -95,7 +99,7 @@ private:
     using IteratorType = typename StorageEngineType::IteratorType;
 
     static constexpr size_t MAX_PARTITION_COUNT =
-        32; // Maximum number of partitions
+        1024; // Maximum number of partitions
 
 public:
     /**
@@ -127,15 +131,14 @@ public:
         storages_.reserve(partition_count_);
         for (size_t i = 0; i < partition_count_; ++i) {
             storages_.push_back(new StorageEngineType(
-                level_ + 1,
+                level_,
                 paths_[i % paths_.size()])); // Child storages at level + 1
         }
 
         // Create partition locks
         partition_locks_.reserve(partition_count_);
         for (size_t i = 0; i < partition_count_; ++i) {
-            partition_locks_.emplace_back(
-                std::make_unique<std::shared_mutex>());
+            partition_locks_.emplace_back(std::make_unique<absl::Mutex>());
         }
 
         // Start repartitioning thread if both durations are set
@@ -178,28 +181,27 @@ public:
     Status read_impl(const std::string &key, std::string &value) {
 
         // Look up which storage owns this key
-        std::pair<StorageEngineType *, partition_index_t> *index;
-        key_map_lock_.lock_shared();
+        Index *index;
+        key_map_lock_.ReaderLock();
+
         bool found = storage_map_.get(key, index);
         if (!found) {
             // Key not found in any storage
-            key_map_lock_.unlock_shared();
+            key_map_lock_.ReaderUnlock();
             return Status::NOT_FOUND;
         }
-        StorageEngineType *storage = index->first;
-        size_t partition_idx = index->second;
 
         // Lock the partition for reading
-        partition_locks_[partition_idx]->lock_shared();
+        partition_locks_[index->partition_idx]->ReaderLock();
 
         // Unlock key map (we have the storage lock now)
-        key_map_lock_.unlock_shared();
+        key_map_lock_.ReaderUnlock();
 
         // Read value from storage
-        Status status = storage->read(key, value);
+        Status status = index->storage->read(key, value);
 
         // Unlock storage
-        partition_locks_[partition_idx]->unlock_shared();
+        partition_locks_[index->partition_idx]->ReaderUnlock();
 
         // Track key access if enabled
         if (enable_tracking_) {
@@ -217,43 +219,31 @@ public:
     Status write_impl(const std::string &key, const std::string &value) {
         // Look up or assign storage for this key
 
-        std::pair<StorageEngineType *, partition_index_t> *index;
+        Index *index;
 
-        key_map_lock_.lock();
+        key_map_lock_.WriterLock();
 
         bool found_storage = storage_map_.get(key, index);
 
         if (!found_storage) {
             size_t next_partition_idx = hash_func_(key) % partition_count_;
             StorageEngineType *next_storage = storages_[next_partition_idx];
-            std::pair<StorageEngineType *, partition_index_t> *next_index =
-                new std::pair<StorageEngineType *, partition_index_t>(
-                    next_storage, next_partition_idx);
+            Index *next_index = new Index(next_storage, next_partition_idx);
             storage_map_.put(key, next_index);
             index = next_index;
         }
 
-        StorageEngineType *storage = index->first;
-        size_t partition_idx = index->second;
-
-        if (storage->level() != level_) {
-            // Storage is from a different level - reassign to current level
-            storage = storages_[partition_idx];
-            index->first = storage;
-            index->second = partition_idx;
-        }
-
         // Lock the partition for writing
-        partition_locks_[partition_idx]->lock();
+        partition_locks_[index->partition_idx]->WriterLock();
 
         // Unlock key map (we have the storage lock now)
-        key_map_lock_.unlock();
+        key_map_lock_.WriterUnlock();
 
         // Write value to storage
-        Status status = storage->write(key, value);
+        Status status = index->storage->write(key, value);
 
         // Unlock storage
-        partition_locks_[partition_idx]->unlock();
+        partition_locks_[index->partition_idx]->WriterUnlock();
 
         // Track key access if enabled
         if (enable_tracking_) {
@@ -275,38 +265,33 @@ public:
         std::bitset<MAX_PARTITION_COUNT> partition_bitset;
 
         // Get iterator starting from initial_key
-        std::vector<std::pair<
-            std::string, std::pair<StorageEngineType *, partition_index_t> *>>
-            key_index_pairs;
-        key_map_lock_.lock_shared();
+        std::vector<std::pair<std::string, Index *>> key_index_pairs;
+        key_map_lock_.ReaderLock();
         storage_map_.scan(initial_key_prefix, limit, key_index_pairs);
 
         for (const auto &[key, index] : key_index_pairs) {
-            size_t partition_idx = index->second;
-            partition_bitset.set(partition_idx);
+            partition_bitset.set(index->partition_idx);
         }
 
         for (size_t i = 0; i < partition_count_; ++i) {
             if (partition_bitset.test(i)) {
-                partition_locks_[i]->lock_shared();
+                partition_locks_[i]->ReaderLock();
             }
         }
 
-        key_map_lock_.unlock_shared();
+        key_map_lock_.ReaderUnlock();
 
         std::map<StorageEngineType *, IteratorType> iterators;
         for (const auto &[key, index] : key_index_pairs) {
-            StorageEngineType *storage = index->first;
-            iterators.try_emplace(storage, storage->iterator());
+            iterators.try_emplace(index->storage, index->storage->iterator());
         }
 
         // Read values from storages
         results.reserve(key_index_pairs.size());
         Status status = Status::NOT_FOUND;
         for (const auto &[key, index] : key_index_pairs) {
-            StorageEngineType *storage = index->first;
             std::string value;
-            IteratorType &iterator = iterators.at(storage);
+            IteratorType &iterator = iterators.at(index->storage);
             status = iterator.find(key, value);
             if (status != Status::SUCCESS) {
                 break;
@@ -318,7 +303,7 @@ public:
 
         for (size_t i = 0; i < partition_count_; ++i) {
             if (partition_bitset.test(i)) {
-                partition_locks_[i]->unlock_shared();
+                partition_locks_[i]->ReaderUnlock();
             }
         }
 
@@ -364,9 +349,9 @@ public:
 
         if (success) {
             // Step 3: Lock and update partition assignments
-            key_map_lock_.lock();
+            key_map_lock_.WriterLock();
             for (size_t i = 0; i < partition_count_; ++i) {
-                partition_locks_[i]->lock();
+                partition_locks_[i]->WriterLock();
             }
 
             // Save old storages
@@ -386,9 +371,9 @@ public:
             }
 
             for (size_t i = 0; i < partition_count_; ++i) {
-                partition_locks_[partition_count_ - 1 - i]->unlock();
+                partition_locks_[partition_count_ - 1 - i]->WriterUnlock();
             }
-            key_map_lock_.unlock();
+            key_map_lock_.WriterUnlock();
         }
 
         // Clear repartitioning flag
