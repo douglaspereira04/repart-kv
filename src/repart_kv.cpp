@@ -54,9 +54,9 @@ std::string LOADGEN_CONFIG_FILE;
 std::string WORKLOAD_NAME;
 // Repartitioning parameters
 std::chrono::milliseconds TRACKING_DURATION(
-    1000); // Duration to track key accesses before repartitioning
+    100); // Duration to track key accesses before repartitioning
 std::chrono::milliseconds
-    REPARTITION_INTERVAL(1000); // Interval between repartitioning cycles
+    REPARTITION_INTERVAL(100); // Interval between repartitioning cycles
 std::chrono::nanoseconds THINKING_TIME(0); // Thinking time delay (ns)
 long THINKING_SEED = 0;                    // Thinking seed
 
@@ -479,6 +479,9 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
 
     std::mt19937 rng(
         static_cast<std::mt19937::result_type>(worker_id + THINKING_SEED));
+    std::uniform_int_distribution<int> latency_store_chance_dist(0, 99);
+    std::mt19937 latency_store_chance_rng(
+        static_cast<std::mt19937::result_type>(worker_id + THINKING_SEED + 1));
 
     if (THINKING_TIME.count() > 0) {
         std::exponential_distribution<double> thinking_dist(
@@ -489,9 +492,11 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
             auto op_end = std::chrono::high_resolution_clock::now();
             executed_counts[worker_id]++;
             double delay_ns = thinking_dist(rng);
-            START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
-            END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
-            TIMES_INDEX[worker_id]++;
+            if (latency_store_chance_dist(latency_store_chance_rng) < 5) {
+                START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
+                END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
+                TIMES_INDEX[worker_id]++;
+            }
             if (!RUNNING[worker_id]) {
                 break;
             }
@@ -506,9 +511,11 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
             execute_operation(operation, storage);
             auto op_end = std::chrono::high_resolution_clock::now();
             executed_counts[worker_id]++;
-            START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
-            END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
-            TIMES_INDEX[worker_id]++;
+            if (latency_store_chance_dist(latency_store_chance_rng) < 5) {
+                START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
+                END_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_end;
+                TIMES_INDEX[worker_id]++;
+            }
             if (!RUNNING[worker_id]) {
                 break;
             }
