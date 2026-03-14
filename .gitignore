@@ -108,3 +108,5 @@ gmon.out
 *.aux
 *.bbl
 *.blg
+
+reports/
