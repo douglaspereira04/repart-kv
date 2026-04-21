@@ -731,8 +731,7 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<TkrzwTreeStorageEngine,
-                                                  AbslBtreeKeyStorage,
-                                                  UnorderedDenseKeyStorage>;
+                                                  AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
@@ -773,8 +772,7 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<TkrzwHashStorageEngine,
-                                                  AbslBtreeKeyStorage,
-                                                  UnorderedDenseKeyStorage>;
+                                                  AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
@@ -815,8 +813,7 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<LmdbStorageEngine,
-                                                  AbslBtreeKeyStorage,
-                                                  UnorderedDenseKeyStorage>;
+                                                  AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
@@ -854,8 +851,7 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<LevelDBStorageEngine,
-                                                  AbslBtreeKeyStorage,
-                                                  UnorderedDenseKeyStorage>;
+                                                  AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
@@ -895,8 +891,7 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<MapStorageEngine,
-                                                  AbslBtreeKeyStorage,
-                                                  UnorderedDenseKeyStorage>;
+                                                  AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
@@ -934,8 +929,7 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<TbbStorageEngine,
-                                                  AbslBtreeKeyStorage,
-                                                  UnorderedDenseKeyStorage>;
+                                                  AbslBtreeKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");

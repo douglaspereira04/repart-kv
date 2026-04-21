@@ -69,8 +69,7 @@ private:
         partition_locks_;    // Vector of partition locks
     HashFunc hash_func_;     // Hash function for key hashing
     MetisGraph metis_graph_; // METIS graph for partitioning
-    Tracker<PartitionMapType<size_t>>
-        tracker_; // Tracker for tracking key access patterns
+    Tracker tracker_;        // Tracker for tracking key access patterns
 
     // Threading attributes for automatic repartitioning
     std::thread repartitioning_thread_; // Background thread for automatic

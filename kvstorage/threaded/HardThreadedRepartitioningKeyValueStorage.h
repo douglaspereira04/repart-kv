@@ -75,8 +75,7 @@ private:
         storages_;       // Vector of storage engine instances
     size_t level_;       // Current level (tree depth or hierarchy level)
     HashFunc hash_func_; // Hash function for key hashing
-    Tracker<PartitionMapType<size_t>>
-        tracker_; // Tracker for tracking key access patterns
+    Tracker tracker_;    // Tracker for tracking key access patterns
 
     // Threading attributes for automatic repartitioning
     std::thread repartitioning_thread_; // Background thread for automatic

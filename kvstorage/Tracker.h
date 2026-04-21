@@ -17,7 +17,7 @@
  * built-in blocking behavior for coordination between the producer (update
  * method) and consumer (tracking_loop method).
  */
-template <typename PartitionMapType> class Tracker {
+class Tracker {
 private:
     tbb::concurrent_bounded_queue<std::vector<std::string>>
         queue_;    // High-performance thread-safe bounded queue from TBB with
@@ -206,6 +206,7 @@ public:
         return success;
     }
 
+    template <typename PartitionMapType>
     void update_partition_map(PartitionMapType &partition_map) {
         std::vector<idx_t> metis_partitions =
             metis_graph_.get_partition_result();

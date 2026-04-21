@@ -644,8 +644,8 @@ int main() {
 
     try {
         // Test HardRepartitioningKeyValueStorage
-        run_repartitioning_test_suite<HardRepartitioningKeyValueStorage<
-            MapStorageEngine, MapKeyStorage, MapKeyStorage>>(
+        run_repartitioning_test_suite<
+            HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>>(
             "HardRepartitioningKeyValueStorage");
 
         // Test SoftRepartitioningKeyValueStorage

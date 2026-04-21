@@ -453,8 +453,7 @@ int main() {
         SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage,
                                           MapKeyStorage>;
     using HardRepartitioningStorage =
-        HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage,
-                                          MapKeyStorage>;
+        HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>;
     using SoftThreadedRepartitioningStorage =
         SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine,
                                                   MapKeyStorage>;

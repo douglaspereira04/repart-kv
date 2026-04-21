@@ -27,38 +27,30 @@
  * @brief Hard repartitioning key-value storage implementation
  *
  * This class manages partitioned storage with dynamic repartitioning
- * capabilities. Uses two key-value maps:
- * - StorageMapType: Maps keys to storage engine instances
- * - PartitionMapType: Maps key ranges to partition IDs
+ * capabilities. Uses a key-to-index map (StorageMapType) whose values hold
+ * the owning storage engine pointer and partition index for each key.
  *
  * This implementation creates separate storage engines for each partition and
  * migrates data by creating new storage engines during repartitioning.
  *
  * @tparam StorageEngineType The storage engine type (must derive from
  * StorageEngine)
- * @tparam StorageMapType Template for key storage type for partition->engine
- * mapping (e.g., MapKeyStorage). Will be instantiated with StorageEngineType*
- * as value type.
- * @tparam PartitionMapType Template for key storage type for key->partition
- * mapping (e.g., MapKeyStorage). Will be instantiated with size_t as value
- * type.
+ * @tparam StorageMapType Template for key storage type for key->index
+ * mapping (e.g., MapKeyStorage). Will be instantiated with Index* as value
+ * type, where Index holds the storage engine pointer and partition index.
  * @tparam HashFunc Hash function type for key hashing (defaults to
  * std::hash<std::string>)
  *
  * Usage example:
- *   HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage,
- * MapKeyStorage> Instead of:
- *   HardRepartitioningKeyValueStorage<MapStorageEngine,
- * MapKeyStorage<MapStorageEngine*>, MapKeyStorage<size_t>>
+ *   HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>
  */
 template <typename StorageEngineType,
           template <typename> typename StorageMapType,
-          template <typename> typename PartitionMapType,
           typename HashFunc = std::hash<std::string>>
 class HardRepartitioningKeyValueStorage
     : public RepartitioningKeyValueStorage<
           HardRepartitioningKeyValueStorage<StorageEngineType, StorageMapType,
-                                            PartitionMapType, HashFunc>,
+                                            HashFunc>,
           StorageEngineType> {
 private:
     struct Index {
@@ -80,8 +72,7 @@ private:
     std::vector<std::unique_ptr<std::shared_mutex>>
         partition_locks_; // Vector of partition locks
     HashFunc hash_func_;  // Hash function for key hashing
-    Tracker<PartitionMapType<size_t>>
-        tracker_; // Tracker for tracking key access patterns
+    Tracker tracker_;     // Tracker for tracking key access patterns
 
     // Threading attributes for automatic repartitioning
     std::thread repartitioning_thread_; // Background thread for automatic
