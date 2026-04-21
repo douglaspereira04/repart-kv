@@ -5,9 +5,47 @@
 #include "../LmdbKeyStorage.h"
 #include "../UnorderedDenseKeyStorage.h"
 #include "../../utils/test_assertions.h"
+#include <cstddef>
+#include <cstdint>
+#include <concepts>
+#include <functional>
 #include <iostream>
-#include <vector>
 #include <string>
+#include <type_traits>
+#include <vector>
+
+/**
+ * Trivial value type for KeyStorage tests: raw pointer bits + partition hash.
+ * Integral \p i maps to storage = reinterpret_cast<void*>(uintptr_t(i)) and
+ * partition_idx = std::hash<decltype(i)>{}(i), matching equality against \p i.
+ */
+struct IndexType {
+    void *storage;
+    size_t partition_idx;
+
+    IndexType() : storage(nullptr), partition_idx(0) {}
+
+    template <std::integral I> IndexType(I integral) :
+        storage(
+            reinterpret_cast<void *>(static_cast<std::uintptr_t>(integral))),
+        partition_idx(std::hash<I>{}(integral)) {}
+
+    friend bool operator==(const IndexType &a, const IndexType &b) {
+        return a.storage == b.storage && a.partition_idx == b.partition_idx;
+    }
+
+    template <std::integral I> bool operator==(I other) const {
+        return *this == IndexType(other);
+    }
+
+    template <std::integral I>
+    friend bool operator==(I lhs, const IndexType &rhs) {
+        return rhs == lhs;
+    }
+};
+
+static_assert(std::is_trivially_copyable_v<IndexType>);
+static_assert(std::is_default_constructible_v<IndexType>);
 
 // Test result tracking
 int tests_passed = 0;
@@ -656,6 +694,21 @@ int main() {
                                                                "uint64_t");
     run_storage_test_suite<UnorderedDenseKeyStorage<uint64_t>, uint64_t>(
         "UnorderedDenseKeyStorage", "uint64_t");
+
+    // Test all storage implementations with IndexType (trivial struct value)
+    std::cout << "\n=== Testing with IndexType ===" << std::endl;
+    run_storage_test_suite<MapKeyStorage<IndexType>, IndexType>("MapKeyStorage",
+                                                                "IndexType");
+    run_storage_test_suite<AbslBtreeKeyStorage<IndexType>, IndexType>(
+        "AbslBtreeKeyStorage", "IndexType");
+    run_storage_test_suite<TkrzwHashKeyStorage<IndexType>, IndexType>(
+        "TkrzwHashKeyStorage", "IndexType");
+    run_storage_test_suite<TkrzwTreeKeyStorage<IndexType>, IndexType>(
+        "TkrzwTreeKeyStorage", "IndexType");
+    run_storage_test_suite<LmdbKeyStorage<IndexType>, IndexType>(
+        "LmdbKeyStorage", "IndexType");
+    run_storage_test_suite<UnorderedDenseKeyStorage<IndexType>, IndexType>(
+        "UnorderedDenseKeyStorage", "IndexType");
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;
