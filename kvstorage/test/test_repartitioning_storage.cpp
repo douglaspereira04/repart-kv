@@ -2,6 +2,8 @@
 #include "../HardRepartitioningKeyValueStorage.h"
 #include "../SoftRepartitioningKeyValueStorage.h"
 #include "../../keystorage/MapKeyStorage.h"
+#include "../../keystorage/LmdbKeyStorage.h"
+#include "../../keystorage/TkrzwTreeKeyStorage.h"
 #include "../../storage/MapStorageEngine.h"
 #include "../../utils/test_assertions.h"
 #include "../threaded/SoftThreadedRepartitioningKeyValueStorage.h"
@@ -637,31 +639,41 @@ void run_repartitioning_test_suite(const std::string &storage_name) {
     run_test_suite(storage_name, tests);
 }
 
+/**
+ * Runs hard/soft and threaded repartitioning suites for one key-map template.
+ * Threaded variants use LmdbStorageEngine; non-threaded use MapStorageEngine.
+ */
+template <template <typename> typename KeyMap>
+void run_repartitioning_suites_for_key_storage(
+    const std::string &key_storage_label) {
+    const std::string tag = " (" + key_storage_label + ")";
+
+    run_repartitioning_test_suite<
+        HardRepartitioningKeyValueStorage<MapStorageEngine, KeyMap>>(
+        "HardRepartitioningKeyValueStorage" + tag);
+    run_repartitioning_test_suite<
+        SoftRepartitioningKeyValueStorage<MapStorageEngine, KeyMap, KeyMap>>(
+        "SoftRepartitioningKeyValueStorage" + tag);
+    run_repartitioning_test_suite<
+        SoftThreadedRepartitioningKeyValueStorage<LmdbStorageEngine, KeyMap>>(
+        "SoftThreadedRepartitioningKeyValueStorage" + tag);
+    run_repartitioning_test_suite<HardThreadedRepartitioningKeyValueStorage<
+        LmdbStorageEngine, KeyMap, KeyMap>>(
+        "HardThreadedRepartitioningKeyValueStorage" + tag);
+}
+
 int main() {
     std::cout
         << "=== Testing Repartitioning Key-Value Storage Implementations ==="
         << std::endl;
 
     try {
-        // Test HardRepartitioningKeyValueStorage
-        run_repartitioning_test_suite<
-            HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>>(
-            "HardRepartitioningKeyValueStorage");
-
-        // Test SoftRepartitioningKeyValueStorage
-        run_repartitioning_test_suite<SoftRepartitioningKeyValueStorage<
-            MapStorageEngine, MapKeyStorage, MapKeyStorage>>(
-            "SoftRepartitioningKeyValueStorage");
-
-        // Test SoftThreadedRepartitioningKeyValueStorage
-        run_repartitioning_test_suite<SoftThreadedRepartitioningKeyValueStorage<
-            LmdbStorageEngine, MapKeyStorage>>(
-            "SoftThreadedRepartitioningKeyValueStorage");
-
-        // Test HardThreadedRepartitioningKeyValueStorage
-        run_repartitioning_test_suite<HardThreadedRepartitioningKeyValueStorage<
-            LmdbStorageEngine, MapKeyStorage, MapKeyStorage>>(
-            "HardThreadedRepartitioningKeyValueStorage");
+        run_repartitioning_suites_for_key_storage<MapKeyStorage>(
+            "MapKeyStorage");
+        run_repartitioning_suites_for_key_storage<LmdbKeyStorage>(
+            "LmdbKeyStorage");
+        run_repartitioning_suites_for_key_storage<TkrzwTreeKeyStorage>(
+            "TkrzwTreeKeyStorage");
 
         std::cout << "\n========================================\n";
         std::cout << "  All Repartitioning Tests PASSED!\n";

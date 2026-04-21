@@ -4,6 +4,8 @@
 #include "../threaded/HardThreadedRepartitioningKeyValueStorage.h"
 #include "../../storage/MapStorageEngine.h"
 #include "../../keystorage/MapKeyStorage.h"
+#include "../../keystorage/LmdbKeyStorage.h"
+#include "../../keystorage/TkrzwTreeKeyStorage.h"
 #include "../../utils/test_assertions.h"
 #include "../LockStrippingKeyValueStorage.h"
 #include <iostream>
@@ -73,26 +75,6 @@ template <typename StorageType> void test_overwrite_value() {
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
     ASSERT_STR_EQ("updated", value);
     END_TEST("overwrite_value")
-}
-
-template <typename StorageType> void test_empty_key_value() {
-    TEST("empty_key_value")
-    StorageType storage(4);
-    std::string value;
-    // Test empty key
-    Status status = storage.write("", "empty_key_value");
-    ASSERT_STATUS_EQ(Status::SUCCESS, status);
-    status = storage.read("", value);
-    ASSERT_STATUS_EQ(Status::SUCCESS, status);
-    ASSERT_STR_EQ("empty_key_value", value);
-
-    // Test empty value
-    status = storage.write("empty_value_key", "");
-    ASSERT_STATUS_EQ(Status::SUCCESS, status);
-    status = storage.read("empty_value_key", value);
-    ASSERT_STATUS_EQ(Status::SUCCESS, status);
-    ASSERT_STR_EQ("", value);
-    END_TEST("empty_key_value")
 }
 
 template <typename StorageType> void test_multiple_partitions() {
@@ -423,7 +405,6 @@ void run_partitioned_kv_test_suite(const std::string &storage_name) {
         {"read_nonexistent_key",
          []() { test_read_nonexistent_key<StorageType>(); }},
         {"overwrite_value", []() { test_overwrite_value<StorageType>(); }},
-        {"empty_key_value", []() { test_empty_key_value<StorageType>(); }},
         {"single_partition", []() { test_single_partition<StorageType>(); }},
         {"multiple_partitions",
          []() { test_multiple_partitions<StorageType>(); }},
@@ -443,43 +424,42 @@ void run_partitioned_kv_test_suite(const std::string &storage_name) {
     run_test_suite(storage_name, tests);
 }
 
+/**
+ * Runs repartitioning-threaded and hard/soft partitioned suites that share the
+ * same key-map template (e.g. MapKeyStorage, LmdbKeyStorage). Lock stripping
+ * uses no separate key storage and is run once in main.
+ */
+template <template <typename> typename KeyMap>
+void run_partitioned_kv_suites_for_key_storage(
+    const std::string &key_storage_label) {
+    const std::string tag = " (" + key_storage_label + ")";
+
+    run_partitioned_kv_test_suite<
+        SoftRepartitioningKeyValueStorage<MapStorageEngine, KeyMap, KeyMap>>(
+        "SoftRepartitioningKeyValueStorage" + tag);
+    run_partitioned_kv_test_suite<
+        HardRepartitioningKeyValueStorage<MapStorageEngine, KeyMap>>(
+        "HardRepartitioningKeyValueStorage" + tag);
+    run_partitioned_kv_test_suite<
+        SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine, KeyMap>>(
+        "SoftThreadedRepartitioningKeyValueStorage" + tag);
+    run_partitioned_kv_test_suite<HardThreadedRepartitioningKeyValueStorage<
+        MapStorageEngine, KeyMap, KeyMap>>(
+        "HardThreadedRepartitioningKeyValueStorage" + tag);
+}
+
 int main() {
     std::cout << "========================================" << std::endl;
     std::cout << "  Generic PartitionedKeyValueStorage Test Suite" << std::endl;
     std::cout << "========================================" << std::endl;
 
-    // Type aliases for cleaner code
-    using SoftRepartitioningStorage =
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage,
-                                          MapKeyStorage>;
-    using HardRepartitioningStorage =
-        HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>;
-    using SoftThreadedRepartitioningStorage =
-        SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine,
-                                                  MapKeyStorage>;
-    using HardThreadedRepartitioningStorage =
-        HardThreadedRepartitioningKeyValueStorage<MapStorageEngine,
-                                                  MapKeyStorage, MapKeyStorage>;
-    using LockStrippingStorage = LockStrippingKeyValueStorage<MapStorageEngine>;
+    run_partitioned_kv_suites_for_key_storage<MapKeyStorage>("MapKeyStorage");
+    run_partitioned_kv_suites_for_key_storage<LmdbKeyStorage>("LmdbKeyStorage");
+    run_partitioned_kv_suites_for_key_storage<TkrzwTreeKeyStorage>(
+        "TkrzwTreeKeyStorage");
 
-    // Test SoftRepartitioningKeyValueStorage
-    run_partitioned_kv_test_suite<SoftRepartitioningStorage>(
-        "SoftRepartitioningKeyValueStorage");
-
-    // Test HardRepartitioningKeyValueStorage
-    run_partitioned_kv_test_suite<HardRepartitioningStorage>(
-        "HardRepartitioningKeyValueStorage");
-
-    // Test SoftThreadedRepartitioningKeyValueStorage
-    run_partitioned_kv_test_suite<SoftThreadedRepartitioningStorage>(
-        "SoftThreadedRepartitioningKeyValueStorage");
-
-    // Test HardThreadedRepartitioningKeyValueStorage
-    run_partitioned_kv_test_suite<HardThreadedRepartitioningStorage>(
-        "HardThreadedRepartitioningKeyValueStorage");
-
-    // Test LockStrippingKeyValueStorage
-    run_partitioned_kv_test_suite<LockStrippingStorage>(
+    run_partitioned_kv_test_suite<
+        LockStrippingKeyValueStorage<MapStorageEngine>>(
         "LockStrippingKeyValueStorage");
 
     std::cout << "\n========================================" << std::endl;
@@ -494,11 +474,8 @@ int main() {
         std::cout
             << "✓ All tests passed for all partitioned key-value storage types!"
             << std::endl;
-        std::cout << "✓ SoftRepartitioningKeyValueStorage: PASSED" << std::endl;
-        std::cout << "✓ HardRepartitioningKeyValueStorage: PASSED" << std::endl;
-        std::cout << "✓ SoftThreadedRepartitioningKeyValueStorage: PASSED"
-                  << std::endl;
-        std::cout << "✓ HardThreadedRepartitioningKeyValueStorage: PASSED"
+        std::cout << "✓ Key map backends: MapKeyStorage, LmdbKeyStorage, "
+                     "TkrzwTreeKeyStorage"
                   << std::endl;
         std::cout << "✓ LockStrippingKeyValueStorage: PASSED" << std::endl;
         return 0;

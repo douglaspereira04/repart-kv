@@ -248,6 +248,7 @@ add_executable(test_partitioned_kv_storage
 target_link_libraries(test_partitioned_kv_storage PRIVATE 
     Threads::Threads
     ${TKRZW_ALL_LIBS}
+    ${LMDB_LIB}
     ${METIS_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
