@@ -2,11 +2,11 @@
 
 #include "KeyStorage.h"
 #include "KeyStorageIterator.h"
+#include "KeyStorageValueBinary.h"
 #include <tkrzw_dbm_hash.h>
 #include <string>
 #include <memory>
-#include <sstream>
-#include <iomanip>
+#include <string_view>
 #include <type_traits>
 #include <ctime>
 #include <vector>
@@ -23,7 +23,7 @@ template <KeyStorageValueType ValueType> class TkrzwHashKeyStorageIterator;
  * @tparam ValueType The type of values stored (integral types or pointers)
  *
  * Uses TKRZW's hash database for high-performance key-value storage.
- * Values are serialized to strings for storage in TKRZW.
+ * Values are stored as raw sizeof(ValueType) bytes in TKRZW.
  * Requires C++20 for concepts and CRTP pattern.
  */
 template <KeyStorageValueType ValueType> class TkrzwHashKeyStorage
@@ -36,38 +36,12 @@ private:
     static std::string id_;
 
 public:
-    // Helper to serialize value to string (public for iterator access)
-    std::string value_to_string(const ValueType &value) const {
-        if constexpr (std::is_integral_v<ValueType>) {
-            return std::to_string(value);
-        } else if constexpr (std::is_pointer_v<ValueType>) {
-            std::ostringstream oss;
-            oss << std::hex << reinterpret_cast<uintptr_t>(value);
-            return oss.str();
+    ValueType value_from_bytes(std::string_view bytes) const {
+        ValueType out{};
+        if (!key_storage_value_from_bytes(bytes, out)) {
+            return ValueType{};
         }
-    }
-
-    // Helper to deserialize string to value (public for iterator access)
-    ValueType string_to_value(const std::string &str) const {
-        if constexpr (std::is_integral_v<ValueType>) {
-            if constexpr (std::is_same_v<ValueType, long> ||
-                          std::is_same_v<ValueType, long long>) {
-                return static_cast<ValueType>(std::stoll(str));
-            } else if constexpr (std::is_same_v<ValueType, unsigned long> ||
-                                 std::is_same_v<ValueType,
-                                                unsigned long long>) {
-                return static_cast<ValueType>(std::stoull(str));
-            } else if constexpr (std::is_signed_v<ValueType>) {
-                return static_cast<ValueType>(std::stoi(str));
-            } else {
-                return static_cast<ValueType>(std::stoul(str));
-            }
-        } else if constexpr (std::is_pointer_v<ValueType>) {
-            std::istringstream iss(str);
-            uintptr_t ptr_value;
-            iss >> std::hex >> ptr_value;
-            return reinterpret_cast<ValueType>(ptr_value);
-        }
+        return out;
     }
 
     /**
@@ -119,7 +93,7 @@ public:
         tkrzw::Status status = db_->Get(key, &str_value);
 
         if (status == tkrzw::Status::SUCCESS) {
-            value = string_to_value(str_value);
+            value = value_from_bytes(str_value);
             return true;
         }
         return false;
@@ -135,8 +109,7 @@ public:
             return;
         }
 
-        std::string str_value = value_to_string(value);
-        db_->Set(key, str_value);
+        db_->Set(key, key_storage_value_as_bytes(value));
     }
 
     /**
@@ -158,12 +131,12 @@ public:
         std::string str_value;
         tkrzw::Status status = db_->Get(key, &str_value);
         if (status == tkrzw::Status::SUCCESS) {
-            found_value = string_to_value(str_value);
+            found_value = value_from_bytes(str_value);
             return true;
         }
 
         found_value = value_to_insert;
-        db_->Set(key, value_to_string(value_to_insert), false);
+        db_->Set(key, key_storage_value_as_bytes(value_to_insert), false);
         return false;
     }
 
@@ -288,10 +261,6 @@ public:
     bool is_end_impl() const {
         return !sorted_keys_ || current_index_ >= sorted_keys_->size();
     }
-
-private:
-    // Make string_to_value accessible to iterator
-    friend class TkrzwHashKeyStorage<ValueType>;
 };
 
 // Implementation of lower_bound_impl

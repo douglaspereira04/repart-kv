@@ -2,8 +2,10 @@
 
 #include "KeyStorage.h"
 #include "KeyStorageIterator.h"
+#include "KeyStorageValueBinary.h"
 #include <lmdb.h>
 #include <string>
+#include <string_view>
 #include <vector>
 #include <filesystem>
 #include <atomic>
@@ -34,7 +36,8 @@ template <KeyStorageValueType ValueType> class LmdbKeyStorageIterator;
  *
  * Limitations:
  * - Empty keys may not be supported (LMDB restriction)
- * - ValueType must be serializable to/from string representation
+ * - ValueType must be trivially copyable (stored as sizeof(ValueType) raw
+ * bytes)
  *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
@@ -144,10 +147,13 @@ public:
 
         rc = mdb_get(txn, dbi_, &mdb_key, &mdb_value);
         if (rc == MDB_SUCCESS) {
-            // Convert the stored string back to ValueType
-            std::string value_str(reinterpret_cast<char *>(mdb_value.mv_data),
-                                  mdb_value.mv_size);
-            value = deserialize_value(value_str);
+            const std::string_view stored(
+                static_cast<const char *>(mdb_value.mv_data),
+                mdb_value.mv_size);
+            if (!key_storage_value_from_bytes(stored, value)) {
+                mdb_txn_abort(txn);
+                return false;
+            }
             mdb_txn_abort(txn);
             return true;
         } else {
@@ -175,15 +181,14 @@ public:
             return;
         }
 
-        // Serialize the value to string
-        std::string value_str = serialize_value(value);
+        const std::string_view value_bytes = key_storage_value_as_bytes(value);
 
         mdb_key.mv_size = key.size();
         mdb_key.mv_data =
             const_cast<void *>(static_cast<const void *>(key.c_str()));
-        mdb_value.mv_size = value_str.size();
+        mdb_value.mv_size = value_bytes.size();
         mdb_value.mv_data =
-            const_cast<void *>(static_cast<const void *>(value_str.c_str()));
+            const_cast<void *>(static_cast<const void *>(value_bytes.data()));
 
         rc = mdb_put(txn, dbi_, &mdb_key, &mdb_value, 0);
         if (rc != 0) {
@@ -225,10 +230,14 @@ public:
                 const_cast<void *>(static_cast<const void *>(key.c_str()));
             rc = mdb_get(txn, dbi_, &mdb_key, &mdb_value);
             if (rc == MDB_SUCCESS) {
-                std::string value_str(
-                    reinterpret_cast<char *>(mdb_value.mv_data),
+                const std::string_view stored(
+                    static_cast<const char *>(mdb_value.mv_data),
                     mdb_value.mv_size);
-                found_value = deserialize_value(value_str);
+                if (!key_storage_value_from_bytes(stored, found_value)) {
+                    mdb_txn_abort(txn);
+                    found_value = value_to_insert;
+                    return false;
+                }
                 mdb_txn_abort(txn);
                 return true;
             }
@@ -242,13 +251,14 @@ public:
             return false;
         }
 
-        std::string value_str = serialize_value(value_to_insert);
+        const std::string_view value_bytes =
+            key_storage_value_as_bytes(value_to_insert);
         mdb_key.mv_size = key.size();
         mdb_key.mv_data =
             const_cast<void *>(static_cast<const void *>(key.c_str()));
-        mdb_value.mv_size = value_str.size();
+        mdb_value.mv_size = value_bytes.size();
         mdb_value.mv_data =
-            const_cast<void *>(static_cast<const void *>(value_str.c_str()));
+            const_cast<void *>(static_cast<const void *>(value_bytes.data()));
 
         rc = mdb_put(txn, dbi_, &mdb_key, &mdb_value, MDB_NOOVERWRITE);
         if (rc == 0) {
@@ -259,9 +269,14 @@ public:
             // Someone else inserted it in the meantime!
             rc = mdb_get(txn, dbi_, &mdb_key, &mdb_value);
             if (rc == MDB_SUCCESS) {
-                std::string v_str(reinterpret_cast<char *>(mdb_value.mv_data),
-                                  mdb_value.mv_size);
-                found_value = deserialize_value(v_str);
+                const std::string_view stored(
+                    static_cast<const char *>(mdb_value.mv_data),
+                    mdb_value.mv_size);
+                if (!key_storage_value_from_bytes(stored, found_value)) {
+                    mdb_txn_abort(txn);
+                    found_value = value_to_insert;
+                    return false;
+                }
                 mdb_txn_abort(txn);
                 return true;
             }
@@ -466,58 +481,6 @@ private:
         mdb_txn_commit(txn);
         is_open_ = true;
     }
-
-    /**
-     * @brief Serialize a value to string for storage
-     * @param value The value to serialize
-     * @return String representation of the value
-     */
-    std::string serialize_value(const ValueType &value) const {
-        if constexpr (std::is_pointer_v<ValueType>) {
-            // For pointers, store as string representation of the address
-            return std::to_string(reinterpret_cast<uintptr_t>(value));
-        } else {
-            // For integral types, convert to string
-            return std::to_string(value);
-        }
-    }
-
-    /**
-     * @brief Deserialize a string back to ValueType
-     * @param value_str The string representation
-     * @return The deserialized value
-     */
-    ValueType deserialize_value(const std::string &value_str) const {
-        if constexpr (std::is_pointer_v<ValueType>) {
-            // For pointers, reconstruct from address
-            return reinterpret_cast<ValueType>(std::stoull(value_str));
-        } else {
-            // For integral types, parse from string
-            if constexpr (std::is_same_v<ValueType, int>) {
-                return std::stoi(value_str);
-            } else if constexpr (std::is_same_v<ValueType, long>) {
-                return std::stol(value_str);
-            } else if constexpr (std::is_same_v<ValueType, long long>) {
-                return std::stoll(value_str);
-            } else if constexpr (std::is_same_v<ValueType, unsigned int>) {
-                return static_cast<unsigned int>(std::stoul(value_str));
-            } else if constexpr (std::is_same_v<ValueType, unsigned long>) {
-                return std::stoul(value_str);
-            } else if constexpr (std::is_same_v<ValueType,
-                                                unsigned long long>) {
-                return std::stoull(value_str);
-            } else if constexpr (std::is_same_v<ValueType, size_t>) {
-                return static_cast<size_t>(std::stoull(value_str));
-            } else if constexpr (std::is_same_v<ValueType, int64_t>) {
-                return std::stoll(value_str);
-            } else if constexpr (std::is_same_v<ValueType, uint64_t>) {
-                return std::stoull(value_str);
-            } else {
-                // For other integral types, use generic conversion
-                return static_cast<ValueType>(std::stoll(value_str));
-            }
-        }
-    }
 };
 
 /**
@@ -703,10 +666,14 @@ public:
             return ValueType();
         }
 
-        // Deserialize the value from the stored string
-        std::string value_str(reinterpret_cast<char *>(current_value_.mv_data),
-                              current_value_.mv_size);
-        return deserialize_value(value_str);
+        ValueType out{};
+        const std::string_view stored(
+            static_cast<const char *>(current_value_.mv_data),
+            current_value_.mv_size);
+        if (!key_storage_value_from_bytes(stored, out)) {
+            return ValueType{};
+        }
+        return out;
     }
 
     /**
@@ -732,44 +699,6 @@ public:
      * @return true if at end, false otherwise
      */
     bool is_end_impl() const { return is_at_end_ || !is_valid_; }
-
-private:
-    /**
-     * @brief Deserialize a string back to ValueType
-     * @param value_str The string representation
-     * @return The deserialized value
-     */
-    ValueType deserialize_value(const std::string &value_str) const {
-        if constexpr (std::is_pointer_v<ValueType>) {
-            // For pointers, reconstruct from address
-            return reinterpret_cast<ValueType>(std::stoull(value_str));
-        } else {
-            // For integral types, parse from string
-            if constexpr (std::is_same_v<ValueType, int>) {
-                return std::stoi(value_str);
-            } else if constexpr (std::is_same_v<ValueType, long>) {
-                return std::stol(value_str);
-            } else if constexpr (std::is_same_v<ValueType, long long>) {
-                return std::stoll(value_str);
-            } else if constexpr (std::is_same_v<ValueType, unsigned int>) {
-                return static_cast<unsigned int>(std::stoul(value_str));
-            } else if constexpr (std::is_same_v<ValueType, unsigned long>) {
-                return std::stoul(value_str);
-            } else if constexpr (std::is_same_v<ValueType,
-                                                unsigned long long>) {
-                return std::stoull(value_str);
-            } else if constexpr (std::is_same_v<ValueType, size_t>) {
-                return static_cast<size_t>(std::stoull(value_str));
-            } else if constexpr (std::is_same_v<ValueType, int64_t>) {
-                return std::stoll(value_str);
-            } else if constexpr (std::is_same_v<ValueType, uint64_t>) {
-                return std::stoull(value_str);
-            } else {
-                // For other integral types, use generic conversion
-                return static_cast<ValueType>(std::stoll(value_str));
-            }
-        }
-    }
 };
 
 // Implementation of lower_bound_impl
