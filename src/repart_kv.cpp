@@ -56,7 +56,7 @@ std::string WORKLOAD_NAME;
 std::chrono::milliseconds TRACKING_DURATION(
     100); // Duration to track key accesses before repartitioning
 std::chrono::milliseconds
-    REPARTITION_INTERVAL(100); // Interval between repartitioning cycles
+    REPARTITION_INTERVAL(1000); // Interval between repartitioning cycles
 std::chrono::nanoseconds THINKING_TIME(0); // Thinking time delay (ns)
 long THINKING_SEED = 0;                    // Thinking seed
 

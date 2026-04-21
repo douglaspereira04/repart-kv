@@ -231,6 +231,9 @@ public:
             Index *next_index = new Index(next_storage, next_partition_idx);
             storage_map_.put(key, next_index);
             index = next_index;
+        } else if (index->storage->level() != level_) {
+            index->storage = storages_[index->partition_idx];
+            storage_map_.put(key, index);
         }
 
         // Lock the partition for writing
@@ -433,7 +436,7 @@ private:
             lock.unlock();
 
             // Perform repartitioning (this also disables tracking)
-            repartition_impl();
+            HardRepartitioningKeyValueStorage::repartition_impl();
         }
     }
 };
