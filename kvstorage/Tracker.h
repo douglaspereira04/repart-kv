@@ -224,15 +224,16 @@ public:
     }
 
     template <template <typename> typename StorageMapType, typename Index>
-    void update_storage_map(StorageMapType<Index *> &storage_map) {
+    void update_storage_map(StorageMapType<Index> &storage_map) {
         std::vector<idx_t> metis_partitions =
             metis_graph_.get_partition_result();
         const auto &idx_to_vertex = metis_graph_.get_idx_to_vertex();
         for (size_t i = 0; i < metis_partitions.size(); ++i) {
-            Index *index;
+            Index index;
             bool found = storage_map.get(idx_to_vertex[i], index);
             if (found) {
-                index->partition_idx = static_cast<size_t>(metis_partitions[i]);
+                index.partition_idx = static_cast<size_t>(metis_partitions[i]);
+                storage_map.put(idx_to_vertex[i], index);
             }
         }
         // Lock the graph to clear it

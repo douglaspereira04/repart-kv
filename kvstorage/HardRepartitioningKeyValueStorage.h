@@ -58,8 +58,7 @@ private:
         size_t partition_idx;
     };
 
-    StorageMapType<Index *>
-        storage_map_; // Maps partition IDs to storage engines
+    StorageMapType<Index> storage_map_; // Maps partition IDs to storage engines
     std::shared_mutex
         key_map_lock_;     // Mutex for thread-safe access to key mappers
     bool enable_tracking_; // Enable/disable tracking of key access patterns
@@ -173,7 +172,7 @@ public:
     Status read_impl(const std::string &key, std::string &value) {
 
         // Look up which storage owns this key
-        Index *index;
+        Index index;
         key_map_lock_.lock_shared();
         bool found = storage_map_.get(key, index);
         if (!found) {
@@ -183,16 +182,16 @@ public:
         }
 
         // Lock the partition for reading
-        partition_locks_[index->partition_idx]->lock_shared();
+        partition_locks_[index.partition_idx]->lock_shared();
 
         // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock_shared();
 
         // Read value from storage
-        Status status = index->storage->read(key, value);
+        Status status = index.storage->read(key, value);
 
         // Unlock storage
-        partition_locks_[index->partition_idx]->unlock_shared();
+        partition_locks_[index.partition_idx]->unlock_shared();
 
         // Track key access if enabled
         if (enable_tracking_) {
@@ -210,7 +209,7 @@ public:
     Status write_impl(const std::string &key, const std::string &value) {
         // Look up or assign storage for this key
 
-        Index *index;
+        Index index;
 
         key_map_lock_.lock();
 
@@ -219,25 +218,24 @@ public:
         if (!found_storage) {
             size_t next_partition_idx = hash_func_(key) % partition_count_;
             StorageEngineType *next_storage = storages_[next_partition_idx];
-            Index *next_index = new Index(next_storage, next_partition_idx);
-            storage_map_.put(key, next_index);
-            index = next_index;
-        } else if (index->storage->level() != level_) {
-            index->storage = storages_[index->partition_idx];
+            index = Index(next_storage, next_partition_idx);
+            storage_map_.put(key, index);
+        } else if (index.storage->level() != level_) {
+            index.storage = storages_[index.partition_idx];
             storage_map_.put(key, index);
         }
 
         // Lock the partition for writing
-        partition_locks_[index->partition_idx]->lock();
+        partition_locks_[index.partition_idx]->lock();
 
         // Unlock key map (we have the storage lock now)
         key_map_lock_.unlock();
 
         // Write value to storage
-        Status status = index->storage->write(key, value);
+        Status status = index.storage->write(key, value);
 
         // Unlock storage
-        partition_locks_[index->partition_idx]->unlock();
+        partition_locks_[index.partition_idx]->unlock();
 
         // Track key access if enabled
         if (enable_tracking_) {
@@ -259,12 +257,12 @@ public:
         std::bitset<MAX_PARTITION_COUNT> partition_bitset;
 
         // Get iterator starting from initial_key
-        std::vector<std::pair<std::string, Index *>> key_index_pairs;
+        std::vector<std::pair<std::string, Index>> key_index_pairs;
         key_map_lock_.lock_shared();
         storage_map_.scan(initial_key_prefix, limit, key_index_pairs);
 
         for (const auto &[key, index] : key_index_pairs) {
-            partition_bitset.set(index->partition_idx);
+            partition_bitset.set(index.partition_idx);
         }
 
         for (size_t i = 0; i < partition_count_; ++i) {
@@ -277,7 +275,7 @@ public:
 
         std::map<StorageEngineType *, IteratorType> iterators;
         for (const auto &[key, index] : key_index_pairs) {
-            iterators.try_emplace(index->storage, index->storage->iterator());
+            iterators.try_emplace(index.storage, index.storage->iterator());
         }
 
         // Read values from storages
@@ -285,7 +283,7 @@ public:
         Status status = Status::NOT_FOUND;
         for (const auto &[key, index] : key_index_pairs) {
             std::string value;
-            IteratorType &iterator = iterators.at(index->storage);
+            IteratorType &iterator = iterators.at(index.storage);
             status = iterator.find(key, value);
             if (status != Status::SUCCESS) {
                 break;
