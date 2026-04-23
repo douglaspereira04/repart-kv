@@ -350,17 +350,16 @@ public:
     }
 
     /**
-     * @brief Remove a key from the database
-     * @param key The key to remove
-     * @return Status code indicating the result of the operation
+     * @brief Implementation: Remove a key and return the stored value
      */
-    Status remove(const std::string &key) {
+    Status remove_impl(const std::string &key, std::string &removed_value) {
         if (!is_open_ || !env_) {
             return Status::ERROR;
         }
 
         MDB_txn *txn;
         MDB_val mdb_key;
+        MDB_val mdb_value;
 
         int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
         if (rc != 0) {
@@ -371,14 +370,22 @@ public:
         mdb_key.mv_data =
             const_cast<void *>(static_cast<const void *>(key.c_str()));
 
+        rc = mdb_get(txn, dbi_, &mdb_key, &mdb_value);
+        if (rc != MDB_SUCCESS) {
+            mdb_txn_abort(txn);
+            return Status::NOT_FOUND;
+        }
+
+        removed_value.assign(static_cast<const char *>(mdb_value.mv_data),
+                             mdb_value.mv_size);
+
         rc = mdb_del(txn, dbi_, &mdb_key, nullptr);
         if (rc == 0) {
             mdb_txn_commit(txn);
             return Status::SUCCESS;
-        } else {
-            mdb_txn_abort(txn);
-            return Status::NOT_FOUND;
         }
+        mdb_txn_abort(txn);
+        return Status::ERROR;
     }
 
     /**

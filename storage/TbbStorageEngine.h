@@ -138,12 +138,13 @@ public:
     void clear() { storage_.clear(); }
 
     /**
-     * @brief Remove a key from the storage
-     * @param key The key to remove
-     * @return Status code indicating the result of the operation
+     * @brief Implementation: Remove a key and return the stored value
      */
-    Status remove(const std::string &key) {
-        if (storage_.erase(key)) {
+    Status remove_impl(const std::string &key, std::string &removed_value) {
+        tbb::concurrent_hash_map<std::string, std::string>::accessor accessor;
+        if (storage_.find(accessor, key)) {
+            removed_value = accessor->second;
+            storage_.erase(accessor);
             return Status::SUCCESS;
         }
         return Status::NOT_FOUND;

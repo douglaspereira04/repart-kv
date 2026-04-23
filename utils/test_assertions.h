@@ -54,6 +54,14 @@ void run_test_suite(
                                  "' but got '" + #actual + "'");               \
     }
 
+// Assertion macros
+#define ASSERT_INT_EQ(expected, actual)                                        \
+    if (!((expected) == (actual))) {                                           \
+        throw std::runtime_error(std::string("Expected '") +                   \
+                                 std::to_string(expected) + "' but got '" +    \
+                                 std::to_string(actual) + "'");                \
+    }
+
 #define ASSERT_STATUS_EQ(expected, actual)                                     \
     if ((expected) != (actual)) {                                              \
         throw std::runtime_error(std::string("Expected '") +                   \

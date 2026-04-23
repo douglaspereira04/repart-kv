@@ -248,14 +248,18 @@ public:
     }
 
     /**
-     * @brief Remove a key from the database
-     * @param key The key to remove
-     * @return Status code indicating the result of the operation
+     * @brief Implementation: Remove a key and return the stored value
      */
-    Status remove(const std::string &key) {
-        tkrzw::Status status = db_->Remove(key);
+    Status remove_impl(const std::string &key, std::string &removed_value) {
+        if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        tkrzw::Status status = db_->Remove(key, &removed_value);
         if (status == tkrzw::Status::SUCCESS) {
             return Status::SUCCESS;
+        }
+        if (status == tkrzw::Status::NOT_FOUND_ERROR) {
+            return Status::NOT_FOUND;
         }
         return Status::ERROR;
     }

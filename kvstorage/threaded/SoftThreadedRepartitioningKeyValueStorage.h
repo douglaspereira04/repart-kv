@@ -66,7 +66,7 @@ private:
     size_t partition_count_;    // Number of partitions
     StorageEngineType storage_; // Storage engine instance for the storage
     HashFunc hash_func_;        // Hash function for key hashing
-    Tracker tracker_;           // Tracker for tracking key access patterns
+    Tracker<> tracker_;         // Tracker for tracking key access patterns
 
     // Threading attributes for automatic repartitioning
     std::thread repartitioning_thread_; // Background thread for automatic

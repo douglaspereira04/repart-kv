@@ -9,7 +9,6 @@
 #include <iomanip>
 #include <sstream>
 #include <memory>
-#include "keystorage/AbslBtreeKeyStorage.h"
 #include "workload/Workload.h"
 #if __has_include("request/request_generator.h")
 #include "request/request_generator.h"
@@ -37,12 +36,28 @@
 #include "keystorage/TkrzwTreeKeyStorage.h"
 #include "keystorage/TkrzwHashKeyStorage.h"
 #include "keystorage/LmdbKeyStorage.h"
+#include "keystorage/AbslBtreeKeyStorage.h"
 #include "keystorage/UnorderedDenseKeyStorage.h"
 #include "repart_kv_api.h"
 #include <cassert>
 #include <barrier>
 #include <random>
 
+/**
+ * Ordered key→partition map for repartitioning storages (template template
+ * parameter). Point this alias at a different KeyStorage to swap backends in
+ * one place (e.g. AbslBtreeKeyStorage, TkrzwTreeKeyStorage).
+ */
+template <typename ValueType> using OrderedKeyStorage =
+    LmdbKeyStorage<ValueType>;
+
+/*
+template <typename ValueType> using OrderedKeyStorage =
+    TkrzwTreeKeyStorage<ValueType>;
+*/
+/*template <typename ValueType> using OrderedKeyStorage =
+    AbslBtreeKeyStorage<ValueType>;
+*/
 // Global parameters
 size_t PARTITION_COUNT = 4;
 size_t TEST_WORKERS = 1;
@@ -56,7 +71,7 @@ std::string WORKLOAD_NAME;
 std::chrono::milliseconds TRACKING_DURATION(
     100); // Duration to track key accesses before repartitioning
 std::chrono::milliseconds
-    REPARTITION_INTERVAL(1000); // Interval between repartitioning cycles
+    REPARTITION_INTERVAL(100); // Interval between repartitioning cycles
 std::chrono::nanoseconds THINKING_TIME(0); // Thinking time delay (ns)
 long THINKING_SEED = 0;                    // Thinking seed
 
@@ -731,27 +746,25 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<TkrzwTreeStorageEngine,
-                                                  AbslBtreeKeyStorage>;
+                                                  OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
-            using StorageType =
-                SoftRepartitioningKeyValueStorage<TkrzwTreeStorageEngine,
-                                                  AbslBtreeKeyStorage,
-                                                  AbslBtreeKeyStorage>;
+            using StorageType = SoftRepartitioningKeyValueStorage<
+                TkrzwTreeStorageEngine, OrderedKeyStorage, OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType = SoftThreadedRepartitioningKeyValueStorage<
-                TkrzwTreeStorageEngine, AbslBtreeKeyStorage>;
+                TkrzwTreeStorageEngine, OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                TkrzwTreeStorageEngine, AbslBtreeKeyStorage,
+                TkrzwTreeStorageEngine, OrderedKeyStorage,
                 UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
@@ -772,27 +785,25 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<TkrzwHashStorageEngine,
-                                                  AbslBtreeKeyStorage>;
+                                                  OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
-            using StorageType =
-                SoftRepartitioningKeyValueStorage<TkrzwHashStorageEngine,
-                                                  AbslBtreeKeyStorage,
-                                                  AbslBtreeKeyStorage>;
+            using StorageType = SoftRepartitioningKeyValueStorage<
+                TkrzwHashStorageEngine, OrderedKeyStorage, OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType = SoftThreadedRepartitioningKeyValueStorage<
-                TkrzwHashStorageEngine, AbslBtreeKeyStorage>;
+                TkrzwHashStorageEngine, OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                TkrzwHashStorageEngine, AbslBtreeKeyStorage,
+                TkrzwHashStorageEngine, OrderedKeyStorage,
                 UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
@@ -813,27 +824,26 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<LmdbStorageEngine,
-                                                  AbslBtreeKeyStorage>;
+                                                  OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
             using StorageType = SoftRepartitioningKeyValueStorage<
-                LmdbStorageEngine, AbslBtreeKeyStorage, AbslBtreeKeyStorage>;
+                LmdbStorageEngine, OrderedKeyStorage, OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType =
                 SoftThreadedRepartitioningKeyValueStorage<LmdbStorageEngine,
-                                                          AbslBtreeKeyStorage>;
+                                                          OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                LmdbStorageEngine, AbslBtreeKeyStorage,
-                UnorderedDenseKeyStorage>;
+                LmdbStorageEngine, OrderedKeyStorage, UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardThreadedRepartitioningKeyValueStorage");
@@ -851,26 +861,26 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<LevelDBStorageEngine,
-                                                  AbslBtreeKeyStorage>;
+                                                  OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
             using StorageType = SoftRepartitioningKeyValueStorage<
-                LevelDBStorageEngine, AbslBtreeKeyStorage, AbslBtreeKeyStorage>;
+                LevelDBStorageEngine, OrderedKeyStorage, OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType =
                 SoftThreadedRepartitioningKeyValueStorage<LevelDBStorageEngine,
-                                                          AbslBtreeKeyStorage>;
+                                                          OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                LevelDBStorageEngine, AbslBtreeKeyStorage,
+                LevelDBStorageEngine, OrderedKeyStorage,
                 UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
@@ -891,27 +901,26 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<MapStorageEngine,
-                                                  AbslBtreeKeyStorage>;
+                                                  OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
             using StorageType = SoftRepartitioningKeyValueStorage<
-                MapStorageEngine, AbslBtreeKeyStorage, AbslBtreeKeyStorage>;
+                MapStorageEngine, OrderedKeyStorage, OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType =
                 SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine,
-                                                          AbslBtreeKeyStorage>;
+                                                          OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                MapStorageEngine, AbslBtreeKeyStorage,
-                UnorderedDenseKeyStorage>;
+                MapStorageEngine, OrderedKeyStorage, UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardThreadedRepartitioningKeyValueStorage");
@@ -929,27 +938,26 @@ void execute_with_storage_config(
         if (STORAGE_TYPE == "hard") {
             using StorageType =
                 HardRepartitioningKeyValueStorage<TbbStorageEngine,
-                                                  AbslBtreeKeyStorage>;
+                                                  OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "soft") {
             using StorageType = SoftRepartitioningKeyValueStorage<
-                TbbStorageEngine, AbslBtreeKeyStorage, AbslBtreeKeyStorage>;
+                TbbStorageEngine, OrderedKeyStorage, OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "threaded") {
             using StorageType =
                 SoftThreadedRepartitioningKeyValueStorage<TbbStorageEngine,
-                                                          AbslBtreeKeyStorage>;
+                                                          OrderedKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "SoftThreadedRepartitioningKeyValueStorage");
         } else if (STORAGE_TYPE == "hard_threaded") {
             using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                TbbStorageEngine, AbslBtreeKeyStorage,
-                UnorderedDenseKeyStorage>;
+                TbbStorageEngine, OrderedKeyStorage, UnorderedDenseKeyStorage>;
             run_workload_with_storage<StorageType>(
                 generators, PARTITION_COUNT, TEST_WORKERS,
                 "HardThreadedRepartitioningKeyValueStorage");

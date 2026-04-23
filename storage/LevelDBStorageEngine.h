@@ -256,17 +256,19 @@ public:
     }
 
     /**
-     * @brief Remove a key from the database
+     * @brief Implementation: Remove a key and return the stored value
      */
-    Status remove(const std::string &key) {
+    Status remove_impl(const std::string &key, std::string &removed_value) {
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
-        std::string dummy;
         leveldb::Status get_status =
-            db_->Get(leveldb::ReadOptions(), key, &dummy);
+            db_->Get(leveldb::ReadOptions(), key, &removed_value);
         if (get_status.IsNotFound()) {
             return Status::NOT_FOUND;
+        }
+        if (!get_status.ok()) {
+            return Status::ERROR;
         }
         leveldb::Status del_status = db_->Delete(leveldb::WriteOptions(), key);
         if (del_status.ok()) {

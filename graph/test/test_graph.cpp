@@ -107,6 +107,41 @@ void testClearOperation() {
     END_TEST("clear_operation")
 }
 
+void testConditionalIncrements() {
+    TEST("conditional_increments")
+    Graph graph;
+
+    // increment_vertex_weight_if_exists: missing vertex leaves graph empty
+    ASSERT_EQ(0, graph.increment_vertex_weight_if_exists("ghost"));
+    ASSERT_FALSE(graph.has_vertex("ghost"));
+    ASSERT_EQ(0, graph.get_vertex_count());
+
+    graph.increment_vertex_weight("A");
+    ASSERT_EQ(2, graph.increment_vertex_weight_if_exists("A"));
+    ASSERT_EQ(2, graph.get_vertex_weight("A"));
+    ASSERT_EQ(0, graph.increment_vertex_weight_if_exists("missing"));
+
+    // increment_edge_weight_if_vertices_exist: needs both vertices
+    ASSERT_EQ(0, graph.increment_edge_weight_if_vertices_exist("A", "B"));
+    ASSERT_FALSE(graph.has_edge("A", "B"));
+
+    graph.increment_vertex_weight("B");
+    ASSERT_EQ(1, graph.increment_edge_weight_if_vertices_exist("A", "B"));
+    ASSERT_TRUE(graph.has_edge("A", "B"));
+    ASSERT_EQ(1, graph.get_edge_weight("A", "B"));
+
+    ASSERT_EQ(2, graph.increment_edge_weight_if_vertices_exist("A", "B"));
+    ASSERT_EQ(2, graph.get_edge_weight("B", "A"));
+
+    // Self-loop when vertex exists
+    graph.increment_vertex_weight("C");
+    ASSERT_EQ(1, graph.increment_edge_weight_if_vertices_exist("C", "C"));
+    ASSERT_EQ(2, graph.increment_edge_weight_if_vertices_exist("C", "C"));
+    ASSERT_EQ(2, graph.get_edge_weight("C", "C"));
+
+    END_TEST("conditional_increments")
+}
+
 void testPerformance() {
     TEST("performance")
     Graph graph;
@@ -142,6 +177,7 @@ int main() {
         {"basic_edge_operations", testBasicEdgeOperations},
         {"combined_operations", testCombinedOperations},
         {"clear_operation", testClearOperation},
+        {"conditional_increments", testConditionalIncrements},
         {"performance", testPerformance}};
 
     run_test_suite("Graph Implementation", tests);

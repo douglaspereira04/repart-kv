@@ -65,6 +65,42 @@ public:
     }
 
     /**
+     * @brief Increments the weight of a vertex by 1 if it already exists.
+     * Does not create the vertex if it is missing.
+     *
+     * @param vertex The name of the vertex
+     * @return The new weight after incrementing, or 0 if the vertex does not
+     * exist
+     */
+    int increment_vertex_weight_if_exists(const std::string &vertex) {
+        auto it = vertices_.find(vertex);
+        if (it == vertices_.end()) {
+            return 0;
+        }
+        return ++it->second;
+    }
+
+    /**
+     * @brief Increments the weight of an undirected edge by 1 when both
+     * endpoints already exist as vertices. If either endpoint is missing, the
+     * graph is unchanged. Otherwise behaves like increment_edge_weight
+     * (symmetric adjacency, creates the edge if absent).
+     *
+     * @param source One endpoint of the edge
+     * @param destination The other endpoint of the edge
+     * @return The new weight of the edge after incrementing, or 0 if either
+     * vertex does not exist
+     */
+    int
+    increment_edge_weight_if_vertices_exist(const std::string &source,
+                                            const std::string &destination) {
+        if (!has_vertex(source) || !has_vertex(destination)) {
+            return 0;
+        }
+        return increment_edge_weight(source, destination);
+    }
+
+    /**
      * @brief Gets the weight of a vertex.
      *
      * @param vertex The name of the vertex

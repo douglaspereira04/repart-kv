@@ -48,6 +48,18 @@ template <typename EngineType> void test_read_nonexistent_key() {
     END_TEST("read_nonexistent_key")
 }
 
+template <typename EngineType> void test_remove_returns_removed_value() {
+    TEST("remove_returns_removed_value")
+    EngineType engine;
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("rk", "rv"));
+
+    std::string removed;
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.remove("rk", removed));
+    ASSERT_STR_EQ("rv", removed);
+
+    END_TEST("remove_returns_removed_value")
+}
+
 template <typename EngineType> void test_overwrite_value() {
     TEST("overwrite_value")
     EngineType engine;
@@ -483,6 +495,8 @@ void run_storage_engine_test_suite(const std::string &engine_name) {
         {"basic_write_read", []() { test_basic_write_read<EngineType>(); }},
         {"read_nonexistent_key",
          []() { test_read_nonexistent_key<EngineType>(); }},
+        {"remove_returns_removed_value",
+         []() { test_remove_returns_removed_value<EngineType>(); }},
         {"overwrite_value", []() { test_overwrite_value<EngineType>(); }},
         {"scan_basic", []() { test_scan_basic<EngineType>(); }},
         {"scan_with_limit", []() { test_scan_with_limit<EngineType>(); }},

@@ -70,6 +70,22 @@ public:
     }
 
     /**
+     * @brief Implementation: Remove a key and return the stored value
+     */
+    Status remove_impl(const std::string &key, std::string &removed_value) {
+        lock_.lock();
+        auto it = storage_.find(key);
+        if (it != storage_.end()) {
+            removed_value = std::move(it->second);
+            storage_.erase(it);
+            lock_.unlock();
+            return Status::SUCCESS;
+        }
+        lock_.unlock();
+        return Status::NOT_FOUND;
+    }
+
+    /**
      * @brief Implementation: Scan for key-value pairs from a starting point
      * @param initial_key_prefix The starting key (lower_bound)
      * @param limit Maximum number of key-value pairs to return

@@ -21,6 +21,7 @@
  * Derived classes must implement:
  * - read_impl(const std::string& key, std::string& value) const
  * - write_impl(const std::string& key, const std::string& value)
+ * - remove_impl(const std::string& key, std::string& removed_value)
  * - scan_impl(const std::string& initial_key_prefix, size_t limit,
  *   std::vector<std::pair<std::string, std::string>>& results) const
  * - iterator_impl() (optional) - returns a scan iterator for locality-optimized
@@ -83,6 +84,20 @@ public:
         Derived *derived = static_cast<Derived *>(this);
         derived->operation_count_.fetch_add(1, std::memory_order_relaxed);
         return derived->scan_impl(key_start, limit, results);
+    }
+
+    /**
+     * @brief Remove a key and return the previously stored value
+     * @param key The key to remove
+     * @param removed_value Reference set to the removed value when the key
+     *        exists (undefined if the key is not found)
+     * @return Status::SUCCESS if the key existed and was removed,
+     *         Status::NOT_FOUND if the key did not exist
+     */
+    Status remove(const std::string &key, std::string &removed_value) {
+        Derived *derived = static_cast<Derived *>(this);
+        derived->operation_count_.fetch_add(1, std::memory_order_relaxed);
+        return derived->remove_impl(key, removed_value);
     }
 
     /**

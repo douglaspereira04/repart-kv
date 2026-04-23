@@ -3,6 +3,7 @@
 #include "../graph/Graph.h"
 #include "../graph/MetisGraph.h"
 #include <tbb/concurrent_queue.h>
+#include <cstddef>
 #include <string>
 #include <vector>
 #include <thread>
@@ -16,8 +17,14 @@
  * background thread. It uses TBB's concurrent_bounded_queue which provides
  * built-in blocking behavior for coordination between the producer (update
  * method) and consumer (tracking_loop method).
+ *
+ * @tparam MAX_GRAPH_SIZE While holding graph_lock_, if get_vertex_count() ==
+ * MAX_GRAPH_SIZE before applying the dequeued update, vertex and edge updates
+ * use increment_vertex_weight_if_exists and
+ * increment_edge_weight_if_vertices_exist; otherwise they use
+ * increment_vertex_weight and increment_edge_weight.
  */
-class Tracker {
+template <size_t MAX_GRAPH_SIZE = 1000> class Tracker {
 private:
     tbb::concurrent_bounded_queue<std::vector<std::string>>
         queue_;    // High-performance thread-safe bounded queue from TBB with
@@ -49,20 +56,37 @@ private:
             // Lock the graph
             std::lock_guard<std::mutex> lock(graph_lock_);
 
+            const bool at_vertex_cap =
+                graph_.get_vertex_count() == MAX_GRAPH_SIZE;
+
             // Process the item based on size
             if (keys.size() == 1) {
                 // Single key: increment vertex weight
-                graph_.increment_vertex_weight(keys[0]);
+                if (at_vertex_cap) {
+                    graph_.increment_vertex_weight_if_exists(keys[0]);
+                } else {
+                    graph_.increment_vertex_weight(keys[0]);
+                }
             } else if (keys.size() > 1) {
                 // Multiple keys: increment vertex weights and create edges
-                for (size_t i = 0; i < keys.size(); ++i) {
-                    graph_.increment_vertex_weight(keys[i]);
-                }
-
-                // Add or increment edges between all pairs of keys
-                for (size_t i = 0; i < keys.size(); ++i) {
-                    for (size_t j = i + 1; j < keys.size(); ++j) {
-                        graph_.increment_edge_weight(keys[i], keys[j]);
+                if (at_vertex_cap) {
+                    for (size_t i = 0; i < keys.size(); ++i) {
+                        graph_.increment_vertex_weight_if_exists(keys[i]);
+                    }
+                    for (size_t i = 0; i < keys.size(); ++i) {
+                        for (size_t j = i + 1; j < keys.size(); ++j) {
+                            graph_.increment_edge_weight_if_vertices_exist(
+                                keys[i], keys[j]);
+                        }
+                    }
+                } else {
+                    for (size_t i = 0; i < keys.size(); ++i) {
+                        graph_.increment_vertex_weight(keys[i]);
+                    }
+                    for (size_t i = 0; i < keys.size(); ++i) {
+                        for (size_t j = i + 1; j < keys.size(); ++j) {
+                            graph_.increment_edge_weight(keys[i], keys[j]);
+                        }
                     }
                 }
             }
@@ -77,8 +101,8 @@ public:
      * starts the background tracking thread.
      */
     Tracker() :
-        running_(true),
-        tracking_thread_(std::thread(&Tracker::tracking_loop, this)) {
+        running_(true), tracking_thread_(std::thread(
+                            &Tracker<MAX_GRAPH_SIZE>::tracking_loop, this)) {
         queue_.set_capacity(1000000);
     }
 
@@ -221,6 +245,19 @@ public:
 
         // Note that the queue was not cleared, thus, next repartitioning might
         // consider some realy old tracked keys
+    }
+
+    std::vector<idx_t> get_metis_partitions() const {
+        return metis_graph_.get_partition_result();
+    }
+
+    const auto &get_idx_to_vertex() const {
+        return metis_graph_.get_idx_to_vertex();
+    }
+
+    void lock_and_clear_graph() {
+        std::lock_guard<std::mutex> lock(graph_lock_);
+        graph_.clear();
     }
 
     template <template <typename> typename StorageMapType, typename Index>
