@@ -24,8 +24,11 @@
  *
  * Note: This class is thread-safe by design. The base class lock()/unlock()
  * methods are still available but not necessary for thread-safety.
+ *
+ * @tparam SYNC Durable sync flag (ignored; in-memory only).
  */
-class TbbStorageEngine : public StorageEngine<TbbStorageEngine> {
+template <bool SYNC = false> class TbbStorageEngine
+    : public StorageEngine<TbbStorageEngine<SYNC>, SYNC> {
 private:
     // TBB concurrent_hash_map with string keys and values
     tbb::concurrent_hash_map<std::string, std::string> storage_;
@@ -41,7 +44,7 @@ public:
      */
     explicit TbbStorageEngine(size_t level = 0,
                               const std::string &path = "/tmp") :
-        StorageEngine<TbbStorageEngine>(level, path) {}
+        StorageEngine<TbbStorageEngine<SYNC>, SYNC>(level, path) {}
 
     /**
      * @brief Destructor
@@ -158,21 +161,22 @@ public:
      * benefits; it uses find() per lookup. Thread-safe like the engine.
      */
     class TbbIterator
-        : public StorageEngineIterator<TbbIterator, TbbStorageEngine> {
+        : public StorageEngineIterator<TbbIterator, TbbStorageEngine<SYNC>> {
     public:
         explicit TbbIterator(TbbStorageEngine &engine) :
-            StorageEngineIterator<TbbIterator, TbbStorageEngine>(engine) {}
+            StorageEngineIterator<TbbIterator, TbbStorageEngine<SYNC>>(engine) {
+        }
 
         TbbIterator(const TbbIterator &) = delete;
         TbbIterator &operator=(const TbbIterator &) = delete;
 
         TbbIterator(TbbIterator &&other) noexcept :
-            StorageEngineIterator<TbbIterator, TbbStorageEngine>(
+            StorageEngineIterator<TbbIterator, TbbStorageEngine<SYNC>>(
                 *other.engine_) {}
 
         TbbIterator &operator=(TbbIterator &&other) noexcept {
             if (this != &other) {
-                engine_ = other.engine_;
+                this->engine_ = other.engine_;
             }
             return *this;
         }
@@ -182,7 +186,7 @@ public:
         Status find_impl(const std::string &key, std::string &value) const {
             tbb::concurrent_hash_map<std::string, std::string>::const_accessor
                 accessor;
-            if (engine_->storage_.find(accessor, key)) {
+            if (this->engine_->storage_.find(accessor, key)) {
                 value = accessor->second;
                 return Status::SUCCESS;
             }

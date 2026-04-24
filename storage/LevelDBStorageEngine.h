@@ -33,14 +33,23 @@
  *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
+ *
+ * @tparam SYNC When true, all writes use WriteOptions.sync for durability.
  */
-class LevelDBStorageEngine : public StorageEngine<LevelDBStorageEngine> {
+template <bool SYNC = false> class LevelDBStorageEngine
+    : public StorageEngine<LevelDBStorageEngine<SYNC>, SYNC> {
 private:
     std::unique_ptr<leveldb::DB> db_;
     bool is_open_;
     std::string db_path_;
     static std::atomic_int db_counter_;
     static std::string id_;
+
+    static leveldb::WriteOptions durable_write_options() {
+        leveldb::WriteOptions o;
+        o.sync = SYNC;
+        return o;
+    }
 
 public:
     /**
@@ -53,14 +62,14 @@ public:
      */
     explicit LevelDBStorageEngine(size_t level = 0,
                                   const std::string &path = "/tmp") :
-        StorageEngine<LevelDBStorageEngine>(level, path), db_(nullptr),
-        is_open_(false) {
+        StorageEngine<LevelDBStorageEngine<SYNC>, SYNC>(level, path),
+        db_(nullptr), is_open_(false) {
         std::string temp_path =
-            path_ + std::string("/repart_kv_storage/") + id_ +
+            this->path_ + std::string("/repart_kv_storage/") + id_ +
             std::string("/leveldb_temp_") +
             std::to_string(db_counter_.fetch_add(1, std::memory_order_relaxed));
         std::filesystem::create_directories(
-            path_ + std::string("/repart_kv_storage/") + id_);
+            this->path_ + std::string("/repart_kv_storage/") + id_);
 
         leveldb::Options options;
         options.create_if_missing = true;
@@ -84,8 +93,8 @@ public:
     explicit LevelDBStorageEngine(const std::string &file_path,
                                   size_t level = 0,
                                   const std::string &path = "/tmp") :
-        StorageEngine<LevelDBStorageEngine>(level, path), db_(nullptr),
-        is_open_(false), db_path_(file_path) {
+        StorageEngine<LevelDBStorageEngine<SYNC>, SYNC>(level, path),
+        db_(nullptr), is_open_(false), db_path_(file_path) {
 
         leveldb::Options options;
         options.create_if_missing = true;
@@ -114,7 +123,8 @@ public:
 
     // Enable move
     LevelDBStorageEngine(LevelDBStorageEngine &&other) noexcept :
-        StorageEngine<LevelDBStorageEngine>(other.level_, other.path_),
+        StorageEngine<LevelDBStorageEngine<SYNC>, SYNC>(other.level_,
+                                                        other.path_),
         db_(std::move(other.db_)), is_open_(other.is_open_),
         db_path_(std::move(other.db_path_)) {
         other.is_open_ = false;
@@ -157,7 +167,7 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
-        leveldb::Status status = db_->Put(leveldb::WriteOptions(), key, value);
+        leveldb::Status status = db_->Put(durable_write_options(), key, value);
         if (status.ok()) {
             return Status::SUCCESS;
         }
@@ -232,10 +242,10 @@ public:
         if (!is_open_ || !db_) {
             return false;
         }
-        // LevelDB syncs automatically on write by default; WriteOptions.sync
-        // controls that. For explicit sync we can try a no-op write or
-        // rely on Close. leveldb::DB doesn't expose a direct Sync().
-        // Return true as LevelDB is generally crash-safe.
+        if constexpr (SYNC) {
+            leveldb::WriteBatch batch;
+            return db_->Write(durable_write_options(), &batch).ok();
+        }
         return true;
     }
 
@@ -252,7 +262,7 @@ public:
         for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
             batch.Delete(iter->key());
         }
-        db_->Write(leveldb::WriteOptions(), &batch);
+        db_->Write(durable_write_options(), &batch);
     }
 
     /**
@@ -270,7 +280,7 @@ public:
         if (!get_status.ok()) {
             return Status::ERROR;
         }
-        leveldb::Status del_status = db_->Delete(leveldb::WriteOptions(), key);
+        leveldb::Status del_status = db_->Delete(durable_write_options(), key);
         if (del_status.ok()) {
             return Status::SUCCESS;
         }
@@ -281,13 +291,14 @@ public:
      * @brief LevelDB scan iterator for locality-optimized key lookups
      */
     class LevelDBIterator
-        : public StorageEngineIterator<LevelDBIterator, LevelDBStorageEngine> {
+        : public StorageEngineIterator<LevelDBIterator,
+                                       LevelDBStorageEngine<SYNC>> {
     private:
         std::unique_ptr<leveldb::Iterator> iter_;
 
     public:
         explicit LevelDBIterator(LevelDBStorageEngine &engine) :
-            StorageEngineIterator<LevelDBIterator, LevelDBStorageEngine>(
+            StorageEngineIterator<LevelDBIterator, LevelDBStorageEngine<SYNC>>(
                 engine) {
             if (engine.is_open_ && engine.db_) {
                 iter_ = std::unique_ptr<leveldb::Iterator>(
@@ -299,13 +310,13 @@ public:
         LevelDBIterator &operator=(const LevelDBIterator &) = delete;
 
         LevelDBIterator(LevelDBIterator &&other) noexcept :
-            StorageEngineIterator<LevelDBIterator, LevelDBStorageEngine>(
+            StorageEngineIterator<LevelDBIterator, LevelDBStorageEngine<SYNC>>(
                 *other.engine_),
             iter_(std::move(other.iter_)) {}
 
         LevelDBIterator &operator=(LevelDBIterator &&other) noexcept {
             if (this != &other) {
-                engine_ = other.engine_;
+                this->engine_ = other.engine_;
                 iter_ = std::move(other.iter_);
             }
             return *this;
@@ -314,7 +325,7 @@ public:
         ~LevelDBIterator() = default;
 
         Status find_impl(const std::string &key, std::string &value) const {
-            if (!iter_ || !engine_->is_open_) {
+            if (!iter_ || !this->engine_->is_open_) {
                 return Status::ERROR;
             }
             iter_->Seek(key);
@@ -338,8 +349,10 @@ public:
 };
 
 // Static member definitions
-inline std::atomic_int LevelDBStorageEngine::db_counter_ = 0;
-inline std::string LevelDBStorageEngine::id_ = std::to_string(
-    std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch())
-        .count());
+template <bool SYNC> std::atomic_int LevelDBStorageEngine<SYNC>::db_counter_ =
+    0;
+template <bool SYNC> std::string LevelDBStorageEngine<SYNC>::id_ =
+    std::to_string(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::high_resolution_clock::now().time_since_epoch())
+            .count());

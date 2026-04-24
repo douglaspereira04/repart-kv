@@ -34,8 +34,13 @@
  *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
+ *
+ * @tparam SYNC When true, opens the environment without MDB_NOSYNC /
+ *        MDB_NOMETASYNC so metadata (and data) are flushed on commit for
+ *        higher durability; explicit sync() uses a hard flush.
  */
-class LmdbStorageEngine : public StorageEngine<LmdbStorageEngine> {
+template <bool SYNC = false> class LmdbStorageEngine
+    : public StorageEngine<LmdbStorageEngine<SYNC>, SYNC> {
 private:
     MDB_env *env_;
     MDB_dbi dbi_;
@@ -44,6 +49,13 @@ private:
 
     static std::atomic_int db_counter_;
     static std::string id_;
+
+    static constexpr unsigned env_open_flags() {
+        if constexpr (SYNC) {
+            return 0;
+        }
+        return MDB_NOSYNC | MDB_NOMETASYNC;
+    }
 
 public:
     /**
@@ -56,8 +68,8 @@ public:
      */
     explicit LmdbStorageEngine(size_t level = 0,
                                const std::string &path = "/tmp") :
-        StorageEngine<LmdbStorageEngine>(level, path), env_(nullptr),
-        dbi_(MDB_dbi{}), is_open_(false) {
+        StorageEngine<LmdbStorageEngine<SYNC>, SYNC>(level, path),
+        env_(nullptr), dbi_(MDB_dbi{}), is_open_(false) {
 
         init();
     }
@@ -73,8 +85,8 @@ public:
                                size_t map_size = 50ULL * 1024 * 1024 * 1024,
                                size_t level = 0,
                                const std::string &path = "/tmp") :
-        StorageEngine<LmdbStorageEngine>(level, path), env_(nullptr),
-        dbi_(MDB_dbi{}), is_open_(false), db_path_(file_path) {
+        StorageEngine<LmdbStorageEngine<SYNC>, SYNC>(level, path),
+        env_(nullptr), dbi_(MDB_dbi{}), is_open_(false), db_path_(file_path) {
 
         init_with_path(file_path, map_size);
     }
@@ -89,7 +101,7 @@ public:
             is_open_ = false;
 
             // Clean up temporary directory if it was created
-            std::string temp_prefix = path_ + "/repart_kv_storage/";
+            std::string temp_prefix = this->path_ + "/repart_kv_storage/";
             if (db_path_.find(temp_prefix) == 0) {
                 std::filesystem::remove_all(db_path_);
             }
@@ -102,7 +114,7 @@ public:
 
     // Enable move
     LmdbStorageEngine(LmdbStorageEngine &&other) noexcept :
-        StorageEngine<LmdbStorageEngine>(other.level_, other.path_),
+        StorageEngine<LmdbStorageEngine<SYNC>, SYNC>(other.level_, other.path_),
         env_(other.env_), dbi_(other.dbi_), is_open_(other.is_open_),
         db_path_(std::move(other.db_path_)) {
         other.env_ = nullptr;
@@ -322,7 +334,7 @@ public:
             return false;
         }
 
-        int rc = mdb_env_sync(env_, 1);
+        int rc = mdb_env_sync(env_, SYNC ? 1 : 0);
         return rc == 0;
     }
 
@@ -402,7 +414,7 @@ public:
      * traversal from the root for nearby keys.
      */
     class LmdbIterator
-        : public StorageEngineIterator<LmdbIterator, LmdbStorageEngine> {
+        : public StorageEngineIterator<LmdbIterator, LmdbStorageEngine<SYNC>> {
     private:
         MDB_txn *txn_;
         MDB_cursor *cursor_;
@@ -413,7 +425,8 @@ public:
          * @param engine The LMDB storage engine to scan
          */
         explicit LmdbIterator(LmdbStorageEngine &engine) :
-            StorageEngineIterator<LmdbIterator, LmdbStorageEngine>(engine),
+            StorageEngineIterator<LmdbIterator, LmdbStorageEngine<SYNC>>(
+                engine),
             txn_(nullptr), cursor_(nullptr) {
             if (engine.is_open_ && engine.env_) {
                 int rc = mdb_txn_begin(engine.env_, nullptr, MDB_RDONLY, &txn_);
@@ -431,7 +444,7 @@ public:
         LmdbIterator &operator=(const LmdbIterator &) = delete;
 
         LmdbIterator(LmdbIterator &&other) noexcept :
-            StorageEngineIterator<LmdbIterator, LmdbStorageEngine>(
+            StorageEngineIterator<LmdbIterator, LmdbStorageEngine<SYNC>>(
                 *other.engine_),
             txn_(other.txn_), cursor_(other.cursor_) {
             other.txn_ = nullptr;
@@ -446,7 +459,7 @@ public:
                 if (txn_) {
                     mdb_txn_abort(txn_);
                 }
-                engine_ = other.engine_;
+                this->engine_ = other.engine_;
                 txn_ = other.txn_;
                 cursor_ = other.cursor_;
                 other.txn_ = nullptr;
@@ -513,7 +526,7 @@ private:
      */
     void init() {
         db_path_ =
-            path_ + std::string("/repart_kv_storage/") + id_ +
+            this->path_ + std::string("/repart_kv_storage/") + id_ +
             std::string("/") +
             std::to_string(db_counter_.fetch_add(1, std::memory_order_relaxed));
         std::filesystem::create_directories(db_path_);
@@ -536,8 +549,7 @@ private:
         mdb_env_set_maxdbs(env_, 1);
         mdb_env_set_mapsize(env_, map_size);
 
-        rc =
-            mdb_env_open(env_, path.c_str(), MDB_NOSYNC | MDB_NOMETASYNC, 0664);
+        rc = mdb_env_open(env_, path.c_str(), env_open_flags(), 0664);
         if (rc != 0) {
             mdb_env_close(env_);
             env_ = nullptr;
@@ -569,8 +581,8 @@ private:
 };
 
 // Static member definitions
-inline std::atomic_int LmdbStorageEngine::db_counter_ = 0;
-inline std::string LmdbStorageEngine::id_ = std::to_string(
+template <bool SYNC> std::atomic_int LmdbStorageEngine<SYNC>::db_counter_ = 0;
+template <bool SYNC> std::string LmdbStorageEngine<SYNC>::id_ = std::to_string(
     std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch())
         .count());

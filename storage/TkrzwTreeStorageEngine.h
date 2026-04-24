@@ -30,13 +30,24 @@
  *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
+ *
+ * @tparam SYNC When true, Synchronize(hard=true) is used after mutating
+ *        operations and for explicit sync(); when false, soft sync.
  */
-class TkrzwTreeStorageEngine : public StorageEngine<TkrzwTreeStorageEngine> {
+template <bool SYNC = false> class TkrzwTreeStorageEngine
+    : public StorageEngine<TkrzwTreeStorageEngine<SYNC>, SYNC> {
 private:
     std::unique_ptr<tkrzw::TreeDBM> db_;
     bool is_open_;
     static std::atomic_int db_counter_;
     static std::string id_;
+
+    bool flush_if_durable() {
+        if constexpr (!SYNC) {
+            return true;
+        }
+        return db_->Synchronize(true) == tkrzw::Status::SUCCESS;
+    }
 
 public:
     /**
@@ -49,17 +60,18 @@ public:
      */
     explicit TkrzwTreeStorageEngine(size_t level = 0,
                                     const std::string &path = "/tmp") :
-        StorageEngine<TkrzwTreeStorageEngine>(level, path),
+        StorageEngine<TkrzwTreeStorageEngine<SYNC>, SYNC>(level, path),
         db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
         // TKRZW TreeDBM requires a file path, so we use the provided path
         // The file will be created but can be considered temporary
-        std::string temp_path = path_ + std::string("/repart_kv_storage/") +
-                                id_ + std::string("/tkrzw_tree_temp_") +
-                                std::to_string(db_counter_.fetch_add(
-                                    1, std::memory_order_relaxed)) +
-                                ".tkt";
+        std::string temp_path =
+            this->path_ + std::string("/repart_kv_storage/") + id_ +
+            std::string("/tkrzw_tree_temp_") +
+            std::to_string(
+                db_counter_.fetch_add(1, std::memory_order_relaxed)) +
+            ".tkt";
         std::filesystem::create_directories(
-            path_ + std::string("/repart_kv_storage/") + id_);
+            this->path_ + std::string("/repart_kv_storage/") + id_);
 
         tkrzw::TreeDBM::TuningParameters tuning_params;
         tuning_params.record_comp_mode = tkrzw::HashDBM::RECORD_COMP_ZLIB;
@@ -86,7 +98,7 @@ public:
     explicit TkrzwTreeStorageEngine(const std::string &file_path,
                                     size_t level = 0,
                                     const std::string &path = "/tmp") :
-        StorageEngine<TkrzwTreeStorageEngine>(level, path),
+        StorageEngine<TkrzwTreeStorageEngine<SYNC>, SYNC>(level, path),
         db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
 
         tkrzw::Status status =
@@ -116,7 +128,8 @@ public:
 
     // Enable move
     TkrzwTreeStorageEngine(TkrzwTreeStorageEngine &&other) noexcept :
-        StorageEngine<TkrzwTreeStorageEngine>(other.level_, other.path_),
+        StorageEngine<TkrzwTreeStorageEngine<SYNC>, SYNC>(other.level_,
+                                                          other.path_),
         db_(std::move(other.db_)), is_open_(other.is_open_) {
         other.is_open_ = false;
     }
@@ -156,10 +169,13 @@ public:
      */
     Status write_impl(const std::string &key, const std::string &value) {
         tkrzw::Status status = db_->Set(key, value);
-        if (status == tkrzw::Status::SUCCESS) {
-            return Status::SUCCESS;
+        if (status != tkrzw::Status::SUCCESS) {
+            return Status::ERROR;
         }
-        return Status::ERROR;
+        if (!flush_if_durable()) {
+            return Status::ERROR;
+        }
+        return Status::SUCCESS;
     }
 
     /**
@@ -241,7 +257,7 @@ public:
         if (!is_open_) {
             return false;
         }
-        return db_->Synchronize(false) == tkrzw::Status::SUCCESS;
+        return db_->Synchronize(SYNC) == tkrzw::Status::SUCCESS;
     }
 
     /**
@@ -252,6 +268,7 @@ public:
             return;
         }
         db_->Clear();
+        (void)flush_if_durable();
     }
 
     /**
@@ -263,6 +280,9 @@ public:
         }
         tkrzw::Status status = db_->Remove(key, &removed_value);
         if (status == tkrzw::Status::SUCCESS) {
+            if (!flush_if_durable()) {
+                return Status::ERROR;
+            }
             return Status::SUCCESS;
         }
         if (status == tkrzw::Status::NOT_FOUND_ERROR) {
@@ -280,7 +300,7 @@ public:
      */
     class TkrzwTreeIterator
         : public StorageEngineIterator<TkrzwTreeIterator,
-                                       TkrzwTreeStorageEngine> {
+                                       TkrzwTreeStorageEngine<SYNC>> {
     private:
         std::unique_ptr<tkrzw::DBM::Iterator> iter_;
 
@@ -290,8 +310,8 @@ public:
          * @param engine The TreeDBM storage engine to scan
          */
         explicit TkrzwTreeIterator(TkrzwTreeStorageEngine &engine) :
-            StorageEngineIterator<TkrzwTreeIterator, TkrzwTreeStorageEngine>(
-                engine) {
+            StorageEngineIterator<TkrzwTreeIterator,
+                                  TkrzwTreeStorageEngine<SYNC>>(engine) {
             if (engine.is_open_ && engine.db_) {
                 iter_ = engine.db_->MakeIterator();
             }
@@ -301,13 +321,13 @@ public:
         TkrzwTreeIterator &operator=(const TkrzwTreeIterator &) = delete;
 
         TkrzwTreeIterator(TkrzwTreeIterator &&other) noexcept :
-            StorageEngineIterator<TkrzwTreeIterator, TkrzwTreeStorageEngine>(
-                *other.engine_),
+            StorageEngineIterator<TkrzwTreeIterator,
+                                  TkrzwTreeStorageEngine<SYNC>>(*other.engine_),
             iter_(std::move(other.iter_)) {}
 
         TkrzwTreeIterator &operator=(TkrzwTreeIterator &&other) noexcept {
             if (this != &other) {
-                engine_ = other.engine_;
+                this->engine_ = other.engine_;
                 iter_ = std::move(other.iter_);
             }
             return *this;
@@ -325,7 +345,7 @@ public:
          * @return Status code
          */
         Status find_impl(const std::string &key, std::string &value) const {
-            if (!iter_ || !engine_->is_open_) {
+            if (!iter_ || !this->engine_->is_open_) {
                 return Status::ERROR;
             }
 
@@ -356,8 +376,10 @@ public:
 };
 
 // Static member definitions
-inline std::atomic_int TkrzwTreeStorageEngine::db_counter_ = 0;
-inline std::string TkrzwTreeStorageEngine::id_ = std::to_string(
-    std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch())
-        .count());
+template <bool SYNC> std::atomic_int TkrzwTreeStorageEngine<SYNC>::db_counter_ =
+    0;
+template <bool SYNC> std::string TkrzwTreeStorageEngine<SYNC>::id_ =
+    std::to_string(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::high_resolution_clock::now().time_since_epoch())
+            .count());

@@ -23,13 +23,24 @@
  *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
+ *
+ * @tparam SYNC When true, Synchronize(hard=true) is used after mutating
+ *        operations and for explicit sync(); when false, soft sync.
  */
-class TkrzwHashStorageEngine : public StorageEngine<TkrzwHashStorageEngine> {
+template <bool SYNC = false> class TkrzwHashStorageEngine
+    : public StorageEngine<TkrzwHashStorageEngine<SYNC>, SYNC> {
 private:
     std::unique_ptr<tkrzw::HashDBM> db_;
     bool is_open_;
     static std::atomic_int db_counter_;
     static std::string id_;
+
+    bool flush_if_durable() {
+        if constexpr (!SYNC) {
+            return true;
+        }
+        return db_->Synchronize(true) == tkrzw::Status::SUCCESS;
+    }
 
 public:
     /**
@@ -43,17 +54,18 @@ public:
      */
     explicit TkrzwHashStorageEngine(size_t level = 0,
                                     const std::string &path = "/tmp") :
-        StorageEngine<TkrzwHashStorageEngine>(level, path),
+        StorageEngine<TkrzwHashStorageEngine<SYNC>, SYNC>(level, path),
         db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
         // TKRZW HashDBM requires a file path, so we use the provided path
         // The file will be created but can be considered temporary
-        std::string temp_path = path_ + std::string("/repart_kv_storage/") +
-                                id_ + std::string("/tkrzw_hash_temp_") +
-                                std::to_string(db_counter_.fetch_add(
-                                    1, std::memory_order_relaxed)) +
-                                ".tkh";
+        std::string temp_path =
+            this->path_ + std::string("/repart_kv_storage/") + id_ +
+            std::string("/tkrzw_hash_temp_") +
+            std::to_string(
+                db_counter_.fetch_add(1, std::memory_order_relaxed)) +
+            ".tkh";
         std::filesystem::create_directories(
-            path_ + std::string("/repart_kv_storage/") + id_);
+            this->path_ + std::string("/repart_kv_storage/") + id_);
 
         tkrzw::Status status = db_->OpenAdvanced(temp_path,
                                                  true, // writable
@@ -75,7 +87,7 @@ public:
                                     int64_t num_buckets = 1000000,
                                     size_t level = 0,
                                     const std::string &path = "/tmp") :
-        StorageEngine<TkrzwHashStorageEngine>(level, path),
+        StorageEngine<TkrzwHashStorageEngine<SYNC>, SYNC>(level, path),
         db_(std::make_unique<tkrzw::HashDBM>()), is_open_(false) {
 
         tkrzw::HashDBM::TuningParameters tuning_params;
@@ -108,7 +120,8 @@ public:
 
     // Enable move
     TkrzwHashStorageEngine(TkrzwHashStorageEngine &&other) noexcept :
-        StorageEngine<TkrzwHashStorageEngine>(other.level_, other.path_),
+        StorageEngine<TkrzwHashStorageEngine<SYNC>, SYNC>(other.level_,
+                                                          other.path_),
         db_(std::move(other.db_)), is_open_(other.is_open_) {
         other.is_open_ = false;
     }
@@ -148,10 +161,13 @@ public:
      */
     Status write_impl(const std::string &key, const std::string &value) {
         tkrzw::Status status = db_->Set(key, value);
-        if (status == tkrzw::Status::SUCCESS) {
-            return Status::SUCCESS;
+        if (status != tkrzw::Status::SUCCESS) {
+            return Status::ERROR;
         }
-        return Status::ERROR;
+        if (!flush_if_durable()) {
+            return Status::ERROR;
+        }
+        return Status::SUCCESS;
     }
 
     /**
@@ -234,7 +250,7 @@ public:
         if (!is_open_) {
             return false;
         }
-        return db_->Synchronize(false) == tkrzw::Status::SUCCESS;
+        return db_->Synchronize(SYNC) == tkrzw::Status::SUCCESS;
     }
 
     /**
@@ -245,6 +261,7 @@ public:
             return;
         }
         db_->Clear();
+        (void)flush_if_durable();
     }
 
     /**
@@ -256,6 +273,9 @@ public:
         }
         tkrzw::Status status = db_->Remove(key, &removed_value);
         if (status == tkrzw::Status::SUCCESS) {
+            if (!flush_if_durable()) {
+                return Status::ERROR;
+            }
             return Status::SUCCESS;
         }
         if (status == tkrzw::Status::NOT_FOUND_ERROR) {
@@ -273,22 +293,23 @@ public:
      */
     class TkrzwHashIterator
         : public StorageEngineIterator<TkrzwHashIterator,
-                                       TkrzwHashStorageEngine> {
+                                       TkrzwHashStorageEngine<SYNC>> {
     public:
         explicit TkrzwHashIterator(TkrzwHashStorageEngine &engine) :
-            StorageEngineIterator<TkrzwHashIterator, TkrzwHashStorageEngine>(
-                engine) {}
+            StorageEngineIterator<TkrzwHashIterator,
+                                  TkrzwHashStorageEngine<SYNC>>(engine) {}
 
         TkrzwHashIterator(const TkrzwHashIterator &) = delete;
         TkrzwHashIterator &operator=(const TkrzwHashIterator &) = delete;
 
         TkrzwHashIterator(TkrzwHashIterator &&other) noexcept :
-            StorageEngineIterator<TkrzwHashIterator, TkrzwHashStorageEngine>(
+            StorageEngineIterator<TkrzwHashIterator,
+                                  TkrzwHashStorageEngine<SYNC>>(
                 *other.engine_) {}
 
         TkrzwHashIterator &operator=(TkrzwHashIterator &&other) noexcept {
             if (this != &other) {
-                engine_ = other.engine_;
+                this->engine_ = other.engine_;
             }
             return *this;
         }
@@ -296,10 +317,10 @@ public:
         ~TkrzwHashIterator() = default;
 
         Status find_impl(const std::string &key, std::string &value) const {
-            if (!engine_->is_open_ || !engine_->db_) {
+            if (!this->engine_->is_open_ || !this->engine_->db_) {
                 return Status::ERROR;
             }
-            tkrzw::Status status = engine_->db_->Get(key, &value);
+            tkrzw::Status status = this->engine_->db_->Get(key, &value);
             if (status == tkrzw::Status::SUCCESS) {
                 return Status::SUCCESS;
             }
@@ -313,8 +334,10 @@ public:
 };
 
 // Static member definitions
-inline std::atomic_int TkrzwHashStorageEngine::db_counter_ = 0;
-inline std::string TkrzwHashStorageEngine::id_ = std::to_string(
-    std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch())
-        .count());
+template <bool SYNC> std::atomic_int TkrzwHashStorageEngine<SYNC>::db_counter_ =
+    0;
+template <bool SYNC> std::string TkrzwHashStorageEngine<SYNC>::id_ =
+    std::to_string(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::high_resolution_clock::now().time_since_epoch())
+            .count());

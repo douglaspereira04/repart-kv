@@ -17,8 +17,11 @@
  *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
+ *
+ * @tparam SYNC Durable sync flag (ignored; in-memory only).
  */
-class AbslBtreeStorageEngine : public StorageEngine<AbslBtreeStorageEngine> {
+template <bool SYNC = false> class AbslBtreeStorageEngine
+    : public StorageEngine<AbslBtreeStorageEngine<SYNC>, SYNC> {
 private:
     absl::btree_map<std::string, std::string> storage_;
     mutable std::shared_mutex lock_;
@@ -33,7 +36,7 @@ public:
      */
     explicit AbslBtreeStorageEngine(size_t level = 0,
                                     const std::string &path = "/tmp") :
-        StorageEngine<AbslBtreeStorageEngine>(level, path) {}
+        StorageEngine<AbslBtreeStorageEngine<SYNC>, SYNC>(level, path) {}
 
     /**
      * @brief Destructor
@@ -130,22 +133,23 @@ public:
      */
     class AbslBtreeIterator
         : public StorageEngineIterator<AbslBtreeIterator,
-                                       AbslBtreeStorageEngine> {
+                                       AbslBtreeStorageEngine<SYNC>> {
     public:
         explicit AbslBtreeIterator(AbslBtreeStorageEngine &engine) :
-            StorageEngineIterator<AbslBtreeIterator, AbslBtreeStorageEngine>(
-                engine) {}
+            StorageEngineIterator<AbslBtreeIterator,
+                                  AbslBtreeStorageEngine<SYNC>>(engine) {}
 
         AbslBtreeIterator(const AbslBtreeIterator &) = delete;
         AbslBtreeIterator &operator=(const AbslBtreeIterator &) = delete;
 
         AbslBtreeIterator(AbslBtreeIterator &&other) noexcept :
-            StorageEngineIterator<AbslBtreeIterator, AbslBtreeStorageEngine>(
+            StorageEngineIterator<AbslBtreeIterator,
+                                  AbslBtreeStorageEngine<SYNC>>(
                 *other.engine_) {}
 
         AbslBtreeIterator &operator=(AbslBtreeIterator &&other) noexcept {
             if (this != &other) {
-                engine_ = other.engine_;
+                this->engine_ = other.engine_;
             }
             return *this;
         }
@@ -153,14 +157,14 @@ public:
         ~AbslBtreeIterator() = default;
 
         Status find_impl(const std::string &key, std::string &value) const {
-            engine_->lock_.lock_shared();
-            auto it = engine_->storage_.find(key);
-            if (it != engine_->storage_.end()) {
+            this->engine_->lock_.lock_shared();
+            auto it = this->engine_->storage_.find(key);
+            if (it != this->engine_->storage_.end()) {
                 value = it->second;
-                engine_->lock_.unlock_shared();
+                this->engine_->lock_.unlock_shared();
                 return Status::SUCCESS;
             }
-            engine_->lock_.unlock_shared();
+            this->engine_->lock_.unlock_shared();
             return Status::NOT_FOUND;
         }
     };

@@ -536,25 +536,57 @@ int main() {
     std::cout << "========================================" << std::endl;
 
     // Test all storage engine implementations
-    run_storage_engine_test_suite<MapStorageEngine>("MapStorageEngine");
-    run_storage_engine_test_suite<AbslBtreeStorageEngine>(
+    run_storage_engine_test_suite<MapStorageEngine<>>("MapStorageEngine");
+    run_storage_engine_test_suite<AbslBtreeStorageEngine<>>(
         "AbslBtreeStorageEngine");
-    run_storage_engine_test_suite<TkrzwHashStorageEngine>(
+    run_storage_engine_test_suite<TkrzwHashStorageEngine<>>(
         "TkrzwHashStorageEngine");
-    run_storage_engine_test_suite<TkrzwTreeStorageEngine>(
+    run_storage_engine_test_suite<TkrzwTreeStorageEngine<>>(
         "TkrzwTreeStorageEngine");
-    run_storage_engine_test_suite<LmdbStorageEngine>("LmdbStorageEngine");
-    run_storage_engine_test_suite<LevelDBStorageEngine>("LevelDBStorageEngine");
-    run_storage_engine_test_suite<TbbStorageEngine>("TbbStorageEngine");
+    run_storage_engine_test_suite<LmdbStorageEngine<>>("LmdbStorageEngine");
+    run_storage_engine_test_suite<LevelDBStorageEngine<>>(
+        "LevelDBStorageEngine");
+    run_storage_engine_test_suite<TbbStorageEngine<>>("TbbStorageEngine");
 
     // Iterator tests (only for engines that implement iterator_impl)
-    run_iterator_tests<MapStorageEngine>("MapStorageEngine");
-    run_iterator_tests<AbslBtreeStorageEngine>("AbslBtreeStorageEngine");
-    run_iterator_tests<TkrzwHashStorageEngine>("TkrzwHashStorageEngine");
-    run_iterator_tests<LmdbStorageEngine>("LmdbStorageEngine");
-    run_iterator_tests<LevelDBStorageEngine>("LevelDBStorageEngine");
-    run_iterator_tests<TkrzwTreeStorageEngine>("TkrzwTreeStorageEngine");
-    run_iterator_tests<TbbStorageEngine>("TbbStorageEngine");
+    run_iterator_tests<MapStorageEngine<>>("MapStorageEngine");
+    run_iterator_tests<AbslBtreeStorageEngine<>>("AbslBtreeStorageEngine");
+    run_iterator_tests<TkrzwHashStorageEngine<>>("TkrzwHashStorageEngine");
+    run_iterator_tests<LmdbStorageEngine<>>("LmdbStorageEngine");
+    run_iterator_tests<LevelDBStorageEngine<>>("LevelDBStorageEngine");
+    run_iterator_tests<TkrzwTreeStorageEngine<>>("TkrzwTreeStorageEngine");
+    run_iterator_tests<TbbStorageEngine<>>("TbbStorageEngine");
+
+    // Same suites with SYNC=true (durable persistence where the backend
+    // supports it; in-memory engines are unchanged but must still pass).
+    std::cout << "\n--- SYNC=true (durable) variants ---" << std::endl;
+    run_storage_engine_test_suite<MapStorageEngine<true>>(
+        "MapStorageEngine (SYNC=true)");
+    run_storage_engine_test_suite<AbslBtreeStorageEngine<true>>(
+        "AbslBtreeStorageEngine (SYNC=true)");
+    run_storage_engine_test_suite<TkrzwHashStorageEngine<true>>(
+        "TkrzwHashStorageEngine (SYNC=true)");
+    run_storage_engine_test_suite<TkrzwTreeStorageEngine<true>>(
+        "TkrzwTreeStorageEngine (SYNC=true)");
+    run_storage_engine_test_suite<LmdbStorageEngine<true>>(
+        "LmdbStorageEngine (SYNC=true)");
+    run_storage_engine_test_suite<LevelDBStorageEngine<true>>(
+        "LevelDBStorageEngine (SYNC=true)");
+    run_storage_engine_test_suite<TbbStorageEngine<true>>(
+        "TbbStorageEngine (SYNC=true)");
+
+    run_iterator_tests<MapStorageEngine<true>>("MapStorageEngine (SYNC=true)");
+    run_iterator_tests<AbslBtreeStorageEngine<true>>(
+        "AbslBtreeStorageEngine (SYNC=true)");
+    run_iterator_tests<TkrzwHashStorageEngine<true>>(
+        "TkrzwHashStorageEngine (SYNC=true)");
+    run_iterator_tests<LmdbStorageEngine<true>>(
+        "LmdbStorageEngine (SYNC=true)");
+    run_iterator_tests<LevelDBStorageEngine<true>>(
+        "LevelDBStorageEngine (SYNC=true)");
+    run_iterator_tests<TkrzwTreeStorageEngine<true>>(
+        "TkrzwTreeStorageEngine (SYNC=true)");
+    run_iterator_tests<TbbStorageEngine<true>>("TbbStorageEngine (SYNC=true)");
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;

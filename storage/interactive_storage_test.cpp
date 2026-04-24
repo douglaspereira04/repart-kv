@@ -195,22 +195,22 @@ int main() {
     switch (choice) {
         case 1:
             engine =
-                std::make_unique<StorageEngineWrapperImpl<MapStorageEngine>>(
+                std::make_unique<StorageEngineWrapperImpl<MapStorageEngine<>>>(
                     "MapStorageEngine");
             break;
         case 2:
             engine = std::make_unique<
-                StorageEngineWrapperImpl<TkrzwHashStorageEngine>>(
+                StorageEngineWrapperImpl<TkrzwHashStorageEngine<>>>(
                 "TkrzwHashStorageEngine");
             break;
         case 3:
             engine = std::make_unique<
-                StorageEngineWrapperImpl<TkrzwTreeStorageEngine>>(
+                StorageEngineWrapperImpl<TkrzwTreeStorageEngine<>>>(
                 "TkrzwTreeStorageEngine");
             break;
         case 4:
             engine =
-                std::make_unique<StorageEngineWrapperImpl<TbbStorageEngine>>(
+                std::make_unique<StorageEngineWrapperImpl<TbbStorageEngine<>>>(
                     "TbbStorageEngine");
             break;
         default:

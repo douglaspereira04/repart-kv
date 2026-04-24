@@ -17,8 +17,11 @@
  *
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
+ *
+ * @tparam SYNC Durable sync flag (ignored; in-memory only).
  */
-class MapStorageEngine : public StorageEngine<MapStorageEngine> {
+template <bool SYNC = false> class MapStorageEngine
+    : public StorageEngine<MapStorageEngine<SYNC>, SYNC> {
 private:
     std::map<std::string, std::string> storage_;
     mutable std::shared_mutex lock_;
@@ -34,7 +37,7 @@ public:
      */
     explicit MapStorageEngine(size_t level = 0,
                               const std::string &path = "/tmp") :
-        StorageEngine<MapStorageEngine>(level, path) {}
+        StorageEngine<MapStorageEngine<SYNC>, SYNC>(level, path) {}
 
     /**
      * @brief Destructor
@@ -129,21 +132,22 @@ public:
      * thread-safety. std::map is ordered; the iterator uses find() for lookups.
      */
     class MapIterator
-        : public StorageEngineIterator<MapIterator, MapStorageEngine> {
+        : public StorageEngineIterator<MapIterator, MapStorageEngine<SYNC>> {
     public:
         explicit MapIterator(MapStorageEngine &engine) :
-            StorageEngineIterator<MapIterator, MapStorageEngine>(engine) {}
+            StorageEngineIterator<MapIterator, MapStorageEngine<SYNC>>(engine) {
+        }
 
         MapIterator(const MapIterator &) = delete;
         MapIterator &operator=(const MapIterator &) = delete;
 
         MapIterator(MapIterator &&other) noexcept :
-            StorageEngineIterator<MapIterator, MapStorageEngine>(
+            StorageEngineIterator<MapIterator, MapStorageEngine<SYNC>>(
                 *other.engine_) {}
 
         MapIterator &operator=(MapIterator &&other) noexcept {
             if (this != &other) {
-                engine_ = other.engine_;
+                this->engine_ = other.engine_;
             }
             return *this;
         }
@@ -151,14 +155,14 @@ public:
         ~MapIterator() = default;
 
         Status find_impl(const std::string &key, std::string &value) const {
-            engine_->lock_.lock_shared();
-            auto it = engine_->storage_.find(key);
-            if (it != engine_->storage_.end()) {
+            this->engine_->lock_.lock_shared();
+            auto it = this->engine_->storage_.find(key);
+            if (it != this->engine_->storage_.end()) {
                 value = it->second;
-                engine_->lock_.unlock_shared();
+                this->engine_->lock_.unlock_shared();
                 return Status::SUCCESS;
             }
-            engine_->lock_.unlock_shared();
+            this->engine_->lock_.unlock_shared();
             return Status::NOT_FOUND;
         }
     };

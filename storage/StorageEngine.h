@@ -9,6 +9,11 @@
 /**
  * @brief CRTP base class for storage engines
  * @tparam Derived The derived storage engine type
+ * @tparam SYNC When true, disk-backed engines are configured for durable,
+ *        synchronous persistence (library-specific: e.g. LMDB opens without
+ *        MDB_NOSYNC, LevelDB uses WriteOptions.sync on writes). When false,
+ *        engines prefer asynchronous / relaxed durability where supported.
+ *        In-memory engines ignore this parameter.
  *
  * Uses Curiously Recurring Template Pattern for compile-time polymorphism
  * without virtual functions. Requires C++20 for compile-time polymorphism.
@@ -27,7 +32,11 @@
  * - iterator_impl() (optional) - returns a scan iterator for locality-optimized
  * lookups
  */
-template <typename Derived> class StorageEngine {
+template <typename Derived, bool SYNC = false> class StorageEngine {
+public:
+    /** True when this engine was instantiated with durable sync enabled. */
+    static constexpr bool sync_enabled = SYNC;
+
 protected:
     mutable std::shared_mutex _lock; // Mutex for thread-safe operations
     size_t level_;                   // Hierarchy level of this storage engine
