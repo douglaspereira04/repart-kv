@@ -10,11 +10,11 @@
 int tests_passed = 0;
 int tests_failed = 0;
 
-template <size_t Q> using Worker = SoftPartitionWorker<MapStorageEngine, Q>;
+template <size_t Q> using Worker = SoftPartitionWorker<MapStorageEngine<>, Q>;
 
 void test_stop_signal() {
     TEST("stop_signal")
-    MapStorageEngine engine;
+    MapStorageEngine<> engine;
     Worker<4> worker(engine);
 
     // The stop signal should be done on destructor
@@ -25,7 +25,7 @@ void test_stop_signal() {
 
 void test_single_read_operation() {
     TEST("single_read_operation")
-    MapStorageEngine engine;
+    MapStorageEngine<> engine;
     std::string key = "k1";
     engine.write(key, "v1");
     Worker<8> worker(engine);
@@ -42,7 +42,7 @@ void test_single_read_operation() {
 
 void test_single_write_operation() {
     TEST("single_write_operation")
-    MapStorageEngine engine;
+    MapStorageEngine<> engine;
     Worker<8> worker(engine);
 
     std::string key = "k1";
@@ -62,7 +62,7 @@ void test_single_write_operation() {
 
 void test_single_scan_operation() {
     TEST("single_scan_operation")
-    MapStorageEngine engine;
+    MapStorageEngine<> engine;
     Worker<8> worker(engine);
 
     std::string key = "k1";
@@ -92,7 +92,7 @@ void test_single_scan_operation() {
 
 void test_sync_multiple_workers() {
     TEST("sync_multiple_workers")
-    MapStorageEngine engine;
+    MapStorageEngine<> engine;
     const size_t worker_count = 10;
     std::vector<Worker<8> *> workers;
     for (size_t i = 0; i < worker_count; ++i) {

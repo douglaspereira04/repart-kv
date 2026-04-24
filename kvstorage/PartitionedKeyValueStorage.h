@@ -8,7 +8,12 @@
 /**
  * @brief CRTP base class for managing partitioned storage
  * @tparam Derived The derived partitioned storage type
- * @tparam StorageEngineType Type that derives from StorageEngine
+ * @tparam StorageEngineTemplate Storage engine class template (e.g.
+ *        \c LmdbStorageEngine), parameterized by the same boolean SYNC flag
+ *        as \p STORAGE_SYNC.
+ * @tparam STORAGE_SYNC When true, engines are instantiated as
+ *        \c StorageEngineTemplate<true> for durable sync; when false, as
+ *        \c StorageEngineTemplate<false>.
  *
  * Uses Curiously Recurring Template Pattern for compile-time polymorphism
  * without virtual functions. Requires C++20 for compile-time polymorphism.
@@ -19,9 +24,13 @@
  * - std::vector<std::pair<std::string, std::string>> scan_impl(const
  * std::string& initial_key_prefix, size_t limit)
  */
-template <typename Derived, typename StorageEngineType>
+template <typename Derived, template <bool> class StorageEngineTemplate,
+          bool STORAGE_SYNC = false>
 class PartitionedKeyValueStorage {
 public:
+    using StorageEngineType = StorageEngineTemplate<STORAGE_SYNC>;
+    static constexpr bool storage_sync_enabled = STORAGE_SYNC;
+
     /**
      * @brief Default constructor
      */

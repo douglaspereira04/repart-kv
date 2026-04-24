@@ -18,8 +18,9 @@
  * provide zero-overhead abstractions without virtual functions.
  *
  * @tparam Derived The concrete implementation type (CRTP pattern)
- * @tparam StorageEngineType The storage engine type (must derive from
- * StorageEngine)
+ * @tparam StorageEngineTemplate Storage engine class template (see
+ *        PartitionedKeyValueStorage)
+ * @tparam STORAGE_SYNC Durable sync flag forwarded to engine instantiation
  *
  * Common functionality includes:
  * - Access pattern tracking via graph structures
@@ -38,9 +39,11 @@
  * - void multi_key_graph_update_impl(const std::vector<std::string>& keys)
  * - void repartition_loop_impl()
  */
-template <typename Derived, typename StorageEngineType>
+template <typename Derived, template <bool> class StorageEngineTemplate,
+          bool STORAGE_SYNC = false>
 class RepartitioningKeyValueStorage
-    : public PartitionedKeyValueStorage<Derived, StorageEngineType> {
+    : public PartitionedKeyValueStorage<Derived, StorageEngineTemplate,
+                                        STORAGE_SYNC> {
 public:
     /**
      * @brief Default constructor

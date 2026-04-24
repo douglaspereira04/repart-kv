@@ -29,7 +29,7 @@ void test_scan_operation_constructor() {
 void test_scan_operation_single_storage() {
     TEST("scan_operation_barrier")
     // Create storage engine and populate with key-value pairs
-    MapStorageEngine storage(0);
+    MapStorageEngine<> storage(0);
     storage.write("key1", "value1");
     storage.write("key2", "value2");
     storage.write("key3", "value3");

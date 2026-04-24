@@ -33,8 +33,10 @@
  * This implementation creates separate storage engines for each partition and
  * migrates data by creating new storage engines during repartitioning.
  *
- * @tparam StorageEngineType The storage engine type (must derive from
- * StorageEngine)
+ * @tparam StorageEngineTemplate Storage engine class template (e.g.
+ *        \c MapStorageEngine)
+ * @tparam STORAGE_SYNC Engine sync flag (\c
+ * StorageEngineTemplate<STORAGE_SYNC>)
  * @tparam StorageMapType Template for key storage type for key->index
  * mapping (e.g., MapKeyStorage). Will be instantiated with Index* as value
  * type, where Index holds the storage engine pointer and partition index.
@@ -42,17 +44,19 @@
  * std::hash<std::string>)
  *
  * Usage example:
- *   HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>
+ *   HardRepartitioningKeyValueStorage<MapStorageEngine, false, MapKeyStorage>
  */
-template <typename StorageEngineType,
+template <template <bool> class StorageEngineTemplate, bool STORAGE_SYNC,
           template <typename> typename StorageMapType,
           typename HashFunc = std::hash<std::string>>
 class HardRepartitioningKeyValueStorage
     : public RepartitioningKeyValueStorage<
-          HardRepartitioningKeyValueStorage<StorageEngineType, StorageMapType,
-                                            HashFunc>,
-          StorageEngineType> {
+          HardRepartitioningKeyValueStorage<StorageEngineTemplate, STORAGE_SYNC,
+                                            StorageMapType, HashFunc>,
+          StorageEngineTemplate, STORAGE_SYNC> {
 private:
+    using StorageEngineType = StorageEngineTemplate<STORAGE_SYNC>;
+
     StorageMapType<size_t>
         storage_map_; // Maps partition IDs to storage engines
     std::shared_mutex

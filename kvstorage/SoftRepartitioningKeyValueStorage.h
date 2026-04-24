@@ -30,8 +30,9 @@
  * This implementation uses a single storage engine and partition-level locks
  * to provide non-disruptive repartitioning that preserves existing data access.
  *
- * @tparam StorageEngineType The storage engine type (must derive from
- * StorageEngine)
+ * @tparam StorageEngineTemplate Storage engine class template
+ * @tparam STORAGE_SYNC Engine sync flag (\c
+ * StorageEngineTemplate<STORAGE_SYNC>)
  * @tparam StorageMapType Template for key storage type for partition->engine
  * mapping (e.g., MapKeyStorage). Will be instantiated with StorageEngineType*
  * as value type.
@@ -42,21 +43,22 @@
  * std::hash<std::string>)
  *
  * Usage example:
- *   SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage,
- * MapKeyStorage> Instead of:
- *   SoftRepartitioningKeyValueStorage<MapStorageEngine,
- * MapKeyStorage<MapStorageEngine*>, MapKeyStorage<size_t>>
+ *   SoftRepartitioningKeyValueStorage<MapStorageEngine, false, MapKeyStorage,
+ * MapKeyStorage>
  */
-template <typename StorageEngineType,
+template <template <bool> class StorageEngineTemplate, bool STORAGE_SYNC,
           template <typename> typename StorageMapType,
           template <typename> typename PartitionMapType,
           typename HashFunc = std::hash<std::string>>
 class SoftRepartitioningKeyValueStorage
     : public RepartitioningKeyValueStorage<
-          SoftRepartitioningKeyValueStorage<StorageEngineType, StorageMapType,
-                                            PartitionMapType, HashFunc>,
-          StorageEngineType> {
+          SoftRepartitioningKeyValueStorage<StorageEngineTemplate, STORAGE_SYNC,
+                                            StorageMapType, PartitionMapType,
+                                            HashFunc>,
+          StorageEngineTemplate, STORAGE_SYNC> {
 private:
+    using StorageEngineType = StorageEngineTemplate<STORAGE_SYNC>;
+
     PartitionMapType<size_t> partition_map_; // Maps key ranges to partition IDs
     std::shared_mutex
         key_map_lock_;     // Mutex for thread-safe access to key mappers

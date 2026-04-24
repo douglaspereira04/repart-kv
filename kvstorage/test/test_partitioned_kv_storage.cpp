@@ -428,24 +428,39 @@ void run_partitioned_kv_test_suite(const std::string &storage_name) {
  * Runs repartitioning-threaded and hard/soft partitioned suites that share the
  * same key-map template (e.g. MapKeyStorage, LmdbKeyStorage). Lock stripping
  * uses no separate key storage and is run once in main.
+ *
+ * @tparam STORAGE_SYNC Engine durable-sync flag for embedded \c
+ * MapStorageEngine.
  */
+template <template <typename> typename KeyMap, bool STORAGE_SYNC>
+void run_partitioned_kv_suites_for_key_storage_impl(
+    const std::string &key_storage_label) {
+    const std::string sync_tag =
+        STORAGE_SYNC ? std::string(" [STORAGE_SYNC=true]") : std::string();
+    const std::string tag = " (" + key_storage_label + ")" + sync_tag;
+
+    run_partitioned_kv_test_suite<SoftRepartitioningKeyValueStorage<
+        MapStorageEngine, STORAGE_SYNC, KeyMap, KeyMap>>(
+        "SoftRepartitioningKeyValueStorage" + tag);
+    run_partitioned_kv_test_suite<HardRepartitioningKeyValueStorage<
+        MapStorageEngine, STORAGE_SYNC, KeyMap>>(
+        "HardRepartitioningKeyValueStorage" + tag);
+    run_partitioned_kv_test_suite<SoftThreadedRepartitioningKeyValueStorage<
+        MapStorageEngine, STORAGE_SYNC, KeyMap>>(
+        "SoftThreadedRepartitioningKeyValueStorage" + tag);
+    run_partitioned_kv_test_suite<HardThreadedRepartitioningKeyValueStorage<
+        MapStorageEngine, STORAGE_SYNC, KeyMap, KeyMap>>(
+        "HardThreadedRepartitioningKeyValueStorage" + tag);
+}
+
+/** Runs partitioned KV suites with \c STORAGE_SYNC false, then true. */
 template <template <typename> typename KeyMap>
 void run_partitioned_kv_suites_for_key_storage(
     const std::string &key_storage_label) {
-    const std::string tag = " (" + key_storage_label + ")";
-
-    run_partitioned_kv_test_suite<
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, KeyMap, KeyMap>>(
-        "SoftRepartitioningKeyValueStorage" + tag);
-    run_partitioned_kv_test_suite<
-        HardRepartitioningKeyValueStorage<MapStorageEngine, KeyMap>>(
-        "HardRepartitioningKeyValueStorage" + tag);
-    run_partitioned_kv_test_suite<
-        SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine, KeyMap>>(
-        "SoftThreadedRepartitioningKeyValueStorage" + tag);
-    run_partitioned_kv_test_suite<HardThreadedRepartitioningKeyValueStorage<
-        MapStorageEngine, KeyMap, KeyMap>>(
-        "HardThreadedRepartitioningKeyValueStorage" + tag);
+    run_partitioned_kv_suites_for_key_storage_impl<KeyMap, false>(
+        key_storage_label);
+    run_partitioned_kv_suites_for_key_storage_impl<KeyMap, true>(
+        key_storage_label);
 }
 
 int main() {
@@ -459,8 +474,11 @@ int main() {
         "TkrzwTreeKeyStorage");
 
     run_partitioned_kv_test_suite<
-        LockStrippingKeyValueStorage<MapStorageEngine>>(
+        LockStrippingKeyValueStorage<MapStorageEngine, false>>(
         "LockStrippingKeyValueStorage");
+    run_partitioned_kv_test_suite<
+        LockStrippingKeyValueStorage<MapStorageEngine, true>>(
+        "LockStrippingKeyValueStorage [STORAGE_SYNC=true]");
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;
@@ -471,13 +489,15 @@ int main() {
     std::cout << std::endl;
 
     if (tests_failed == 0) {
-        std::cout
-            << "✓ All tests passed for all partitioned key-value storage types!"
-            << std::endl;
+        std::cout << "✓ All tests passed for all partitioned key-value storage "
+                     "types (STORAGE_SYNC false and true per backend suite)"
+                  << std::endl;
         std::cout << "✓ Key map backends: MapKeyStorage, LmdbKeyStorage, "
                      "TkrzwTreeKeyStorage"
                   << std::endl;
-        std::cout << "✓ LockStrippingKeyValueStorage: PASSED" << std::endl;
+        std::cout << "✓ LockStrippingKeyValueStorage: PASSED (STORAGE_SYNC "
+                     "false and true)"
+                  << std::endl;
         return 0;
     } else {
         std::cout << "✗ Some tests failed!" << std::endl;

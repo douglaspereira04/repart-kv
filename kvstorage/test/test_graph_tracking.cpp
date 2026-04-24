@@ -383,12 +383,13 @@ void test_co_access_patterns(const std::string &storage_name) {
 
 // Type aliases for cleaner code
 using SoftRepartitioningStorage =
-    SoftRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage,
+    SoftRepartitioningKeyValueStorage<MapStorageEngine, false, MapKeyStorage,
                                       MapKeyStorage>;
 using HardRepartitioningStorage =
-    HardRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>;
+    HardRepartitioningKeyValueStorage<MapStorageEngine, false, MapKeyStorage>;
 using SoftThreadedRepartitioningStorage =
-    SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine, MapKeyStorage>;
+    SoftThreadedRepartitioningKeyValueStorage<MapStorageEngine, false,
+                                              MapKeyStorage>;
 
 template <typename StorageType>
 void run_all_tests_for_storage(const std::string &storage_name) {

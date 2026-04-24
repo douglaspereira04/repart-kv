@@ -30,18 +30,21 @@
  * Range scans require locking all partitions and scanning all of
  * them with the requested limit.
  *
- * @tparam StorageEngineType The storage engine type (must derive from
- * StorageEngine)
+ * @tparam StorageEngineTemplate Storage engine class template
+ * @tparam STORAGE_SYNC Engine sync flag
  * @tparam HashFunc Hash function type for key hashing (defaults to
  * std::hash<std::string>)
  */
-template <typename StorageEngineType,
+template <template <bool> class StorageEngineTemplate, bool STORAGE_SYNC,
           typename HashFunc = std::hash<std::string>>
 class LockStrippingKeyValueStorage
     : public PartitionedKeyValueStorage<
-          LockStrippingKeyValueStorage<StorageEngineType, HashFunc>,
-          StorageEngineType> {
+          LockStrippingKeyValueStorage<StorageEngineTemplate, STORAGE_SYNC,
+                                       HashFunc>,
+          StorageEngineTemplate, STORAGE_SYNC> {
 private:
+    using StorageEngineType = StorageEngineTemplate<STORAGE_SYNC>;
+
     size_t partition_count_; // Number of partitions
     std::vector<StorageEngineType *>
         storages_; // Vector of storage engine instances

@@ -37,8 +37,8 @@
  * SoftThreadedRepartitioningKeyValueStorage (worker threads for async
  * processing).
  *
- * @tparam StorageEngineType The storage engine type (must derive from
- * StorageEngine)
+ * @tparam StorageEngineTemplate Storage engine class template
+ * @tparam STORAGE_SYNC Engine sync flag
  * @tparam StorageMapType Template for key storage type for key->engine
  * mapping (e.g., MapKeyStorage). Will be instantiated with StorageEngineType*
  * as value type.
@@ -49,16 +49,19 @@
  * std::hash<std::string>)
  * @tparam Q Maximum queue size for worker operations
  */
-template <typename StorageEngineType,
+template <template <bool> class StorageEngineTemplate, bool STORAGE_SYNC,
           template <typename> typename StorageMapType,
           template <typename> typename PartitionMapType,
           typename HashFunc = std::hash<std::string>, size_t Q = 1024 * 1024>
 class HardThreadedRepartitioningKeyValueStorage
     : public RepartitioningKeyValueStorage<
           HardThreadedRepartitioningKeyValueStorage<
-              StorageEngineType, StorageMapType, PartitionMapType, HashFunc>,
-          StorageEngineType> {
+              StorageEngineTemplate, STORAGE_SYNC, StorageMapType,
+              PartitionMapType, HashFunc, Q>,
+          StorageEngineTemplate, STORAGE_SYNC> {
 private:
+    using StorageEngineType = StorageEngineTemplate<STORAGE_SYNC>;
+
     StorageMapType<StorageEngineType *>
         storage_map_; // Maps keys to storage engine instances
     PartitionMapType<size_t> partition_map_; // Maps keys to partition IDs

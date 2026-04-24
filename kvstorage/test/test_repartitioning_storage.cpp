@@ -642,24 +642,40 @@ void run_repartitioning_test_suite(const std::string &storage_name) {
 /**
  * Runs hard/soft and threaded repartitioning suites for one key-map template.
  * Threaded variants use LmdbStorageEngine; non-threaded use MapStorageEngine.
+ *
+ * @tparam STORAGE_SYNC Forwarded to partitioned storage as engine durable-sync
+ *         flag (\c MapStorageEngine<STORAGE_SYNC>, \c
+ * LmdbStorageEngine<STORAGE_SYNC>, etc.).
  */
+template <template <typename> typename KeyMap, bool STORAGE_SYNC>
+void run_repartitioning_suites_for_key_storage_impl(
+    const std::string &key_storage_label) {
+    const std::string sync_tag =
+        STORAGE_SYNC ? std::string(" [STORAGE_SYNC=true]") : std::string();
+    const std::string tag = " (" + key_storage_label + ")" + sync_tag;
+
+    run_repartitioning_test_suite<HardRepartitioningKeyValueStorage<
+        MapStorageEngine, STORAGE_SYNC, KeyMap>>(
+        "HardRepartitioningKeyValueStorage" + tag);
+    run_repartitioning_test_suite<SoftRepartitioningKeyValueStorage<
+        MapStorageEngine, STORAGE_SYNC, KeyMap, KeyMap>>(
+        "SoftRepartitioningKeyValueStorage" + tag);
+    run_repartitioning_test_suite<SoftThreadedRepartitioningKeyValueStorage<
+        LmdbStorageEngine, STORAGE_SYNC, KeyMap>>(
+        "SoftThreadedRepartitioningKeyValueStorage" + tag);
+    run_repartitioning_test_suite<HardThreadedRepartitioningKeyValueStorage<
+        LmdbStorageEngine, STORAGE_SYNC, KeyMap, KeyMap>>(
+        "HardThreadedRepartitioningKeyValueStorage" + tag);
+}
+
+/** Runs repartitioning suites with default engine sync, then with SYNC=true. */
 template <template <typename> typename KeyMap>
 void run_repartitioning_suites_for_key_storage(
     const std::string &key_storage_label) {
-    const std::string tag = " (" + key_storage_label + ")";
-
-    run_repartitioning_test_suite<
-        HardRepartitioningKeyValueStorage<MapStorageEngine, KeyMap>>(
-        "HardRepartitioningKeyValueStorage" + tag);
-    run_repartitioning_test_suite<
-        SoftRepartitioningKeyValueStorage<MapStorageEngine, KeyMap, KeyMap>>(
-        "SoftRepartitioningKeyValueStorage" + tag);
-    run_repartitioning_test_suite<
-        SoftThreadedRepartitioningKeyValueStorage<LmdbStorageEngine, KeyMap>>(
-        "SoftThreadedRepartitioningKeyValueStorage" + tag);
-    run_repartitioning_test_suite<HardThreadedRepartitioningKeyValueStorage<
-        LmdbStorageEngine, KeyMap, KeyMap>>(
-        "HardThreadedRepartitioningKeyValueStorage" + tag);
+    run_repartitioning_suites_for_key_storage_impl<KeyMap, false>(
+        key_storage_label);
+    run_repartitioning_suites_for_key_storage_impl<KeyMap, true>(
+        key_storage_label);
 }
 
 int main() {
@@ -681,7 +697,7 @@ int main() {
 
         std::cout << "Summary:\n";
         std::cout << "  ✓ Both Hard and Soft repartitioning implementations "
-                     "work correctly\n";
+                     "work correctly (STORAGE_SYNC false and true)\n";
         std::cout << "  ✓ Repartitioning uses METIS graph partitioning\n";
         std::cout << "  ✓ Graph is cleared after repartitioning\n";
         std::cout << "  ✓ Tracking is disabled after repartitioning\n";
