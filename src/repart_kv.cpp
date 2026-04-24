@@ -40,6 +40,7 @@
 #include "keystorage/UnorderedDenseKeyStorage.h"
 #include "repart_kv_api.h"
 #include <cassert>
+#include <cctype>
 #include <barrier>
 #include <random>
 
@@ -63,6 +64,8 @@ size_t PARTITION_COUNT = 4;
 size_t TEST_WORKERS = 1;
 std::string STORAGE_TYPE = "soft";         // Default to soft repartitioning
 std::string STORAGE_ENGINE = "tkrzw_tree"; // Default to TkrzwTreeStorageEngine
+/** When true, storage engines use \c StorageEngine<true> (hard sync). */
+bool STORAGE_SYNC = false;
 std::vector<std::string> STORAGE_PATHS = {
     "/tmp"}; // Default paths for embedded database files
 std::string LOADGEN_CONFIG_FILE;
@@ -613,7 +616,8 @@ template <typename StorageType> void run_workload_with_storage(
         STORAGE_TYPE + "__" + std::to_string(partition_count) + "__" +
         STORAGE_ENGINE + "__" + std::to_string(STORAGE_PATHS.size()) + "__" +
         std::to_string(REPARTITION_INTERVAL.count()) + "__" +
-        std::to_string(THINKING_TIME.count()) + ".csv";
+        std::to_string(THINKING_TIME.count()) + "__" +
+        (STORAGE_SYNC ? "sync_on" : "sync_off") + ".csv";
 
     // Execute operations
     std::cout << "\n=== Executing Workload ===" << std::endl;
@@ -738,247 +742,92 @@ template <typename StorageType> void run_workload_with_storage(
 }
 
 /**
+ * @brief Dispatch STORAGE_TYPE for a given \c template<bool> storage engine.
+ *
+ * Repartitioning wrappers take the engine as a template template parameter;
+ * \c StorageSync selects \c Engine<StorageSync> and matching wrapper sync
+ * flags (defaults are not visible through the template-template parameter).
+ */
+template <template <bool> class Engine, bool StorageSync>
+void run_workload_for_engine_template(
+    std::vector<std::unique_ptr<workload::RequestGenerator>> &generators,
+    const char *engine_metrics_name) {
+    const std::string lock_stripping_label =
+        std::string("LockStrippingKeyValueStorage<") + engine_metrics_name +
+        (StorageSync ? ", true>" : ", false>");
+    if (STORAGE_TYPE == "hard") {
+        using StorageType =
+            HardRepartitioningKeyValueStorage<Engine, StorageSync,
+                                              OrderedKeyStorage>;
+        run_workload_with_storage<StorageType>(
+            generators, PARTITION_COUNT, TEST_WORKERS,
+            "HardRepartitioningKeyValueStorage");
+    } else if (STORAGE_TYPE == "soft") {
+        using StorageType = SoftRepartitioningKeyValueStorage<
+            Engine, StorageSync, OrderedKeyStorage, OrderedKeyStorage>;
+        run_workload_with_storage<StorageType>(
+            generators, PARTITION_COUNT, TEST_WORKERS,
+            "SoftRepartitioningKeyValueStorage");
+    } else if (STORAGE_TYPE == "threaded") {
+        using StorageType =
+            SoftThreadedRepartitioningKeyValueStorage<Engine, StorageSync,
+                                                      OrderedKeyStorage>;
+        run_workload_with_storage<StorageType>(
+            generators, PARTITION_COUNT, TEST_WORKERS,
+            "SoftThreadedRepartitioningKeyValueStorage");
+    } else if (STORAGE_TYPE == "hard_threaded") {
+        using StorageType = HardThreadedRepartitioningKeyValueStorage<
+            Engine, StorageSync, OrderedKeyStorage, UnorderedDenseKeyStorage>;
+        run_workload_with_storage<StorageType>(
+            generators, PARTITION_COUNT, TEST_WORKERS,
+            "HardThreadedRepartitioningKeyValueStorage");
+    } else if (STORAGE_TYPE == "engine") {
+        using StorageType = Engine<StorageSync>;
+        run_workload_with_storage<StorageType>(
+            generators, PARTITION_COUNT, TEST_WORKERS, engine_metrics_name);
+    } else if (STORAGE_TYPE == "lock_stripping") {
+        using StorageType = LockStrippingKeyValueStorage<Engine, StorageSync>;
+        run_workload_with_storage<StorageType>(
+            generators, PARTITION_COUNT, TEST_WORKERS, lock_stripping_label);
+    }
+}
+
+template <template <bool> class Engine>
+void run_workload_for_engine_with_cli_sync(
+    std::vector<std::unique_ptr<workload::RequestGenerator>> &generators,
+    const char *engine_metrics_name) {
+    if (STORAGE_SYNC) {
+        run_workload_for_engine_template<Engine, true>(generators,
+                                                       engine_metrics_name);
+    } else {
+        run_workload_for_engine_template<Engine, false>(generators,
+                                                        engine_metrics_name);
+    }
+}
+
+/**
  * @brief Helper function to execute workload with storage engine configuration
  */
 void execute_with_storage_config(
     std::vector<std::unique_ptr<workload::RequestGenerator>> &generators) {
     if (STORAGE_ENGINE == "tkrzw_tree") {
-        if (STORAGE_TYPE == "hard") {
-            using StorageType =
-                HardRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, false,
-                                                  OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "soft") {
-            using StorageType =
-                SoftRepartitioningKeyValueStorage<TkrzwTreeStorageEngine, false,
-                                                  OrderedKeyStorage,
-                                                  OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "threaded") {
-            using StorageType = SoftThreadedRepartitioningKeyValueStorage<
-                TkrzwTreeStorageEngine, false, OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "hard_threaded") {
-            using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                TkrzwTreeStorageEngine, false, OrderedKeyStorage,
-                UnorderedDenseKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "engine") {
-            using StorageType = TkrzwTreeStorageEngine<>;
-            run_workload_with_storage<StorageType>(generators, PARTITION_COUNT,
-                                                   TEST_WORKERS,
-                                                   "TkrzwTreeStorageEngine");
-        } else if (STORAGE_TYPE == "lock_stripping") {
-            using StorageType =
-                LockStrippingKeyValueStorage<TkrzwTreeStorageEngine, false>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "LockStrippingKeyValueStorage<TkrzwTreeStorageEngine, false>");
-        }
+        run_workload_for_engine_with_cli_sync<TkrzwTreeStorageEngine>(
+            generators, "TkrzwTreeStorageEngine");
     } else if (STORAGE_ENGINE == "tkrzw_hash") {
-        if (STORAGE_TYPE == "hard") {
-            using StorageType =
-                HardRepartitioningKeyValueStorage<TkrzwHashStorageEngine, false,
-                                                  OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "soft") {
-            using StorageType =
-                SoftRepartitioningKeyValueStorage<TkrzwHashStorageEngine, false,
-                                                  OrderedKeyStorage,
-                                                  OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "threaded") {
-            using StorageType = SoftThreadedRepartitioningKeyValueStorage<
-                TkrzwHashStorageEngine, false, OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "hard_threaded") {
-            using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                TkrzwHashStorageEngine, false, OrderedKeyStorage,
-                UnorderedDenseKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "engine") {
-            using StorageType = TkrzwHashStorageEngine<>;
-            run_workload_with_storage<StorageType>(generators, PARTITION_COUNT,
-                                                   TEST_WORKERS,
-                                                   "TkrzwHashStorageEngine");
-        } else if (STORAGE_TYPE == "lock_stripping") {
-            using StorageType =
-                LockStrippingKeyValueStorage<TkrzwHashStorageEngine, false>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "LockStrippingKeyValueStorage<TkrzwHashStorageEngine, false>");
-        }
+        run_workload_for_engine_with_cli_sync<TkrzwHashStorageEngine>(
+            generators, "TkrzwHashStorageEngine");
     } else if (STORAGE_ENGINE == "lmdb") {
-        if (STORAGE_TYPE == "hard") {
-            using StorageType =
-                HardRepartitioningKeyValueStorage<LmdbStorageEngine, false,
-                                                  OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "soft") {
-            using StorageType = SoftRepartitioningKeyValueStorage<
-                LmdbStorageEngine, false, OrderedKeyStorage, OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "threaded") {
-            using StorageType = SoftThreadedRepartitioningKeyValueStorage<
-                LmdbStorageEngine, false, OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "hard_threaded") {
-            using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                LmdbStorageEngine, false, OrderedKeyStorage,
-                UnorderedDenseKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "engine") {
-            using StorageType = LmdbStorageEngine<>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS, "LmdbStorageEngine");
-        } else if (STORAGE_TYPE == "lock_stripping") {
-            using StorageType =
-                LockStrippingKeyValueStorage<LmdbStorageEngine, false>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "LockStrippingKeyValueStorage<LmdbStorageEngine, false>");
-        }
+        run_workload_for_engine_with_cli_sync<LmdbStorageEngine>(
+            generators, "LmdbStorageEngine");
     } else if (STORAGE_ENGINE == "leveldb") {
-        if (STORAGE_TYPE == "hard") {
-            using StorageType =
-                HardRepartitioningKeyValueStorage<LevelDBStorageEngine, false,
-                                                  OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "soft") {
-            using StorageType =
-                SoftRepartitioningKeyValueStorage<LevelDBStorageEngine, false,
-                                                  OrderedKeyStorage,
-                                                  OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "threaded") {
-            using StorageType = SoftThreadedRepartitioningKeyValueStorage<
-                LevelDBStorageEngine, false, OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "hard_threaded") {
-            using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                LevelDBStorageEngine, false, OrderedKeyStorage,
-                UnorderedDenseKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "engine") {
-            using StorageType = LevelDBStorageEngine<>;
-            run_workload_with_storage<StorageType>(generators, PARTITION_COUNT,
-                                                   TEST_WORKERS,
-                                                   "LevelDBStorageEngine");
-        } else if (STORAGE_TYPE == "lock_stripping") {
-            using StorageType =
-                LockStrippingKeyValueStorage<LevelDBStorageEngine, false>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "LockStrippingKeyValueStorage<LevelDBStorageEngine, false>");
-        }
+        run_workload_for_engine_with_cli_sync<LevelDBStorageEngine>(
+            generators, "LevelDBStorageEngine");
     } else if (STORAGE_ENGINE == "map") {
-        if (STORAGE_TYPE == "hard") {
-            using StorageType =
-                HardRepartitioningKeyValueStorage<MapStorageEngine, false,
-                                                  OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "soft") {
-            using StorageType = SoftRepartitioningKeyValueStorage<
-                MapStorageEngine, false, OrderedKeyStorage, OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "threaded") {
-            using StorageType = SoftThreadedRepartitioningKeyValueStorage<
-                MapStorageEngine, false, OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "hard_threaded") {
-            using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                MapStorageEngine, false, OrderedKeyStorage,
-                UnorderedDenseKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "engine") {
-            using StorageType = MapStorageEngine<>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS, "MapStorageEngine");
-        } else if (STORAGE_TYPE == "lock_stripping") {
-            using StorageType =
-                LockStrippingKeyValueStorage<MapStorageEngine, false>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "LockStrippingKeyValueStorage<MapStorageEngine, false>");
-        }
+        run_workload_for_engine_with_cli_sync<MapStorageEngine>(
+            generators, "MapStorageEngine");
     } else if (STORAGE_ENGINE == "tbb") {
-        if (STORAGE_TYPE == "hard") {
-            using StorageType =
-                HardRepartitioningKeyValueStorage<TbbStorageEngine, false,
-                                                  OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "soft") {
-            using StorageType = SoftRepartitioningKeyValueStorage<
-                TbbStorageEngine, false, OrderedKeyStorage, OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "threaded") {
-            using StorageType = SoftThreadedRepartitioningKeyValueStorage<
-                TbbStorageEngine, false, OrderedKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "SoftThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "hard_threaded") {
-            using StorageType = HardThreadedRepartitioningKeyValueStorage<
-                TbbStorageEngine, false, OrderedKeyStorage,
-                UnorderedDenseKeyStorage>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "HardThreadedRepartitioningKeyValueStorage");
-        } else if (STORAGE_TYPE == "engine") {
-            using StorageType = TbbStorageEngine<>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS, "TbbStorageEngine");
-        } else if (STORAGE_TYPE == "lock_stripping") {
-            using StorageType =
-                LockStrippingKeyValueStorage<TbbStorageEngine, false>;
-            run_workload_with_storage<StorageType>(
-                generators, PARTITION_COUNT, TEST_WORKERS,
-                "LockStrippingKeyValueStorage<TbbStorageEngine, false>");
-        }
+        run_workload_for_engine_with_cli_sync<TbbStorageEngine>(
+            generators, "TbbStorageEngine");
     }
 }
 
@@ -990,7 +839,7 @@ void print_usage(const char *program_name) {
               << " <loadgen_config.toml> [partition_count] [test_workers] "
                  "[storage_type] [storage_engine] "
                  "[thinking_time_ns] [storage_paths] "
-                 "[repartition_interval_ms]"
+                 "[repartition_interval_ms] [max_duration_s] [sync]"
               << std::endl;
     std::cout << "\nArguments:" << std::endl;
     std::cout << "  loadgen_config   Path to a LoadGen TOML configuration file "
@@ -1021,6 +870,12 @@ void print_usage(const char *program_name) {
            "repartitioning cycles and tracking duration (default: 1000). "
            "Sets both TRACKING_DURATION and REPARTITION_INTERVAL to this value."
         << std::endl;
+    std::cout << "  max_duration_s   Wall-clock cap for the run in seconds "
+                 "(default: 20)"
+              << std::endl;
+    std::cout << "  sync             Storage engine durability sync: 'false', "
+                 "'true', '0', or '1' (default: false)"
+              << std::endl;
     std::cout << "\nStorage Types:" << std::endl;
     std::cout << "  hard            HardRepartitioningKeyValueStorage (creates "
                  "new storage engines)"
@@ -1188,6 +1043,25 @@ int run_repart_kv(int argc, char *argv[]) {
         }
     }
 
+    if (argc >= 11) {
+        std::string sync_arg = argv[10];
+        for (auto &ch : sync_arg) {
+            ch =
+                static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+        }
+        if (sync_arg == "1" || sync_arg == "true" || sync_arg == "on" ||
+            sync_arg == "yes") {
+            STORAGE_SYNC = true;
+        } else if (sync_arg == "0" || sync_arg == "false" ||
+                   sync_arg == "off" || sync_arg == "no") {
+            STORAGE_SYNC = false;
+        } else {
+            std::cerr << "Error: sync must be 'true' or 'false' (or 1/0), got: "
+                      << argv[10] << std::endl;
+            return 1;
+        }
+    }
+
     std::filesystem::path config_path(LOADGEN_CONFIG_FILE);
     WORKLOAD_NAME = config_path.stem().string();
     if (WORKLOAD_NAME.empty()) {
@@ -1200,6 +1074,7 @@ int run_repart_kv(int argc, char *argv[]) {
     std::cout << "Test workers: " << TEST_WORKERS << std::endl;
     std::cout << "Storage type: " << STORAGE_TYPE << std::endl;
     std::cout << "Storage engine: " << STORAGE_ENGINE << std::endl;
+    std::cout << "Storage sync: " << (STORAGE_SYNC ? "on" : "off") << std::endl;
     std::cout << "Thinking time: " << THINKING_TIME.count() << "ns"
               << std::endl;
     std::cout << "Storage paths: ";
