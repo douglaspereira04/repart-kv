@@ -179,6 +179,7 @@ TMP=("/tmp")
 #deletes directories repart_kv_storage in each path
 for p in "${TMP[@]}"; do
     rm -rf "$p/repart_kv_storage"
+    rm -rf "$p/repart_kv_keystorage"
 done
 
 REPETITIONS=1
