@@ -9,7 +9,7 @@
 int main() {
     // Example 1: Using MapKeyStorage with integer values
     std::cout << "=== Example 1: Integer values ===" << std::endl;
-    MapKeyStorage<int> intStorage;
+    MapKeyStorage<int> intStorage(".");
 
     // Put some key-value pairs
     intStorage.put("apple", 5);
@@ -36,7 +36,7 @@ int main() {
 
     // Example 2: Using MapKeyStorage with pointer values
     std::cout << "=== Example 2: Pointer values ===" << std::endl;
-    MapKeyStorage<std::string *> ptrStorage;
+    MapKeyStorage<std::string *> ptrStorage(".");
 
     // Create some string objects
     std::string *str1 = new std::string("Hello");
@@ -72,7 +72,7 @@ int main() {
 
     // Example 3: Using MapKeyStorage with long values
     std::cout << "=== Example 3: Long integer values ===" << std::endl;
-    MapKeyStorage<long> longStorage;
+    MapKeyStorage<long> longStorage(".");
 
     longStorage.put("small", 100L);
     longStorage.put("medium", 10000L);

@@ -2,6 +2,7 @@
 #include "TkrzwHashStorageEngine.h"
 #include "TkrzwTreeStorageEngine.h"
 #include "TbbStorageEngine.h"
+#include "utils/test_resources.h"
 #include <iostream>
 #include <string>
 #include <memory>
@@ -30,7 +31,8 @@ private:
     std::string name_;
 
 public:
-    StorageEngineWrapperImpl(const std::string &name) : name_(name) {}
+    StorageEngineWrapperImpl(const std::string &name) :
+        engine_(0, repart_kv_test::test_resources_dir()), name_(name) {}
 
     std::string read(const std::string &key) override {
         std::string value;

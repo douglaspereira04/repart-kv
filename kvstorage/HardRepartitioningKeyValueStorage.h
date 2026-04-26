@@ -112,6 +112,8 @@ public:
         std::optional<std::chrono::milliseconds> repartition_interval =
             std::nullopt,
         const std::vector<std::string> &paths = {"/tmp"}) :
+        storage_map_(StorageMapType<size_t>(paths.empty() ? std::string("/tmp")
+                                                          : paths[0])),
         enable_tracking_(false), is_repartitioning_(false),
         partition_count_(partition_count), level_(0), hash_func_(hash_func),
         tracking_duration_(tracking_duration),
@@ -195,7 +197,9 @@ public:
 
         // Track key access if enabled
         if (enable_tracking_) {
-            tracker_.update(key);
+            if (tracker_.update(key)) {
+                enable_tracking_ = false;
+            }
         }
         return status;
     }
@@ -234,7 +238,9 @@ public:
 
         // Track key access if enabled
         if (enable_tracking_) {
-            tracker_.update(key);
+            if (tracker_.update(key)) {
+                enable_tracking_ = false;
+            }
         }
         return status;
     }
@@ -303,7 +309,9 @@ public:
                  it != end; ++it) {
                 keys.push_back(std::move(it->first));
             }
-            tracker_.multi_update(keys);
+            if (tracker_.multi_update(keys)) {
+                enable_tracking_ = false;
+            }
         }
 
         return status;
@@ -377,7 +385,6 @@ public:
     void repartition_impl() {
         // Set repartitioning flag and disable tracking temporarily
         is_repartitioning_ = true;
-        enable_tracking_ = false;
 
         bool success =
             tracker_.prepare_for_partition_map_update(partition_count_);
@@ -398,7 +405,13 @@ public:
     }
 
     // Interface methods required by the abstract base class
-    void enable_tracking_impl(bool enable) { enable_tracking_ = enable; }
+    void enable_tracking_impl(bool enable) {
+        enable_tracking_ = enable;
+        if (!enable) {
+            std::lock_guard<std::mutex> lock(cv_mutex_);
+            cv_.notify_all();
+        }
+    }
 
     bool enable_tracking_impl() const { return enable_tracking_; }
 
@@ -421,7 +434,8 @@ private:
      * This method runs in a separate thread and performs periodic
      * repartitioning:
      * 1. Sleeps for repartition_interval
-     * 2. Enables tracking for tracking_duration
+     * 2. Enables tracking for tracking_duration (or until tracking is disabled
+     *    externally via enable_tracking(false))
      * 3. Calls repartition to redistribute keys based on access patterns
      *
      * The loop continues until running_ is set to false (during destruction).
@@ -440,14 +454,17 @@ private:
             // Enable tracking
             this->enable_tracking(true);
 
-            // Sleep for the tracking duration
+            // Sleep for the tracking duration, or until tracking is turned off
             lock.lock();
-            if (cv_.wait_for(lock, tracking_duration_.value(),
-                             [this]() { return !running_; })) {
-                // If running_ became false, exit the loop
+            (void)cv_.wait_for(lock, tracking_duration_.value(), [this]() {
+                return !running_ || !enable_tracking_;
+            });
+            if (!running_) {
+                lock.unlock();
                 break;
             }
             lock.unlock();
+            this->enable_tracking(false);
 
             // Perform repartitioning (this also disables tracking)
             this->repartition_impl();

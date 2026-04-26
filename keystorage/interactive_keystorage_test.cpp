@@ -1,6 +1,7 @@
 #include "MapKeyStorage.h"
 #include "TkrzwHashKeyStorage.h"
 #include "TkrzwTreeKeyStorage.h"
+#include "utils/test_resources.h"
 #include <iostream>
 #include <string>
 #include <memory>
@@ -31,7 +32,8 @@ private:
 
 public:
     KeyStorageWrapperImpl(const std::string &name, const std::string &type) :
-        name_(name), type_(type) {}
+        storage_(repart_kv_test::test_resources_dir()), name_(name),
+        type_(type) {}
 
     bool get(const std::string &key, std::string &value_str) const override {
         ValueType value;

@@ -24,7 +24,7 @@
  * increment_edge_weight_if_vertices_exist; otherwise they use
  * increment_vertex_weight and increment_edge_weight.
  */
-template <size_t MAX_GRAPH_SIZE = 1000> class Tracker {
+template <size_t MAX_GRAPH_SIZE = 100000> class Tracker {
 private:
     tbb::concurrent_bounded_queue<std::vector<std::string>>
         queue_;    // High-performance thread-safe bounded queue from TBB with
@@ -56,37 +56,19 @@ private:
             // Lock the graph
             std::lock_guard<std::mutex> lock(graph_lock_);
 
-            const bool at_vertex_cap =
-                graph_.get_vertex_count() == MAX_GRAPH_SIZE;
-
             // Process the item based on size
             if (keys.size() == 1) {
                 // Single key: increment vertex weight
-                if (at_vertex_cap) {
-                    graph_.increment_vertex_weight_if_exists(keys[0]);
-                } else {
-                    graph_.increment_vertex_weight(keys[0]);
-                }
+                graph_.increment_vertex_weight(keys[0]);
             } else if (keys.size() > 1) {
                 // Multiple keys: increment vertex weights and create edges
-                if (at_vertex_cap) {
-                    for (size_t i = 0; i < keys.size(); ++i) {
-                        graph_.increment_vertex_weight_if_exists(keys[i]);
-                    }
-                    for (size_t i = 0; i < keys.size(); ++i) {
-                        for (size_t j = i + 1; j < keys.size(); ++j) {
-                            graph_.increment_edge_weight_if_vertices_exist(
-                                keys[i], keys[j]);
-                        }
-                    }
-                } else {
-                    for (size_t i = 0; i < keys.size(); ++i) {
-                        graph_.increment_vertex_weight(keys[i]);
-                    }
-                    for (size_t i = 0; i < keys.size(); ++i) {
-                        for (size_t j = i + 1; j < keys.size(); ++j) {
-                            graph_.increment_edge_weight(keys[i], keys[j]);
-                        }
+
+                for (size_t i = 0; i < keys.size(); ++i) {
+                    graph_.increment_vertex_weight(keys[i]);
+                }
+                for (size_t i = 0; i < keys.size(); ++i) {
+                    for (size_t j = i + 1; j < keys.size(); ++j) {
+                        graph_.increment_edge_weight(keys[i], keys[j]);
                     }
                 }
             }
@@ -140,7 +122,7 @@ public:
      *
      * Copies the string into a vector and inserts it into the queue.
      */
-    void update(const std::string &key) {
+    bool update(const std::string &key) {
         // Create a vector with a single key (copy the string)
         std::vector<std::string> keys;
         keys.push_back(key);
@@ -148,6 +130,7 @@ public:
         // Insert into queue (thread-safe, blocking pop() will wake up
         // automatically)
         queue_.push(std::move(keys));
+        return graph_.get_vertex_count() >= MAX_GRAPH_SIZE;
     }
 
     /**
@@ -156,13 +139,14 @@ public:
      *
      * Copies the vector of keys and inserts it into the queue.
      */
-    void multi_update(const std::vector<std::string> &keys) {
+    bool multi_update(const std::vector<std::string> &keys) {
         // Copy the vector of keys
         std::vector<std::string> keys_copy = keys;
 
         // Insert into queue (thread-safe, blocking pop() will wake up
         // automatically)
         queue_.push(std::move(keys_copy));
+        return graph_.get_vertex_count() >= MAX_GRAPH_SIZE;
     }
 
     /**

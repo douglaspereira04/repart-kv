@@ -14,7 +14,7 @@ int main() {
     std::cout << "\n--- Example 1: TkrzwHashKeyStorage (integers) ---"
               << std::endl;
     {
-        TkrzwHashKeyStorage<int> hashStorage;
+        TkrzwHashKeyStorage<int> hashStorage(".");
 
         if (!hashStorage.is_open()) {
             std::cerr << "Failed to open hash key storage!" << std::endl;
@@ -49,7 +49,7 @@ int main() {
     std::cout << "\n--- Example 2: TkrzwTreeKeyStorage (integers, sorted) ---"
               << std::endl;
     {
-        TkrzwTreeKeyStorage<int> treeStorage;
+        TkrzwTreeKeyStorage<int> treeStorage(".");
 
         if (!treeStorage.is_open()) {
             std::cerr << "Failed to open tree key storage!" << std::endl;
@@ -93,7 +93,7 @@ int main() {
     std::cout << "\n--- Example 3: TkrzwTreeKeyStorage (long integers) ---"
               << std::endl;
     {
-        TkrzwTreeKeyStorage<long> treeStorage;
+        TkrzwTreeKeyStorage<long> treeStorage(".");
 
         if (!treeStorage.is_open()) {
             std::cerr << "Failed to open tree key storage!" << std::endl;
@@ -133,7 +133,7 @@ int main() {
     std::cout << "\n--- Example 4: TkrzwHashKeyStorage (pointers) ---"
               << std::endl;
     {
-        TkrzwHashKeyStorage<std::string *> ptrStorage;
+        TkrzwHashKeyStorage<std::string *> ptrStorage(".");
 
         if (!ptrStorage.is_open()) {
             std::cerr << "Failed to open hash key storage for pointers!"
@@ -172,8 +172,8 @@ int main() {
     // ========================================
     std::cout << "\n--- Example 5: Performance Comparison ---" << std::endl;
     {
-        TkrzwHashKeyStorage<int> hashStorage;
-        TkrzwTreeKeyStorage<int> treeStorage;
+        TkrzwHashKeyStorage<int> hashStorage(".");
+        TkrzwTreeKeyStorage<int> treeStorage(".");
 
         const int num_entries = 1000;
 

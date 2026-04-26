@@ -6,10 +6,15 @@ import sys
 from collections import defaultdict
 
 def parse_filename(filename):
-    # Format: workload__testworkers__storagetype__partitions__storageengine__paths__interval__thinking(REP).csv
+    # Format:
+    # workload__testworkers__storagetype__partitions__storageengine__paths__interval__thinking__[sync_mode](REP).csv
     # Example: ycsb_a__1__engine__1__tkrzw_tree__1__0__10000(1).csv
     # thinking is in nanoseconds (ns)
-    # Backward compat: 7 parts (no thinking) -> thinking_time=0
+    # Backward compat:
+    # - 7 parts (no thinking, no sync_mode) -> thinking_time=0, sync_mode=sync_off
+    # - 8 parts can be either:
+    #   * with thinking and no sync_mode
+    #   * no thinking and with sync_mode (sync_on/sync_off)
     
     # Remove extension
     name = filename.rsplit('.', 1)[0]
@@ -24,10 +29,19 @@ def parse_filename(filename):
     name_no_rep = name[:match.start()]
     
     parts = name_no_rep.split('__')
-    if len(parts) not in (7, 8):
+    if len(parts) not in (7, 8, 9):
         return None
 
-    thinking_time = int(parts[7]) if len(parts) == 8 else 0
+    thinking_time = 0
+    sync_mode = "sync_off"
+    if len(parts) == 8:
+        if parts[7] in ("sync_on", "sync_off"):
+            sync_mode = parts[7]
+        else:
+            thinking_time = int(parts[7])
+    elif len(parts) == 9:
+        thinking_time = int(parts[7])
+        sync_mode = parts[8]
         
     return {
         'workload': parts[0],
@@ -38,6 +52,7 @@ def parse_filename(filename):
         'paths': int(parts[5]),
         'interval': int(parts[6]),
         'thinking_time': thinking_time,
+        'sync_mode': sync_mode,
         'rep': rep,
         'key': name_no_rep  # Unique key for the experiment configuration
     }
@@ -116,7 +131,7 @@ def main():
         mean_ops = sum(m['ops_per_second'] for m in metrics_list) / len(metrics_list)
         mean_makespan = sum(m['makespan_s'] for m in metrics_list) / len(metrics_list)
         
-        output_key = f"{meta['workload']}__{meta['storage_engine']}"
+        output_key = f"{meta['workload']}__{meta['storage_engine']}__{meta['sync_mode']}"
         
         common_meta = {
             'workload': meta['workload'],
@@ -127,6 +142,7 @@ def main():
             'paths': meta['paths'],
             'interval': meta['interval'],
             'thinking_time': meta['thinking_time'],
+            'sync_mode': meta['sync_mode'],
         }
         
         grouped_throughput[output_key].append({**common_meta, 'ops_per_second': mean_ops})
@@ -136,9 +152,9 @@ def main():
     for output_key, data_list in grouped_throughput.items():
         output_file = os.path.join(throughput_dir, f"{output_key}.csv")
         with open(output_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'thinking_time', 'ops_per_second'])
+            writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'thinking_time', 'sync_mode', 'ops_per_second'])
             writer.writeheader()
-            sorted_data = sorted(data_list, key=lambda x: (x['workers'], x['storage_type'], x['partitions'], x['thinking_time']))
+            sorted_data = sorted(data_list, key=lambda x: (x['sync_mode'], x['workers'], x['storage_type'], x['partitions'], x['thinking_time']))
             writer.writerows(sorted_data)
         print(f"Created throughput CSV: {output_file}")
 
@@ -146,9 +162,9 @@ def main():
     for output_key, data_list in grouped_makespan.items():
         output_file = os.path.join(makespan_dir, f"{output_key}.csv")
         with open(output_file, 'w', newline='') as f:
-            writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'thinking_time', 'makespan_s'])
+            writer = csv.DictWriter(f, fieldnames=['workload', 'workers', 'storage_type', 'partitions', 'storage_engine', 'paths', 'interval', 'thinking_time', 'sync_mode', 'makespan_s'])
             writer.writeheader()
-            sorted_data = sorted(data_list, key=lambda x: (x['workers'], x['storage_type'], x['partitions'], x['thinking_time']))
+            sorted_data = sorted(data_list, key=lambda x: (x['sync_mode'], x['workers'], x['storage_type'], x['partitions'], x['thinking_time']))
             writer.writerows(sorted_data)
         print(f"Created makespan CSV: {output_file}")
 

@@ -15,7 +15,8 @@ from collections import defaultdict
 
 
 def parse_latency_filename(filename):
-    # Format: workload__testworkers__storagetype__partitions__storageengine__paths__interval__thinking_latency(REP).csv
+    # Format:
+    # workload__testworkers__storagetype__partitions__storageengine__paths__interval__thinking__[sync_mode]__latency(REP).csv
     # Example: ycsb_a__1__engine__1__lmdb__1__0__0_latency(1).csv
     if not filename.endswith('.csv') or '__latency' not in filename or '(' not in filename:
         return None
@@ -30,10 +31,19 @@ def parse_latency_filename(filename):
         return None
     name_no_latency = name_no_rep[: -len('__latency')]
     parts = name_no_latency.split('__')
-    if len(parts) not in (7, 8):
+    if len(parts) not in (7, 8, 9):
         return None
 
-    thinking_time = int(parts[7]) if len(parts) == 8 else 0
+    thinking_time = 0
+    sync_mode = "sync_off"
+    if len(parts) == 8:
+        if parts[7] in ("sync_on", "sync_off"):
+            sync_mode = parts[7]
+        else:
+            thinking_time = int(parts[7])
+    elif len(parts) == 9:
+        thinking_time = int(parts[7])
+        sync_mode = parts[8]
     return {
         'workload': parts[0],
         'workers': int(parts[1]),
@@ -43,6 +53,7 @@ def parse_latency_filename(filename):
         'paths': int(parts[5]),
         'interval': int(parts[6]),
         'thinking_time': thinking_time,
+        'sync_mode': sync_mode,
         'key': name_no_latency,
     }
 
@@ -87,6 +98,7 @@ def load_throughput_data(throughput_dir):
                         int(row['paths']),
                         int(row['interval']),
                         int(row['thinking_time']),
+                        row.get('sync_mode', 'sync_off'),
                     )
                     throughput[key] = float(row['ops_per_second'].replace(',', '.'))
         except (KeyError, ValueError, OSError) as e:
@@ -132,11 +144,11 @@ def main():
 
         throughput_key = (
             meta['workload'], meta['workers'], meta['storage_type'], meta['partitions'],
-            meta['storage_engine'], meta['paths'], meta['interval'], meta['thinking_time'],
+            meta['storage_engine'], meta['paths'], meta['interval'], meta['thinking_time'], meta['sync_mode'],
         )
         throughput_ops_per_sec = throughput_lookup.get(throughput_key)
 
-        output_key = f"{meta['workload']}__{meta['storage_engine']}"
+        output_key = f"{meta['workload']}__{meta['storage_engine']}__{meta['sync_mode']}"
         grouped[output_key].append({
             'workload': meta['workload'],
             'workers': meta['workers'],
@@ -146,6 +158,7 @@ def main():
             'paths': meta['paths'],
             'interval': meta['interval'],
             'thinking_time': meta['thinking_time'],
+            'sync_mode': meta['sync_mode'],
             'latency_median': latency_median,
             'latency_95': latency_95,
             'throughput_ops_per_sec': throughput_ops_per_sec if throughput_ops_per_sec is not None else '',
@@ -159,6 +172,7 @@ def main():
                 fieldnames=[
                     'workload', 'workers', 'storage_type', 'partitions',
                     'storage_engine', 'paths', 'interval', 'thinking_time',
+                    'sync_mode',
                     'latency_median', 'latency_95', 'throughput_ops_per_sec',
                 ],
             )

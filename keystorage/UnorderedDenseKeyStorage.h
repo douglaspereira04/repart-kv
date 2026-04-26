@@ -29,9 +29,11 @@ private:
 
 public:
     /**
-     * @brief Default constructor
+     * @brief Constructor
+     * @param path Base directory for on-disk backends; ignored for in-memory
+     *        \c unordered_dense map.
      */
-    UnorderedDenseKeyStorage() = default;
+    explicit UnorderedDenseKeyStorage(const std::string &path) { (void)path; }
 
     /**
      * @brief Destructor

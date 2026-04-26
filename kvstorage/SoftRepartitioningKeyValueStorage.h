@@ -107,6 +107,8 @@ public:
         std::optional<std::chrono::milliseconds> repartition_interval =
             std::nullopt,
         const std::vector<std::string> &paths = {"/tmp"}) :
+        partition_map_(PartitionMapType<size_t>(
+            paths.empty() ? std::string("/tmp") : paths[0])),
         enable_tracking_(false), is_repartitioning_(false),
         partition_count_(partition_count),
         storage_(StorageEngineType(0, paths.empty() ? "/tmp" : paths[0])),

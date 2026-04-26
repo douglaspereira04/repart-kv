@@ -3,8 +3,10 @@
 #include "../TkrzwHashKeyStorage.h"
 #include "../TkrzwTreeKeyStorage.h"
 #include "../LmdbKeyStorage.h"
+#include "../LevelDBKeyStorage.h"
 #include "../UnorderedDenseKeyStorage.h"
 #include "../../utils/test_assertions.h"
+#include "../../utils/test_resources.h"
 #include <cstddef>
 #include <cstdint>
 #include <concepts>
@@ -47,6 +49,12 @@ struct IndexType {
 static_assert(std::is_trivially_copyable_v<IndexType>);
 static_assert(std::is_default_constructible_v<IndexType>);
 
+namespace {
+[[nodiscard]] const std::string &key_storage_test_root() {
+    return repart_kv_test::test_resources_dir();
+}
+} // namespace
+
 // Test result tracking
 int tests_passed = 0;
 int tests_failed = 0;
@@ -72,7 +80,7 @@ scan_storage(StorageType &storage, const std::string &start_key, size_t limit) {
 // Generic test functions that work with any KeyStorage implementation
 template <typename StorageType, typename ValueType> void test_basic_put_get() {
     TEST("basic_put_get")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     // Put some values
     storage.put("key1", static_cast<ValueType>(100));
@@ -95,7 +103,7 @@ template <typename StorageType, typename ValueType> void test_basic_put_get() {
 template <typename StorageType, typename ValueType>
 void test_get_nonexistent_key() {
     TEST("get_nonexistent_key")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     ValueType value{};
     ASSERT_FALSE(storage.get("nonexistent", value));
@@ -105,7 +113,7 @@ void test_get_nonexistent_key() {
 template <typename StorageType, typename ValueType>
 void test_overwrite_value() {
     TEST("overwrite_value")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("key", static_cast<ValueType>(100));
     ValueType value{};
@@ -121,7 +129,7 @@ void test_overwrite_value() {
 template <typename StorageType, typename ValueType>
 void test_lower_bound_basic() {
     TEST("lower_bound_basic")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("user:1001", static_cast<ValueType>(100));
     storage.put("user:1002", static_cast<ValueType>(200));
@@ -139,7 +147,7 @@ void test_lower_bound_basic() {
 template <typename StorageType, typename ValueType>
 void test_lower_bound_exact_match() {
     TEST("lower_bound_exact_match")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("exact", static_cast<ValueType>(100));
     storage.put("exactly", static_cast<ValueType>(200));
@@ -155,7 +163,7 @@ void test_lower_bound_exact_match() {
 template <typename StorageType, typename ValueType>
 void test_lower_bound_no_match() {
     TEST("lower_bound_no_match")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("apple", static_cast<ValueType>(10));
     storage.put("banana", static_cast<ValueType>(20));
@@ -169,7 +177,7 @@ void test_lower_bound_no_match() {
 template <typename StorageType, typename ValueType>
 void test_lower_bound_empty_prefix() {
     TEST("lower_bound_empty_prefix")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("a", static_cast<ValueType>(1));
     storage.put("b", static_cast<ValueType>(2));
@@ -185,7 +193,7 @@ void test_lower_bound_empty_prefix() {
 template <typename StorageType, typename ValueType>
 void test_iterator_incrementation() {
     TEST("iterator_incrementation")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("a", static_cast<ValueType>(1));
     storage.put("b", static_cast<ValueType>(2));
@@ -213,7 +221,7 @@ void test_iterator_incrementation() {
 
 template <typename StorageType, typename ValueType> void test_scan_basic() {
     TEST("scan_basic")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("user:1001", static_cast<ValueType>(100));
     storage.put("user:1002", static_cast<ValueType>(200));
@@ -234,7 +242,7 @@ template <typename StorageType, typename ValueType> void test_scan_basic() {
 template <typename StorageType, typename ValueType>
 void test_scan_with_limit() {
     TEST("scan_with_limit")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("item:001", static_cast<ValueType>(1));
     storage.put("item:002", static_cast<ValueType>(2));
@@ -253,7 +261,7 @@ void test_scan_with_limit() {
 template <typename StorageType, typename ValueType>
 void test_scan_no_matches() {
     TEST("scan_no_matches")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("apple", static_cast<ValueType>(10));
     storage.put("banana", static_cast<ValueType>(20));
@@ -266,7 +274,7 @@ void test_scan_no_matches() {
 template <typename StorageType, typename ValueType>
 void test_scan_empty_prefix() {
     TEST("scan_empty_prefix")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("a", static_cast<ValueType>(1));
     storage.put("b", static_cast<ValueType>(2));
@@ -280,7 +288,7 @@ void test_scan_empty_prefix() {
 template <typename StorageType, typename ValueType>
 void test_scan_sorted_order() {
     TEST("scan_sorted_order")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     // Insert in random order
     storage.put("z", static_cast<ValueType>(26));
@@ -301,7 +309,7 @@ void test_scan_sorted_order() {
 template <typename StorageType, typename ValueType>
 void test_scan_partial_prefix() {
     TEST("scan_partial_prefix")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("user:1001", static_cast<ValueType>(100));
     storage.put("user:1002", static_cast<ValueType>(200));
@@ -318,7 +326,7 @@ void test_scan_partial_prefix() {
 
 template <typename StorageType, typename ValueType> void test_large_dataset() {
     TEST("large_dataset")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     // Put 1000 entries
     for (int i = 0; i < 1000; ++i) {
@@ -346,7 +354,7 @@ template <typename StorageType, typename ValueType> void test_large_dataset() {
 template <typename StorageType, typename ValueType>
 void test_special_characters() {
     TEST("special_characters")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("key:with:colons", static_cast<ValueType>(1));
     storage.put("key/with/slashes", static_cast<ValueType>(2));
@@ -371,7 +379,7 @@ void test_special_characters() {
 template <typename StorageType, typename ValueType>
 void test_scan_method_basic() {
     TEST("scan_method_basic")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("user:1001", static_cast<ValueType>(100));
     storage.put("user:1002", static_cast<ValueType>(200));
@@ -394,7 +402,7 @@ void test_scan_method_basic() {
 template <typename StorageType, typename ValueType>
 void test_scan_method_with_limit() {
     TEST("scan_method_with_limit")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("item:001", static_cast<ValueType>(1));
     storage.put("item:002", static_cast<ValueType>(2));
@@ -418,7 +426,7 @@ void test_scan_method_with_limit() {
 template <typename StorageType, typename ValueType>
 void test_scan_method_zero_limit() {
     TEST("scan_method_zero_limit")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("a", static_cast<ValueType>(1));
     storage.put("b", static_cast<ValueType>(2));
@@ -433,7 +441,7 @@ void test_scan_method_zero_limit() {
 template <typename StorageType, typename ValueType>
 void test_scan_method_no_matches() {
     TEST("scan_method_no_matches")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("apple", static_cast<ValueType>(10));
     storage.put("banana", static_cast<ValueType>(20));
@@ -448,7 +456,7 @@ void test_scan_method_no_matches() {
 template <typename StorageType, typename ValueType>
 void test_scan_method_empty_storage() {
     TEST("scan_method_empty_storage")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     std::vector<std::pair<std::string, ValueType>> results;
     storage.scan("any", 10, results);
@@ -460,7 +468,7 @@ void test_scan_method_empty_storage() {
 template <typename StorageType, typename ValueType>
 void test_scan_method_clears_results() {
     TEST("scan_method_clears_results")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("x", static_cast<ValueType>(1));
 
@@ -478,7 +486,7 @@ void test_scan_method_clears_results() {
 template <typename StorageType, typename ValueType>
 void test_scan_method_partial_prefix() {
     TEST("scan_method_partial_prefix")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("user:1001", static_cast<ValueType>(100));
     storage.put("user:1002", static_cast<ValueType>(200));
@@ -498,7 +506,7 @@ void test_scan_method_partial_prefix() {
 template <typename StorageType, typename ValueType>
 void test_scan_after_updates() {
     TEST("scan_after_updates")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     storage.put("prefix:a", static_cast<ValueType>(1));
     storage.put("prefix:b", static_cast<ValueType>(2));
@@ -533,7 +541,7 @@ void test_scan_after_updates() {
 template <typename StorageType, typename ValueType>
 void test_numeric_value_ranges() {
     TEST("numeric_value_ranges")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     // Test with various numeric values
     storage.put("min", static_cast<ValueType>(0));
@@ -558,7 +566,7 @@ void test_numeric_value_ranges() {
 
 template <typename StorageType, typename ValueType> void test_get_or_insert() {
     TEST("get_or_insert")
-    StorageType storage;
+    StorageType storage(key_storage_test_root());
 
     ValueType found_value;
     bool existed;
@@ -663,6 +671,8 @@ int main() {
     run_storage_test_suite<TkrzwTreeKeyStorage<int>, int>("TkrzwTreeKeyStorage",
                                                           "int");
     run_storage_test_suite<LmdbKeyStorage<int>, int>("LmdbKeyStorage", "int");
+    run_storage_test_suite<LevelDBKeyStorage<int>, int>("LevelDBKeyStorage",
+                                                        "int");
     run_storage_test_suite<UnorderedDenseKeyStorage<int>, int>(
         "UnorderedDenseKeyStorage", "int");
 
@@ -677,6 +687,8 @@ int main() {
         "TkrzwTreeKeyStorage", "long");
     run_storage_test_suite<LmdbKeyStorage<long>, long>("LmdbKeyStorage",
                                                        "long");
+    run_storage_test_suite<LevelDBKeyStorage<long>, long>("LevelDBKeyStorage",
+                                                          "long");
     run_storage_test_suite<UnorderedDenseKeyStorage<long>, long>(
         "UnorderedDenseKeyStorage", "long");
 
@@ -692,6 +704,8 @@ int main() {
         "TkrzwTreeKeyStorage", "uint64_t");
     run_storage_test_suite<LmdbKeyStorage<uint64_t>, uint64_t>("LmdbKeyStorage",
                                                                "uint64_t");
+    run_storage_test_suite<LevelDBKeyStorage<uint64_t>, uint64_t>(
+        "LevelDBKeyStorage", "uint64_t");
     run_storage_test_suite<UnorderedDenseKeyStorage<uint64_t>, uint64_t>(
         "UnorderedDenseKeyStorage", "uint64_t");
 
@@ -707,6 +721,8 @@ int main() {
         "TkrzwTreeKeyStorage", "IndexType");
     run_storage_test_suite<LmdbKeyStorage<IndexType>, IndexType>(
         "LmdbKeyStorage", "IndexType");
+    run_storage_test_suite<LevelDBKeyStorage<IndexType>, IndexType>(
+        "LevelDBKeyStorage", "IndexType");
     run_storage_test_suite<UnorderedDenseKeyStorage<IndexType>, IndexType>(
         "UnorderedDenseKeyStorage", "IndexType");
 

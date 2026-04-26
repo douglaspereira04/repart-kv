@@ -47,16 +47,20 @@ for (csv_file in csv_files) {
   if (!"thinking_time" %in% names(data)) {
     data$thinking_time <- 0
   }
+  if (!"sync_mode" %in% names(data)) {
+    data$sync_mode <- "sync_off"
+  }
 
   workload <- unique(data$workload)
   storage_engine <- unique(data$storage_engine)
+  sync_mode <- unique(data$sync_mode)
   thinking_times <- sort(unique(data$thinking_time))
 
   for (tt in thinking_times) {
     subset_data <- data %>% filter(thinking_time == tt)
     if (nrow(subset_data) == 0) next
 
-    cat(paste("Generating makespan chart for", workload, "-", storage_engine, "(Thinking time:", tt, "ns) ...\n"))
+    cat(paste("Generating makespan chart for", workload, "-", storage_engine, "(Thinking time:", tt, "ns, Sync:", sync_mode, ") ...\n"))
 
     # Create storage type labels (p=partitions, d=paths, i=interval) - exclude thinking_time since it's fixed per chart
     subset_data$storage_type_label <- paste0(
@@ -76,7 +80,7 @@ for (csv_file in csv_files) {
         x = "Number of Workers",
         y = "Makespan (seconds)",
         title = paste("Execution Time:", workload, "-", storage_engine),
-        subtitle = paste("Thinking time:", tt, "ns"),
+        subtitle = paste("Thinking time:", tt, "ns | Sync:", sync_mode),
         fill = "Storage Type"
       ) +
       theme_minimal() +
@@ -101,7 +105,7 @@ for (csv_file in csv_files) {
     # Save chart: one file per workload, storage_engine, thinking_time
     safe_workload <- str_replace_all(workload, "[^\\w\\-_]", "_")
     safe_engine <- str_replace_all(storage_engine, "[^\\w\\-_]", "_")
-    output_file <- file.path(output_path, paste(safe_workload, safe_engine, tt, "makespan.png", sep = "."))
+    output_file <- file.path(output_path, paste(safe_workload, safe_engine, tt, sync_mode, "makespan.png", sep = "."))
 
     ggsave(output_file, plot = p, width = 12, height = 6, dpi = 300, bg = "white")
 

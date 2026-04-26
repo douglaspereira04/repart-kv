@@ -1,6 +1,8 @@
 #!/bin/bash
 
 mkdir -p charts/throughput_time
+mkdir -p charts/memory_time
+mkdir -p charts/disk_time
 mkdir -p charts/throughput
 mkdir -p charts/makespan
 mkdir -p charts/latency
@@ -10,6 +12,10 @@ mkdir -p charts/throughput_latency_by_thinking_time
 
 # Generate throughput-time charts
 Rscript generate_throughput_time_charts.R aggregated_throughput_time charts/throughput_time
+
+# Generate memory- and disk-usage-over-time charts (same aggregated CSVs as throughput_time)
+Rscript generate_memory_time_charts.R aggregated_throughput_time charts/memory_time
+Rscript generate_disk_time_charts.R aggregated_throughput_time charts/disk_time
 
 # Generate throughput charts
 Rscript generate_charts.R aggregated_results/throughput charts/throughput

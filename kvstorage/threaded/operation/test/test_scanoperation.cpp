@@ -1,6 +1,7 @@
 #include "../ScanOperation.h"
 #include "../../../../storage/MapStorageEngine.h"
 #include "../../../../utils/test_assertions.h"
+#include "../../../../utils/test_resources.h"
 #include <iostream>
 #include <string>
 #include <vector>
@@ -29,7 +30,7 @@ void test_scan_operation_constructor() {
 void test_scan_operation_single_storage() {
     TEST("scan_operation_barrier")
     // Create storage engine and populate with key-value pairs
-    MapStorageEngine<> storage(0);
+    MapStorageEngine<> storage(0, repart_kv_test::test_resources_dir());
     storage.write("key1", "value1");
     storage.write("key2", "value2");
     storage.write("key3", "value3");

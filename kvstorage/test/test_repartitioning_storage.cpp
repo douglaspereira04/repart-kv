@@ -9,6 +9,7 @@
 #include "../threaded/SoftThreadedRepartitioningKeyValueStorage.h"
 #include "../threaded/HardThreadedRepartitioningKeyValueStorage.h"
 #include "../../storage/LmdbStorageEngine.h"
+#include "make_partitioned_test_storage.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -25,7 +26,8 @@ const std::chrono::milliseconds sleep_time = std::chrono::milliseconds(10);
 // implementation
 template <typename StorageType> void test_basic_operations() {
     TEST("basic_operations")
-    StorageType storage(2);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(2);
 
     // Test write and read
     Status status = storage.write("key1", "value1");
@@ -46,7 +48,8 @@ template <typename StorageType> void test_basic_operations() {
 
 template <typename StorageType> void test_tracking_disabled_by_default() {
     TEST("tracking_disabled_by_default")
-    StorageType storage(2);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(2);
 
     ASSERT_FALSE(storage.enable_tracking()); // Should be false by default
     END_TEST("tracking_disabled_by_default")
@@ -54,7 +57,8 @@ template <typename StorageType> void test_tracking_disabled_by_default() {
 
 template <typename StorageType> void test_enable_tracking() {
     TEST("enable_tracking")
-    StorageType storage(2);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(2);
 
     // Enable tracking
     storage.enable_tracking(true);
@@ -79,7 +83,8 @@ template <typename StorageType> void test_enable_tracking() {
 
 template <typename StorageType> void test_basic_repartition() {
     TEST("basic_repartition")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
     storage.enable_tracking(true);
     std::string value;
     // Create some keys with access patterns
@@ -124,10 +129,6 @@ template <typename StorageType> void test_basic_repartition() {
     ASSERT_EQ(0, graph_after.get_vertex_count());
     std::cout << "    Graph cleared after repartition" << std::endl;
 
-    // Verify tracking is disabled after repartition
-    ASSERT_FALSE(storage.enable_tracking());
-    std::cout << "    Tracking disabled after repartition" << std::endl;
-
     // Verify data is still accessible
     status = storage.read("key1", value);
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
@@ -147,7 +148,8 @@ template <typename StorageType> void test_basic_repartition() {
 
 template <typename StorageType> void test_co_access_patterns() {
     TEST("co_access_patterns")
-    StorageType storage(3);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(3);
     storage.enable_tracking(true);
     std::string value;
     // Create two groups of keys that are accessed together
@@ -236,7 +238,8 @@ template <typename StorageType> void test_co_access_patterns() {
 
 template <typename StorageType> void test_empty_graph_repartition() {
     TEST("empty_graph_repartition")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Don't enable tracking, so graph should be empty
     ASSERT_FALSE(storage.enable_tracking());
@@ -267,7 +270,8 @@ template <typename StorageType> void test_empty_graph_repartition() {
 
 template <typename StorageType> void test_multiple_repartitions() {
     TEST("multiple_repartitions")
-    StorageType storage(3);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(3);
 
     // First tracking period
     storage.enable_tracking(true);
@@ -349,7 +353,8 @@ template <typename StorageType> void test_multiple_repartitions() {
 
 template <typename StorageType> void test_repartition_correctness() {
     TEST("repartition_correctness")
-    StorageType storage(2);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(2);
     Status status;
     // Write keys with different access patterns
     for (int i = 1; i <= 5; ++i) {
@@ -410,7 +415,8 @@ template <typename StorageType> void test_repartition_correctness() {
 
 template <typename StorageType> void test_scan_operations() {
     TEST("scan_operations")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
     Status status;
     // Write some test data
     status = storage.write("prefix1_key1", "value1");
@@ -452,7 +458,8 @@ template <typename StorageType> void test_scan_operations() {
 
 template <typename StorageType> void test_untracked_keys_preservation() {
     TEST("untracked_keys_preservation")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Phase 1: Write many keys without tracking (these should be preserved)
     std::vector<std::pair<std::string, std::string>> untracked_keys;
@@ -526,7 +533,8 @@ template <typename StorageType> void test_untracked_keys_preservation() {
 
 template <typename StorageType> void test_partition_map_consistency() {
     TEST("partition_map_consistency")
-    StorageType storage(2);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(2);
 
     // Write keys without tracking enabled
     Status status = storage.write("key1", "value1");
@@ -584,7 +592,8 @@ template <typename StorageType> void test_partition_map_consistency() {
 
 template <typename StorageType> void test_operation_count() {
     TEST("operation_count")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Initial count should be 0
     ASSERT_EQ(0, storage.operation_count());

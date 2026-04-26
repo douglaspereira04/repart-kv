@@ -11,9 +11,12 @@
 # 5. KV Storage type (hard, soft, threaded, hard_threaded, engine)
 # 6. Storage engine
 # 7. Repartitioning interval
-# 8. Paths
+# 8. Thinking time (ns)
+# 9. Storage engine sync (false/true/0/1, forwarded to repart-kv-runner).
+#    Result CSV basenames use sync_off/sync_on to match repart-kv-runner output.
+# 10+. Paths
 # Example:
-# run_and_move_metrics workload.txt 1 tkrzw_tree 1 1000 /tmp/path1
+# run_and_move_metrics workload.txt 1 tkrzw_tree 1 1000 0 false /tmp/path1
 function run_and_move_metrics {
     local TEST_NUMBER=$1
     local WORKLOAD_FILE=$2
@@ -23,7 +26,8 @@ function run_and_move_metrics {
     local STORAGE_ENGINE=$6
     local REPARTITIONING_INTERVAL=$7
     local THINKING_TIME=$8
-    shift 8
+    local SYNC=$9
+    shift 9
     # set PATHS as the subsequent arguments
     local PATHS=("$@")
 
@@ -33,6 +37,15 @@ function run_and_move_metrics {
     local NUMBER_OF_PATHS=${#PATHS[@]}
     
     local COMMA_SEPARATED_PATHS=$(IFS=,; echo "${PATHS[*]}")
+
+    # repart_kv names metrics like ...__sync_on.csv / ...__sync_off.csv (see repart_kv.cpp)
+    local SYNC_LOWER
+    SYNC_LOWER=$(echo "$SYNC" | tr '[:upper:]' '[:lower:]')
+    local SYNC_TAG
+    case "$SYNC_LOWER" in
+        true|1|on|yes) SYNC_TAG="sync_on" ;;
+        *) SYNC_TAG="sync_off" ;;
+    esac
 
     # create repart_kv_storage directory in each path
     # stop if directory already exists
@@ -44,17 +57,17 @@ function run_and_move_metrics {
         mkdir -p "${p}/repart_kv_storage" || true
     done
 
-    local EXECUTE="./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL"
+    local EXECUTE="./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL 60 $SYNC"
     echo $EXECUTE
 
 
-    local BASENAME=${WORKLOAD}__${W}__${KV_STORAGE_TYPE}__${PARTITIONS}__${STORAGE_ENGINE}__${NUMBER_OF_PATHS}__${REPARTITIONING_INTERVAL}__${THINKING_TIME}
+    local BASENAME=${WORKLOAD}__${W}__${KV_STORAGE_TYPE}__${PARTITIONS}__${STORAGE_ENGINE}__${NUMBER_OF_PATHS}__${REPARTITIONING_INTERVAL}__${THINKING_TIME}__${SYNC_TAG}
     
     # Create results folder if it doesn't exist
     mkdir -p results
 
     #try run the experiment
-    ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL 30 > "results/${BASENAME}(${TEST_NUMBER}).log"
+    ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL 60 $SYNC > "results/${BASENAME}(${TEST_NUMBER}).log"
     
     if [ $? -ne 0 ]; then
         echo "Error: experiment failed"
@@ -64,6 +77,7 @@ function run_and_move_metrics {
     #deletes directories repart_kv_storage in each path
     for p in "${PATHS[@]}"; do
         rm -rf "$p/repart_kv_storage"
+        rm -rf "$p/repart_kv_keystorage"
     done
     mv "${BASENAME}.csv" "results/${BASENAME}(${TEST_NUMBER}).csv"
     mv "${BASENAME}__latency.csv" "results/${BASENAME}__latency(${TEST_NUMBER}).csv"
@@ -80,9 +94,11 @@ function run_and_move_metrics {
 # 3. Storage engine
 # 4. Comma separated numbers of test workers
 # 5. Comma separated partitions
-# 6 to n. Paths
+# 6. Thinking time (ns)
+# 7. Storage engine sync (false/true)
+# 8 to n. Paths
 # Example:
-# run_hard_experiments 10 workload.txt 1000 tkrzw_tree 1,2,4 1,2,4 /tmp/path1 /tmp/path2
+# run_hard_experiments 10 workload.txt tkrzw_tree 1,2,4 1,2,4 0 false /tmp/path1
 function run_hard_experiments {
     local TEST_NUMBER=$1
     local WORKLOAD_FILE=$2
@@ -90,6 +106,7 @@ function run_hard_experiments {
     local COMMA_SEPARATED_TEST_WORKERS=$4
     local COMMA_SEPARATED_PARTITIONS=$5
     local THINKING_TIME=$6
+    local SYNC=$7
 
     # Convert comma separated partitions to array
     local PARTITIONS=($(echo $COMMA_SEPARATED_PARTITIONS | tr ',' '\n'))
@@ -97,7 +114,7 @@ function run_hard_experiments {
     # Convert comma separated test workers to array
     local TEST_WORKERS=($(echo $COMMA_SEPARATED_TEST_WORKERS | tr ',' '\n'))
 
-    shift 6
+    shift 7
 
     # set PATHS as the subsequent arguments
     local PATHS=("$@")
@@ -109,59 +126,51 @@ function run_hard_experiments {
         #test repart-kv varying number of test workers, ...
 
         # test engine
-        run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE 1 $W engine $STORAGE_ENGINE 0 $THINKING_TIME ${PATHS[0]}
+        run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE 1 $W engine $STORAGE_ENGINE 0 $THINKING_TIME $SYNC ${PATHS[0]}
 
         for P in ${PARTITIONS[@]}; do
             # test lock stripping
-            run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE 0 $THINKING_TIME ${PATHS[@]}
+            run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE 0 $THINKING_TIME $SYNC ${PATHS[@]}
 
             # test hard repartitioning
             # ... repartition interval, ...
             for INTERVAL in ${REPARTITIONING_INTERVALS[@]}; do
                 # ... number of partitions, ...
-                run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE $INTERVAL $THINKING_TIME ${PATHS[@]}
+                run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE $INTERVAL $THINKING_TIME $SYNC ${PATHS[@]}
             done 
         done
     done
 
 }
 
-TMP=("/mnt/ollama")
+TMP=("/media/douglas/340ebcc9-1b07-4111-a768-fc8ac9cad904")
 
 #deletes directories repart_kv_storage in each path
 for p in "${TMP[@]}"; do
     rm -rf "$p/repart_kv_storage"
 done
 
-REPETITIONS=3
+REPETITIONS=1
 
-STORAGE_ENGINES=(lmdb tkrzw_tree leveldb)
+STORAGE_ENGINES=(leveldb)
 WORKLOADS=(ycsb_a.toml)
-TEST_WORKERS="1,2,4,6,8,10,12,14,16"
+TEST_WORKERS="4"
 THINKING_TIMES=(50000)
 PARTITIONS="16"
 
+#WORKLOADS=(ycsb_e.toml)
+#THINKING_TIMES=(5000)
 
-for TEST_NUMBER in $(seq 1 $REPETITIONS); do
-    for STORAGE_ENGINE in ${STORAGE_ENGINES[@]}; do
-        for WORKLOAD in ${WORKLOADS[@]}; do
-            for THINKING_TIME in ${THINKING_TIMES[@]}; do
-                echo "run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME ${TMP[@]}"
-                run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME ${TMP[@]}
-            done
-        done
-    done
-done
+SYNCON=(false true)
 
-WORKLOADS=(ycsb_d.toml ycsb_e.toml)
-THINKING_TIMES=(5000)
-
-for TEST_NUMBER in $(seq 1 $REPETITIONS); do
-    for STORAGE_ENGINE in ${STORAGE_ENGINES[@]}; do
-        for WORKLOAD in ${WORKLOADS[@]}; do
-            for THINKING_TIME in ${THINKING_TIMES[@]}; do
-                echo "run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME ${TMP[@]}"
-                run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME ${TMP[@]}
+for SYNC in "${SYNCON[@]}"; do
+    for TEST_NUMBER in $(seq 1 $REPETITIONS); do
+        for STORAGE_ENGINE in ${STORAGE_ENGINES[@]}; do
+            for WORKLOAD in ${WORKLOADS[@]}; do
+                for THINKING_TIME in ${THINKING_TIMES[@]}; do
+                    echo "run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $SYNC ${TMP[@]}"
+                    run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $SYNC ${TMP[@]}
+                done
             done
         done
     done

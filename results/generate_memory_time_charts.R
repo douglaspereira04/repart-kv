@@ -1,10 +1,11 @@
 #!/usr/bin/env Rscript
 #
-# Generate throughput-over-time charts with range bands from aggregated CSV files.
+# Generate memory-over-time charts with range bands from aggregated CSV files.
+# Expects memory_kb_mean / memory_kb_min / memory_kb_max (KiB) from aggregate_throughput_time.py.
 # Data points are sampled every 100ms (elapsed_s has 0.01s resolution).
 #
 # Usage:
-#   Rscript generate_throughput_time_charts.R [input_path] [output_path]
+#   Rscript generate_memory_time_charts.R [input_path] [output_path]
 #
 
 suppressPackageStartupMessages({
@@ -17,7 +18,7 @@ suppressPackageStartupMessages({
 # Parse command line arguments
 args <- commandArgs(trailingOnly = TRUE)
 input_path <- if (length(args) >= 1) args[1] else "/home/douglas/Documentos/repart-kv/results/aggregated_throughput_time"
-output_path <- if (length(args) >= 2) args[2] else "/home/douglas/Documentos/repart-kv/results/charts/throughput_time"
+output_path <- if (length(args) >= 2) args[2] else "/home/douglas/Documentos/repart-kv/results/charts/memory_time"
 
 # Validate input path
 if (!dir.exists(input_path)) {
@@ -41,9 +42,13 @@ dir.create(output_path, showWarnings = FALSE, recursive = TRUE)
 for (csv_file in csv_files) {
   data <- read.csv(csv_file)
   if (nrow(data) == 0) next
-  
+
+  if (!all(c("memory_kb_mean", "memory_kb_min", "memory_kb_max") %in% names(data))) {
+    warning(paste("Skipping (no memory columns):", csv_file))
+    next
+  }
+
   # Extract info from filename
-  # (e.g., ycsb_a__lmdb__1__10__sync_off.csv or backward-compatible variants)
   filename <- basename(csv_file)
   parts <- str_split(str_remove(filename, "\\.csv$"), "__")[[1]]
   workload <- parts[1]
@@ -53,56 +58,51 @@ for (csv_file in csv_files) {
   sync_mode <- if (length(parts) >= 5) parts[5] else "sync_off"
 
   cat(paste("Generating chart for", workload, "-", storage_engine, "(Workers:", num_workers, ", Thinking:", thinking_time, "ns, Sync:", sync_mode, ") ...\n"))
-  
+
   if (!"thinking_time" %in% names(data)) {
     data$thinking_time <- 0
   }
 
+  # MiB for display (values are KiB from the benchmark)
+  data$mem_mib_mean <- data$memory_kb_mean / 1024
+  data$mem_mib_min <- data$memory_kb_min / 1024
+  data$mem_mib_max <- data$memory_kb_max / 1024
+
   # Create nice labels for the legend
   data$label <- paste0(
-    data$storage_type, 
-    " (p=", data$partitions, 
-    ", d=", data$paths, 
+    data$storage_type,
+    " (p=", data$partitions,
+    ", d=", data$paths,
     ", i=", data$interval / 1000, "s",
     ", t=", data$thinking_time, "ns)"
   )
-  
-  # Identify start and end points for repartitioning
-  # We consider an event "active" if its probability is > 0
-  # Since we have multiple lines (labels) in the same dataframe, we group by label
+
   data <- data %>%
     arrange(label, elapsed_s) %>%
     group_by(label) %>%
     mutate(
       repartitioning_active = repartitioning_prob > 0,
-      # Repartitioning transitions
       repartitioning_start = repartitioning_active & !lag(repartitioning_active, default = FALSE),
       repartitioning_end = !repartitioning_active & lag(repartitioning_active, default = FALSE)
     ) %>%
     ungroup()
 
-  # Create dataframes for the lines
   repartitioning_starts <- data %>% filter(repartitioning_start)
   repartitioning_ends <- data %>% filter(repartitioning_end)
 
-  # Create the plot
-  p <- ggplot(data, aes(x = elapsed_s, y = mean / 1000, color = label, fill = label)) +
-    # Min-Max band
-    geom_ribbon(aes(ymin = min / 1000, ymax = max / 1000), alpha = 0.2, color = NA) +
-    # Mean line
+  p <- ggplot(data, aes(x = elapsed_s, y = mem_mib_mean, color = label, fill = label)) +
+    geom_ribbon(aes(ymin = mem_mib_min, ymax = mem_mib_max), alpha = 0.2, color = NA) +
     geom_line(linewidth = 1, alpha = 0.6) +
-    # Repartitioning Start (Dot, same color as line, lighter)
-    geom_point(data = repartitioning_starts, 
-               aes(x = elapsed_s, y = mean / 1000, color = label),
+    geom_point(data = repartitioning_starts,
+               aes(x = elapsed_s, y = mem_mib_mean, color = label),
                alpha = 0.4, size = 3, shape = 16, inherit.aes = FALSE) +
-    # Repartitioning End (Vertical line, same color as line, solid)
-    geom_point(data = repartitioning_ends, 
-               aes(x = elapsed_s, y = mean / 1000, color = label),
+    geom_point(data = repartitioning_ends,
+               aes(x = elapsed_s, y = mem_mib_mean, color = label),
                alpha = 1.0, size = 3, shape = 16, inherit.aes = FALSE) +
     labs(
       x = "Elapsed Time (s)",
-      y = "Thousand Operations per Second",
-      title = paste("Throughput over Time:", workload, "-", storage_engine),
+      y = "Memory (MiB)",
+      title = paste("Memory over Time:", workload, "-", storage_engine),
       subtitle = paste("Workers:", num_workers, "| Thinking time:", thinking_time, "ns | Sync:", sync_mode),
       color = "Configuration",
       fill = "Configuration"
@@ -127,16 +127,15 @@ for (csv_file in csv_files) {
       expand = expansion(mult = c(0.02, 0))
     ) +
     scale_y_continuous(
-      expand = expansion(mult = c(0, 0.1)), 
+      expand = expansion(mult = c(0, 0.1)),
       limits = c(0, NA),
       breaks = pretty_breaks(n = 8)
     )
-  
-  # Save chart
-  output_file <- file.path(output_path, paste(workload, storage_engine, num_workers, thinking_time, sync_mode, "throughput_time.png", sep = "."))
-  
+
+  output_file <- file.path(output_path, paste(workload, storage_engine, num_workers, thinking_time, sync_mode, "memory_time.png", sep = "."))
+
   ggsave(output_file, plot = p, width = 12, height = 8, dpi = 300, bg = "white")
-  
+
   cat(paste("Generated chart:", output_file, "\n"))
 }
 

@@ -65,9 +65,13 @@ for (csv_file in csv_files) {
 
   # Ensure numeric
   data$throughput_ops_per_sec <- as.numeric(data$throughput_ops_per_sec)
+  if (!"sync_mode" %in% names(data)) {
+    data$sync_mode <- "sync_off"
+  }
 
   workload <- unique(data$workload)
   storage_engine <- unique(data$storage_engine)
+  sync_mode <- unique(data$sync_mode)
 
   # Create line labels: storage_type + partitions + paths + interval
   data$line_label <- paste0(
@@ -100,7 +104,7 @@ for (csv_file in csv_files) {
       y_label <- if (metric == "median") "Latency Median (µs)" else "Latency 95th Percentile (µs)"
       metric_suffix <- if (metric == "median") "latency_median" else "latency_p95"
 
-      cat(paste("Generating throughput vs", metric, "latency chart for", workload, "-", storage_engine, "(Workers:", num_workers, ") ...\n"))
+      cat(paste("Generating throughput vs", metric, "latency chart for", workload, "-", storage_engine, "(Workers:", num_workers, ", Sync:", sync_mode, ") ...\n"))
 
       p <- ggplot(subset_data, aes(x = throughput_ops_per_sec / 1000, y = .data[[y_col]],
                                    color = line_label,
@@ -113,7 +117,7 @@ for (csv_file in csv_files) {
           x = "Thousand Operations per Second",
           y = y_label,
           title = paste("Throughput vs Latency (", if (metric == "median") "Median" else "95th pctl", "):", workload, "-", storage_engine),
-          subtitle = paste("Workers:", num_workers, "| Points = thinking time settings"),
+          subtitle = paste("Workers:", num_workers, "| Points = thinking time settings | Sync:", sync_mode),
           color = "Configuration",
           linetype = "Configuration",
           shape = "Configuration"
@@ -143,7 +147,7 @@ for (csv_file in csv_files) {
           breaks = pretty_breaks(n = 10)
         )
 
-      output_file <- file.path(output_path, paste(safe_workload, safe_engine, num_workers, "throughput", metric_suffix, "png", sep = "."))
+      output_file <- file.path(output_path, paste(safe_workload, safe_engine, num_workers, sync_mode, "throughput", metric_suffix, "png", sep = "."))
       ggsave(output_file, plot = p, width = 12, height = 6, dpi = 300, bg = "white")
       cat(paste("Generated chart:", output_file, "\n"))
     }

@@ -31,6 +31,12 @@ if [ ! -d "build" ]; then
     exit 1
 fi
 
+# Tests write under ./test_resources (see utils/test_resources.h). Remove any
+# leftover tree from a previous run so this suite starts clean.
+echo -e "${BLUE}Removing test_resources (if present)...${NC}"
+rm -rf test_resources
+echo ""
+
 # Find all test executables in build directory
 TEST_EXECUTABLES=($(find build -name "test_*" -type f -executable | sort))
 
@@ -97,6 +103,11 @@ if [ $FAILED_TESTS -gt 0 ]; then
     done
     echo ""
 fi
+
+# Remove test artifact directory (same cwd used when invoking test binaries)
+echo -e "${BLUE}Removing test_resources...${NC}"
+rm -rf test_resources
+echo ""
 
 # Exit with appropriate code
 if [ $FAILED_TESTS -eq 0 ]; then

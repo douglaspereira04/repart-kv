@@ -51,9 +51,13 @@ for (csv_file in csv_files) {
   if (!"thinking_time" %in% names(data)) {
     data$thinking_time <- 0
   }
+  if (!"sync_mode" %in% names(data)) {
+    data$sync_mode <- "sync_off"
+  }
 
   workload <- unique(data$workload)
   storage_engine <- unique(data$storage_engine)
+  sync_mode <- unique(data$sync_mode)
 
   # Create storage type labels (p=partitions, d=paths, i=interval) - exclude thinking_time since it's the X-axis (in ns)
   data$storage_type_label <- paste0(
@@ -86,7 +90,7 @@ for (csv_file in csv_files) {
       y_label <- if (metric == "median") "Latency Median (µs)" else "Latency 95th Percentile (µs)"
       metric_title <- if (metric == "median") "Latency (Median)" else "Latency (95th Percentile)"
 
-      cat(paste("Generating", metric, "latency chart for", workload, "-", storage_engine, "(Workers:", num_workers, ") ...\n"))
+      cat(paste("Generating", metric, "latency chart for", workload, "-", storage_engine, "(Workers:", num_workers, ", Sync:", sync_mode, ") ...\n"))
 
       p <- ggplot(subset_data, aes(x = thinking_time_factor, y = .data[[y_col]],
                                   color = storage_type_label,
@@ -99,7 +103,7 @@ for (csv_file in csv_files) {
           x = "Thinking Time (ns)",
           y = y_label,
           title = paste(metric_title, ":", workload, "-", storage_engine),
-          subtitle = paste("Workers:", num_workers),
+          subtitle = paste("Workers:", num_workers, "| Sync:", sync_mode),
           color = "Storage Type",
           linetype = "Storage Type",
           shape = "Storage Type"
@@ -125,7 +129,7 @@ for (csv_file in csv_files) {
           breaks = pretty_breaks(n = 10)
         )
 
-      output_file <- file.path(output_path, paste(safe_workload, safe_engine, num_workers, paste0("latency_", metric), "png", sep = "."))
+      output_file <- file.path(output_path, paste(safe_workload, safe_engine, num_workers, sync_mode, paste0("latency_", metric), "png", sep = "."))
       ggsave(output_file, plot = p, width = 12, height = 6, dpi = 300, bg = "white")
       cat(paste("Generated chart:", output_file, "\n"))
     }

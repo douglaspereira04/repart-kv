@@ -32,6 +32,7 @@ template <KeyStorageValueType ValueType> class TkrzwTreeKeyStorage
 private:
     std::unique_ptr<tkrzw::TreeDBM> db_;
     bool is_open_;
+    std::string db_file_path_;
     static std::atomic_int db_counter_;
     static std::string id_;
 
@@ -46,24 +47,27 @@ public:
     }
 
     /**
-     * @brief Constructor - creates an in-memory database
+     * @brief Constructor
+     * @param base_path Directory under which \c repart_kv_keystorage files are
+     *        created for this database.
      */
-    TkrzwTreeKeyStorage() :
+    explicit TkrzwTreeKeyStorage(const std::string &base_path) :
         db_(std::make_unique<tkrzw::TreeDBM>()), is_open_(false) {
-        std::string temp_path = std::string("/tmp/repart_kv_keystorage/") +
-                                id_ + std::string("/tkrzw_tree_keystorage_") +
-                                std::to_string(db_counter_.fetch_add(
-                                    1, std::memory_order_relaxed)) +
-                                ".tkt";
-        std::filesystem::create_directories(
-            std::string("/tmp/repart_kv_keystorage/") + id_);
+        const std::filesystem::path root =
+            std::filesystem::path(base_path) / "repart_kv_keystorage" / id_;
+        std::filesystem::create_directories(root);
+        db_file_path_ = (root / ("tkrzw_tree_keystorage_" +
+                                 std::to_string(db_counter_.fetch_add(
+                                     1, std::memory_order_relaxed)) +
+                                 ".tkt"))
+                            .string();
 
         tkrzw::TreeDBM::TuningParameters tuning_params;
         tuning_params.max_page_size = 8192;
         tuning_params.max_branches = 256;
 
         tkrzw::Status status = db_->OpenAdvanced(
-            temp_path, true, tkrzw::File::OPEN_TRUNCATE, tuning_params);
+            db_file_path_, true, tkrzw::File::OPEN_TRUNCATE, tuning_params);
 
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;
@@ -77,6 +81,10 @@ public:
         if (is_open_) {
             db_->Close();
             is_open_ = false;
+        }
+        if (!db_file_path_.empty()) {
+            std::error_code ec;
+            std::filesystem::remove(db_file_path_, ec);
         }
     }
 

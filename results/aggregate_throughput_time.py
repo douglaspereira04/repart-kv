@@ -6,9 +6,12 @@ import sys
 from collections import defaultdict
 
 def parse_filename(filename):
-    # Format: workload__testworkers__storagetype__partitions__storageengine__paths__interval__thinking(REP).csv
+    # Format:
+    # workload__testworkers__storagetype__partitions__storageengine__paths__interval__thinking__[sync_mode](REP).csv
     # thinking is in nanoseconds (ns)
-    # Backward compat: 7 parts (no thinking) -> thinking_time=0
+    # Backward compat:
+    # - 7 parts (no thinking, no sync_mode) -> thinking_time=0, sync_mode=sync_off
+    # - 8 parts can be either thinking or sync_mode
     name = filename.rsplit('.', 1)[0]
     match = re.search(r'\((\d+)\)$', name)
     if not match:
@@ -18,10 +21,19 @@ def parse_filename(filename):
     name_no_rep = name[:match.start()]
     
     parts = name_no_rep.split('__')
-    if len(parts) not in (7, 8):
+    if len(parts) not in (7, 8, 9):
         return None
 
-    thinking_time = int(parts[7]) if len(parts) == 8 else 0
+    thinking_time = 0
+    sync_mode = "sync_off"
+    if len(parts) == 8:
+        if parts[7] in ("sync_on", "sync_off"):
+            sync_mode = parts[7]
+        else:
+            thinking_time = int(parts[7])
+    elif len(parts) == 9:
+        thinking_time = int(parts[7])
+        sync_mode = parts[8]
 
     return {
         'workload': parts[0],
@@ -32,9 +44,10 @@ def parse_filename(filename):
         'paths': int(parts[5]),
         'interval': int(parts[6]),
         'thinking_time': thinking_time,
+        'sync_mode': sync_mode,
         'rep': rep,
         'config_key': name_no_rep,
-        'chart_key': f"{parts[0]}__{parts[4]}__{parts[1]}__{thinking_time}"  # workload, engine, workers, thinking
+        'chart_key': f"{parts[0]}__{parts[4]}__{parts[1]}__{thinking_time}__{sync_mode}"  # workload, engine, workers, thinking, sync mode
     }
 
 def process_file(filepath):
@@ -48,15 +61,17 @@ def process_file(filepath):
             for row in reader:
                 time_ms = parse_number(row['elapsed_time_ms'])
                 count = parse_number(row['executed_count'])
-                
+                memory_kb = parse_number(row.get('memory_kb', '') or '0')
+                disk_kb = parse_number(row.get('disk_kb', '') or '0')
+
                 # C++ writes 'o' for active, 'x' for inactive
                 tracking = 1 if row.get('Tracking', '').strip().lower() == 'o' else 0
                 repartitioning = 1 if row.get('Repartitioning', '').strip().lower() == 'o' else 0
-                
+
                 if prev_time is not None:
                     delta_time_s = (time_ms - prev_time) / 1000.0
                     delta_count = count - prev_count
-                    
+
                     if delta_time_s > 0:
                         throughput = delta_count / delta_time_s
                         # Round time to 2 decimal places (100ms) for alignment
@@ -65,6 +80,8 @@ def process_file(filepath):
                         results.append({
                             'elapsed_s': elapsed_s,
                             'throughput': throughput,
+                            'memory_kb': memory_kb,
+                            'disk_kb': disk_kb,
                             'tracking': tracking,
                             'repartitioning': repartitioning
                         })
@@ -127,20 +144,36 @@ def main():
         for t in sorted(time_points.keys()):
             entries = time_points[t]
             tps = [e['throughput'] for e in entries]
-            
+            mems = [e['memory_kb'] for e in entries]
+            disks = [e['disk_kb'] for e in entries]
+
             mean_tp = sum(tps) / len(tps)
             min_tp = min(tps)
             max_tp = max(tps)
-            
+
+            mean_mem = sum(mems) / len(mems)
+            min_mem = min(mems)
+            max_mem = max(mems)
+
+            mean_disk = sum(disks) / len(disks)
+            min_disk = min(disks)
+            max_disk = max(disks)
+
             # Probability/Frequency of tracking and repartitioning at this time point
             tracking_freq = sum(e['tracking'] for e in entries) / len(entries)
             repartitioning_freq = sum(e['repartitioning'] for e in entries) / len(entries)
-            
+
             aggregated_rows.append({
                 'elapsed_s': t,
                 'mean': mean_tp,
                 'min': min_tp,
                 'max': max_tp,
+                'memory_kb_mean': mean_mem,
+                'memory_kb_min': min_mem,
+                'memory_kb_max': max_mem,
+                'disk_kb_mean': mean_disk,
+                'disk_kb_min': min_disk,
+                'disk_kb_max': max_disk,
                 'tracking_prob': tracking_freq,
                 'repartitioning_prob': repartitioning_freq,
                 'storage_type': params['storage_type'],
@@ -148,6 +181,7 @@ def main():
                 'paths': params['paths'],
                 'interval': params['interval'],
                 'thinking_time': params['thinking_time'],
+                'sync_mode': params['sync_mode'],
                 'line_label': f"{params['storage_type']}_p{params['partitions']}_w{params['paths']}_i{params['interval']}_t{params['thinking_time']}"
             })
         
@@ -158,9 +192,11 @@ def main():
         if not rows: continue
         
         fieldnames = [
-            'elapsed_s', 'mean', 'min', 'max', 
+            'elapsed_s', 'mean', 'min', 'max',
+            'memory_kb_mean', 'memory_kb_min', 'memory_kb_max',
+            'disk_kb_mean', 'disk_kb_min', 'disk_kb_max',
             'tracking_prob', 'repartitioning_prob',
-            'storage_type', 'partitions', 'paths', 'interval', 'thinking_time', 'line_label'
+            'storage_type', 'partitions', 'paths', 'interval', 'thinking_time', 'sync_mode', 'line_label'
         ]
         with open(output_file, 'w', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)

@@ -4,6 +4,7 @@
 #include "../../keystorage/MapKeyStorage.h"
 #include "../../storage/MapStorageEngine.h"
 #include "../../utils/test_assertions.h"
+#include "make_partitioned_test_storage.h"
 #include <iostream>
 
 // Test result tracking
@@ -15,7 +16,8 @@ const std::chrono::milliseconds sleep_time = std::chrono::milliseconds(10);
 template <typename StorageType>
 void test_tracking_disabled(const std::string &storage_name) {
     TEST("tracking_disabled_" + storage_name)
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Verify tracking is disabled by default
     ASSERT_FALSE(storage.enable_tracking());
@@ -46,7 +48,8 @@ void test_tracking_disabled(const std::string &storage_name) {
 template <typename StorageType>
 void test_tracking_enabled(const std::string &storage_name) {
     TEST("tracking_enabled_" + storage_name)
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Enable tracking
     storage.enable_tracking(true);
@@ -96,7 +99,8 @@ void test_tracking_enabled(const std::string &storage_name) {
 template <typename StorageType>
 void test_access_frequency_tracking(const std::string &storage_name) {
     TEST("access_frequency_tracking_" + storage_name)
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
     storage.enable_tracking(true);
 
     // Simulate different access patterns
@@ -148,7 +152,8 @@ void test_access_frequency_tracking(const std::string &storage_name) {
 template <typename StorageType>
 void test_toggle_tracking(const std::string &storage_name) {
     TEST("toggle_tracking_" + storage_name)
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Enable tracking and do some operations
     storage.enable_tracking(true);
@@ -191,7 +196,8 @@ void test_toggle_tracking(const std::string &storage_name) {
 template <typename StorageType>
 void test_scan_with_graph_tracking(const std::string &storage_name) {
     TEST("scan_with_graph_tracking_" + storage_name)
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
     storage.enable_tracking(true);
 
     // Write some keys with a common prefix
@@ -257,7 +263,8 @@ void test_scan_with_graph_tracking(const std::string &storage_name) {
 template <typename StorageType>
 void test_repeated_scans(const std::string &storage_name) {
     TEST("repeated_scans_" + storage_name)
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
     storage.enable_tracking(true);
 
     // Write keys
@@ -303,7 +310,8 @@ void test_repeated_scans(const std::string &storage_name) {
 template <typename StorageType>
 void test_co_access_patterns(const std::string &storage_name) {
     TEST("co_access_patterns_" + storage_name)
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
     storage.enable_tracking(true);
 
     // Write keys in different groups

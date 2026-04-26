@@ -1,5 +1,6 @@
 #include "../MapKeyStorage.h"
 #include "../../utils/test_assertions.h"
+#include "../../utils/test_resources.h"
 #include <iostream>
 #include <vector>
 
@@ -11,11 +12,12 @@ struct TwoInts {
 // This should compile - valid types
 void test_valid_types() {
     TEST("valid_types")
-    MapKeyStorage<int> intStorage;
-    MapKeyStorage<long> longStorage;
-    MapKeyStorage<unsigned int> uintStorage;
-    MapKeyStorage<int *> ptrStorage;
-    MapKeyStorage<TwoInts> structStorage;
+    MapKeyStorage<int> intStorage(repart_kv_test::test_resources_dir());
+    MapKeyStorage<long> longStorage(repart_kv_test::test_resources_dir());
+    MapKeyStorage<unsigned int> uintStorage(
+        repart_kv_test::test_resources_dir());
+    MapKeyStorage<int *> ptrStorage(repart_kv_test::test_resources_dir());
+    MapKeyStorage<TwoInts> structStorage(repart_kv_test::test_resources_dir());
     std::cout << "Valid types compile successfully!" << std::endl;
     END_TEST("valid_types")
 }

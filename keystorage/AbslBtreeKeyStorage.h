@@ -22,9 +22,11 @@ private:
 
 public:
     /**
-     * @brief Default constructor
+     * @brief Constructor
+     * @param path Base directory for on-disk backends; ignored for in-memory
+     *        \c absl::btree_map.
      */
-    AbslBtreeKeyStorage() = default;
+    explicit AbslBtreeKeyStorage(const std::string &path) { (void)path; }
 
     /**
      * @brief Destructor

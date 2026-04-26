@@ -6,6 +6,7 @@
 #include "../LevelDBStorageEngine.h"
 #include "../TbbStorageEngine.h"
 #include "../../utils/test_assertions.h"
+#include "../../utils/test_resources.h"
 #include <iostream>
 #include <thread>
 #include <vector>
@@ -20,7 +21,7 @@ int tests_failed = 0;
 // Generic test functions that work with any StorageEngine
 template <typename EngineType> void test_basic_write_read() {
     TEST("basic_write_read")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     // Write some values
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("key1", "value1"));
@@ -40,7 +41,7 @@ template <typename EngineType> void test_basic_write_read() {
 
 template <typename EngineType> void test_read_nonexistent_key() {
     TEST("read_nonexistent_key")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
     std::string read_value;
 
     // Reading a non-existent key should return empty string
@@ -50,7 +51,7 @@ template <typename EngineType> void test_read_nonexistent_key() {
 
 template <typename EngineType> void test_remove_returns_removed_value() {
     TEST("remove_returns_removed_value")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("rk", "rv"));
 
     std::string removed;
@@ -62,7 +63,7 @@ template <typename EngineType> void test_remove_returns_removed_value() {
 
 template <typename EngineType> void test_overwrite_value() {
     TEST("overwrite_value")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     std::string read_value;
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("key", "original"));
@@ -77,7 +78,7 @@ template <typename EngineType> void test_overwrite_value() {
 
 template <typename EngineType> void test_scan_basic() {
     TEST("scan_basic")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("user:1001", "Alice"));
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("user:1002", "Bob"));
@@ -98,7 +99,7 @@ template <typename EngineType> void test_scan_basic() {
 
 template <typename EngineType> void test_scan_with_limit() {
     TEST("scan_with_limit")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("item:001", "A"));
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("item:002", "B"));
@@ -120,7 +121,7 @@ template <typename EngineType> void test_scan_with_limit() {
 
 template <typename EngineType> void test_scan_empty_prefix() {
     TEST("scan_empty_prefix")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     std::vector<std::pair<std::string, std::string>> results;
     ASSERT_STATUS_EQ(Status::NOT_FOUND, engine.scan("", 10, results));
@@ -143,7 +144,7 @@ template <typename EngineType> void test_scan_empty_prefix() {
 
 template <typename EngineType> void test_scan_no_matches() {
     TEST("scan_no_matches")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("apple", "fruit"));
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("banana", "fruit"));
@@ -156,7 +157,7 @@ template <typename EngineType> void test_scan_no_matches() {
 
 template <typename EngineType> void test_scan_exact_match() {
     TEST("scan_exact_match")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("exact", "value"));
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("exactly", "value2"));
@@ -172,7 +173,7 @@ template <typename EngineType> void test_scan_exact_match() {
 
 template <typename EngineType> void test_scan_sorted_order() {
     TEST("scan_sorted_order")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     // Insert in random order
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("z", "last"));
@@ -193,7 +194,7 @@ template <typename EngineType> void test_scan_sorted_order() {
 
 template <typename EngineType> void test_large_dataset() {
     TEST("large_dataset")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     // Write 1000 entries
     for (int i = 0; i < 1000; ++i) {
@@ -220,7 +221,7 @@ template <typename EngineType> void test_large_dataset() {
 
 template <typename EngineType> void test_special_characters() {
     TEST("special_characters")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     ASSERT_STATUS_EQ(Status::SUCCESS,
                      engine.write("key:with:colons", "value1"));
@@ -252,7 +253,7 @@ template <typename EngineType> void test_special_characters() {
 
 template <typename EngineType> void test_manual_locking() {
     TEST("manual_locking")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     // Test exclusive lock
     engine.lock();
@@ -271,7 +272,7 @@ template <typename EngineType> void test_manual_locking() {
 
 template <typename EngineType> void test_concurrent_writes() {
     TEST("concurrent_writes")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     const int num_threads = 4;
     const int writes_per_thread = 100;
@@ -317,7 +318,7 @@ template <typename EngineType> void test_concurrent_writes() {
 
 template <typename EngineType> void test_concurrent_reads_writes() {
     TEST("concurrent_reads_writes")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     // Pre-populate with data
     for (int i = 0; i < 50; ++i) {
@@ -367,7 +368,7 @@ template <typename EngineType> void test_concurrent_reads_writes() {
 
 template <typename EngineType> void test_scan_after_updates() {
     TEST("scan_after_updates")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("prefix:a", "1"));
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("prefix:b", "2"));
@@ -400,7 +401,7 @@ template <typename EngineType> void test_scan_after_updates() {
 
 template <typename EngineType> void test_iterator_find_existing_key() {
     TEST("iterator_find_existing_key")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("iter_key1", "iter_val1"));
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("iter_key2", "iter_val2"));
@@ -419,7 +420,7 @@ template <typename EngineType> void test_iterator_find_existing_key() {
 
 template <typename EngineType> void test_iterator_find_nonexistent_key() {
     TEST("iterator_find_nonexistent_key")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("existing", "value"));
 
@@ -431,7 +432,7 @@ template <typename EngineType> void test_iterator_find_nonexistent_key() {
 
 template <typename EngineType> void test_iterator_multiple_lookups() {
     TEST("iterator_multiple_lookups")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     for (int i = 0; i < 10; ++i) {
         std::string key = "multi:" + std::to_string(i);
@@ -453,7 +454,7 @@ template <typename EngineType> void test_iterator_multiple_lookups() {
 
 template <typename EngineType> void test_operation_count() {
     TEST("operation_count")
-    EngineType engine;
+    EngineType engine(0, repart_kv_test::test_resources_dir());
 
     // Initial count should be 0
     ASSERT_EQ(0, engine.operation_count());

@@ -56,25 +56,21 @@ private:
 
 public:
     /**
-     * @brief Constructor - creates an in-memory database
-     *
-     * Creates a temporary LMDB database in /tmp for in-memory-like behavior.
-     */
-    LmdbKeyStorage() : env_(nullptr), dbi_(MDB_dbi{}), is_open_(false) {
-
-        init();
-    }
-
-    /**
-     * @brief Constructor with file path - creates a persistent database
-     * @param file_path Path to the database directory
+     * @brief Constructor
+     * @param base_path Directory under which a unique \c repart_kv_keystorage
+     *        subdirectory is created for this LMDB environment.
      * @param map_size Maximum size of the memory map in bytes (default: 50GB)
      */
-    explicit LmdbKeyStorage(const std::string &file_path,
+    explicit LmdbKeyStorage(const std::string &base_path,
                             size_t map_size = 50ULL * 1024 * 1024 * 1024) :
-        env_(nullptr), dbi_(MDB_dbi{}), is_open_(false), db_path_(file_path) {
-
-        init_with_path(file_path, map_size);
+        env_(nullptr), dbi_(MDB_dbi{}), is_open_(false) {
+        db_path_ =
+            (std::filesystem::path(base_path) / "repart_kv_keystorage" / id_ /
+             std::to_string(
+                 db_counter_.fetch_add(1, std::memory_order_relaxed)))
+                .string();
+        std::filesystem::create_directories(db_path_);
+        init_with_path(db_path_, map_size);
     }
 
     /**
@@ -85,10 +81,9 @@ public:
             mdb_dbi_close(env_, dbi_);
             mdb_env_close(env_);
             is_open_ = false;
-
-            // Clean up temporary directory if it was created
-            if (db_path_.find("/tmp/repart_kv_keystorage/") == 0) {
-                std::filesystem::remove_all(db_path_);
+            if (!db_path_.empty()) {
+                std::error_code ec;
+                std::filesystem::remove_all(db_path_, ec);
             }
         }
     }
@@ -424,18 +419,6 @@ public:
     const std::string &get_path() const { return db_path_; }
 
 private:
-    /**
-     * @brief Initialize the database with a temporary path
-     */
-    void init() {
-        db_path_ =
-            std::string("/tmp/repart_kv_keystorage/") + id_ + std::string("/") +
-            std::to_string(db_counter_.fetch_add(1, std::memory_order_relaxed));
-        std::filesystem::create_directories(db_path_);
-
-        init_with_path(db_path_, 50ULL * 1024 * 1024 * 1024);
-    }
-
     /**
      * @brief Initialize the database with a specific path
      * @param path The database path

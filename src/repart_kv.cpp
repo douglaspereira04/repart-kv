@@ -43,11 +43,13 @@
 #include <cctype>
 #include <barrier>
 #include <random>
+#include <set>
 
 /**
  * Ordered key→partition map for repartitioning storages (template template
  * parameter). Point this alias at a different KeyStorage to swap backends in
- * one place (e.g. AbslBtreeKeyStorage, TkrzwTreeKeyStorage).
+ * one place (e.g. AbslBtreeKeyStorage, TkrzwTreeKeyStorage, LevelDBKeyStorage;
+ * include "keystorage/LevelDBKeyStorage.h" when using it).
  */
 template <typename ValueType> using OrderedKeyStorage =
     LmdbKeyStorage<ValueType>;
@@ -55,6 +57,10 @@ template <typename ValueType> using OrderedKeyStorage =
 /*
 template <typename ValueType> using OrderedKeyStorage =
     TkrzwTreeKeyStorage<ValueType>;
+*/
+/*
+template <typename ValueType> using OrderedKeyStorage =
+    LevelDBKeyStorage<ValueType>;
 */
 /*template <typename ValueType> using OrderedKeyStorage =
     AbslBtreeKeyStorage<ValueType>;
@@ -74,7 +80,7 @@ std::string WORKLOAD_NAME;
 std::chrono::milliseconds TRACKING_DURATION(
     100); // Duration to track key accesses before repartitioning
 std::chrono::milliseconds
-    REPARTITION_INTERVAL(100); // Interval between repartitioning cycles
+    REPARTITION_INTERVAL(5000); // Interval between repartitioning cycles
 std::chrono::nanoseconds THINKING_TIME(0); // Thinking time delay (ns)
 long THINKING_SEED = 0;                    // Thinking seed
 
@@ -286,21 +292,64 @@ size_t get_memory_usage_kb() {
 }
 
 /**
- * @brief Get current disk usage of the current directory in KB
- * @return Disk usage in KB
+ * @brief Sum sizes of all regular files under @a root (recursive). Missing
+ * directories contribute 0.
  */
-size_t get_disk_usage_kb() {
+static size_t
+directory_tree_file_size_bytes(const std::filesystem::path &root) {
     size_t total_size = 0;
+    if (!std::filesystem::is_directory(root)) {
+        return 0;
+    }
     try {
         for (const auto &entry :
-             std::filesystem::recursive_directory_iterator(".")) {
+             std::filesystem::recursive_directory_iterator(root)) {
             if (entry.is_regular_file()) {
                 total_size += entry.file_size();
             }
         }
-    } catch (const std::exception &e) {
+    } catch (const std::exception &) {
         // Silently ignore errors (e.g., permission denied)
     }
+    return total_size;
+}
+
+/**
+ * @brief On-disk bytes used by the KV and key-storage subtrees.
+ *
+ * Counts, for each path in @c STORAGE_PATHS, @c repart_kv_storage/ (value
+ * partitions) and @c repart_kv_keystorage/ (if present). Key backends also use
+ * @c /tmp/repart_kv_keystorage/ (see LmdbKeyStorage, Tkrzw*KeyStorage), which
+ * is included as well (deduplicated with @c {/tmp}/repart_kv_keystorage when
+ * applicable).
+ */
+size_t get_disk_usage_kb() {
+    std::set<std::string> seen;
+    size_t total_size = 0;
+
+    auto add_dir = [&](const std::filesystem::path &p) {
+        if (p.empty()) {
+            return;
+        }
+        std::string key = p.lexically_normal().string();
+        if (seen.count(key)) {
+            return;
+        }
+        seen.insert(key);
+        total_size +=
+            directory_tree_file_size_bytes(std::filesystem::path(key));
+    };
+
+    for (const std::string &base : STORAGE_PATHS) {
+        if (base.empty()) {
+            continue;
+        }
+        const std::filesystem::path p(base);
+        add_dir(p / "repart_kv_storage");
+        add_dir(p / "repart_kv_keystorage");
+    }
+    add_dir("/tmp/repart_kv_keystorage");
+
     return total_size / 1024; // Convert bytes to KB
 }
 

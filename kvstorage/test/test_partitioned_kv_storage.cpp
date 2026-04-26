@@ -8,6 +8,7 @@
 #include "../../keystorage/TkrzwTreeKeyStorage.h"
 #include "../../utils/test_assertions.h"
 #include "../LockStrippingKeyValueStorage.h"
+#include "make_partitioned_test_storage.h"
 #include <iostream>
 #include <vector>
 #include <string>
@@ -23,7 +24,9 @@ const std::chrono::milliseconds sleep_time = std::chrono::milliseconds(10);
 // implementation
 template <typename StorageType> void test_basic_write_read() {
     TEST("basic_write_read")
-    StorageType storage(4); // Create with 4 partitions
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(
+            4); // Create with 4 partitions
 
     // Write some values
     Status status = storage.write("key1", "value1");
@@ -49,7 +52,8 @@ template <typename StorageType> void test_basic_write_read() {
 
 template <typename StorageType> void test_read_nonexistent_key() {
     TEST("read_nonexistent_key")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Reading a non-existent key should return empty string
     std::string value;
@@ -60,7 +64,8 @@ template <typename StorageType> void test_read_nonexistent_key() {
 
 template <typename StorageType> void test_overwrite_value() {
     TEST("overwrite_value")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
     std::string value;
 
     Status status = storage.write("key", "original");
@@ -79,7 +84,8 @@ template <typename StorageType> void test_overwrite_value() {
 
 template <typename StorageType> void test_multiple_partitions() {
     TEST("multiple_partitions")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Write keys that should hash to different partitions
     for (int i = 0; i < 20; ++i) {
@@ -103,7 +109,9 @@ template <typename StorageType> void test_multiple_partitions() {
 
 template <typename StorageType> void test_single_partition() {
     TEST("single_partition")
-    StorageType storage(1); // Only one partition
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(
+            1); // Only one partition
 
     Status status = storage.write("key1", "value1");
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
@@ -127,7 +135,9 @@ template <typename StorageType> void test_single_partition() {
 
 template <typename StorageType> void test_many_partitions() {
     TEST("many_partitions")
-    StorageType storage(16); // Many partitions
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(
+            16); // Many partitions
 
     for (int i = 0; i < 100; ++i) {
         std::string key = "item:" + std::to_string(i);
@@ -149,7 +159,8 @@ template <typename StorageType> void test_many_partitions() {
 
 template <typename StorageType> void test_large_dataset() {
     TEST("large_dataset")
-    StorageType storage(8);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(8);
 
     // Write 1000 entries
     for (int i = 0; i < 1000; ++i) {
@@ -176,7 +187,8 @@ template <typename StorageType> void test_large_dataset() {
 
 template <typename StorageType> void test_special_characters() {
     TEST("special_characters")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     storage.write("key:with:colons", "value1");
     Status status = storage.write("key/with/slashes", "value2");
@@ -209,7 +221,8 @@ template <typename StorageType> void test_special_characters() {
 
 template <typename StorageType> void test_repeated_operations() {
     TEST("repeated_operations")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
     std::string value;
     // Write, read, overwrite, read again
     Status status = storage.write("test_key", "initial");
@@ -234,7 +247,8 @@ template <typename StorageType> void test_repeated_operations() {
 
 template <typename StorageType> void test_scan_basic() {
     TEST("scan_basic")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     storage.write("user:1001", "Alice");
     Status status = storage.write("user:1002", "Bob");
@@ -261,7 +275,8 @@ template <typename StorageType> void test_scan_basic() {
 
 template <typename StorageType> void test_scan_with_limit() {
     TEST("scan_with_limit")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     storage.write("item:001", "A");
     Status status = storage.write("item:002", "B");
@@ -288,7 +303,8 @@ template <typename StorageType> void test_scan_with_limit() {
 
 template <typename StorageType> void test_scan_no_matches() {
     TEST("scan_no_matches")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     Status status = storage.write("apple", "fruit");
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
@@ -303,7 +319,8 @@ template <typename StorageType> void test_scan_no_matches() {
 
 template <typename StorageType> void test_scan_empty_prefix() {
     TEST("scan_empty_prefix")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     Status status = storage.write("a", "1");
     ASSERT_STATUS_EQ(Status::SUCCESS, status);
@@ -322,7 +339,8 @@ template <typename StorageType> void test_scan_empty_prefix() {
 
 template <typename StorageType> void test_mixed_operations() {
     TEST("mixed_operations")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Mix of writes, reads, and overwrites
     Status status = storage.write("a", "1");
@@ -367,7 +385,8 @@ template <typename StorageType> void test_mixed_operations() {
 
 template <typename StorageType> void test_operation_count() {
     TEST("operation_count")
-    StorageType storage(4);
+    StorageType storage =
+        repart_kv_test::make_partitioned_kv_test_storage<StorageType>(4);
 
     // Initial count should be 0
     ASSERT_EQ(0, storage.operation_count());
