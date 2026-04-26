@@ -119,7 +119,7 @@ function run_hard_experiments {
     # set PATHS as the subsequent arguments
     local PATHS=("$@")
 
-    local REPARTITIONING_INTERVALS=(0 3000)
+    local REPARTITIONING_INTERVALS=(0 5000)
 
     # for each worker count run experiment with pure engine
     for W in ${TEST_WORKERS[@]}; do
@@ -174,7 +174,7 @@ function run_experiment_set {
     done
 }
 
-TMP=("/media/douglas/340ebcc9-1b07-4111-a768-fc8ac9cad904")
+TMP=("/tmp")
 
 #deletes directories repart_kv_storage in each path
 for p in "${TMP[@]}"; do
@@ -183,9 +183,9 @@ done
 
 REPETITIONS=1
 
-STORAGE_ENGINES=(leveldb)
+STORAGE_ENGINES=(leveldb lmdb tkrzw_tree)
 WORKLOADS=(ycsb_a.toml)
-TEST_WORKERS="1,4,8,16"
+TEST_WORKERS="1,4,8,12,16"
 THINKING_TIMES=(50000)
 PARTITIONS="16"
 SYNCON=(false)

@@ -46,32 +46,6 @@
 #include <random>
 #include <set>
 
-/**
- * Ordered key→partition map for repartitioning storages (template template
- * parameter). Point this alias at a different KeyStorage to swap backends in
- * one place (e.g. AbslBtreeKeyStorage, TkrzwTreeKeyStorage, LevelDBKeyStorage;
- * include "keystorage/LevelDBKeyStorage.h" when using it).
- */
-
-/*
-template <typename ValueType> using OrderedKeyStorage =
-    LmdbKeyStorage<ValueType>;
-*/
-
-template <typename ValueType> using OrderedKeyStorage =
-    LevelDBKeyStorage<ValueType>;
-
-/*
-template <typename ValueType> using OrderedKeyStorage =
-    TkrzwTreeKeyStorage<ValueType>;
-*/
-/*
-template <typename ValueType> using OrderedKeyStorage =
-    LevelDBKeyStorage<ValueType>;
-*/
-/*template <typename ValueType> using OrderedKeyStorage =
-    AbslBtreeKeyStorage<ValueType>;
-*/
 // Global parameters
 size_t PARTITION_COUNT = 4;
 size_t TEST_WORKERS = 1;
@@ -804,7 +778,8 @@ template <typename StorageType> void run_workload_with_storage(
  * \c StorageSync selects \c Engine<StorageSync> and matching wrapper sync
  * flags (defaults are not visible through the template-template parameter).
  */
-template <template <bool> class Engine, bool StorageSync>
+template <template <bool> class Engine, bool StorageSync,
+          template <typename> class OrderedKeyStorageType>
 void run_workload_for_engine_template(
     std::vector<std::unique_ptr<workload::RequestGenerator>> &generators,
     const char *engine_metrics_name) {
@@ -814,26 +789,28 @@ void run_workload_for_engine_template(
     if (STORAGE_TYPE == "hard") {
         using StorageType =
             HardRepartitioningKeyValueStorage<Engine, StorageSync,
-                                              OrderedKeyStorage>;
+                                              OrderedKeyStorageType>;
         run_workload_with_storage<StorageType>(
             generators, PARTITION_COUNT, TEST_WORKERS,
             "HardRepartitioningKeyValueStorage");
     } else if (STORAGE_TYPE == "soft") {
         using StorageType = SoftRepartitioningKeyValueStorage<
-            Engine, StorageSync, OrderedKeyStorage, OrderedKeyStorage>;
+            Engine, StorageSync, OrderedKeyStorageType, OrderedKeyStorageType>;
         run_workload_with_storage<StorageType>(
             generators, PARTITION_COUNT, TEST_WORKERS,
             "SoftRepartitioningKeyValueStorage");
     } else if (STORAGE_TYPE == "threaded") {
         using StorageType =
             SoftThreadedRepartitioningKeyValueStorage<Engine, StorageSync,
-                                                      OrderedKeyStorage>;
+                                                      OrderedKeyStorageType>;
         run_workload_with_storage<StorageType>(
             generators, PARTITION_COUNT, TEST_WORKERS,
             "SoftThreadedRepartitioningKeyValueStorage");
     } else if (STORAGE_TYPE == "hard_threaded") {
-        using StorageType = HardThreadedRepartitioningKeyValueStorage<
-            Engine, StorageSync, OrderedKeyStorage, UnorderedDenseKeyStorage>;
+        using StorageType =
+            HardThreadedRepartitioningKeyValueStorage<Engine, StorageSync,
+                                                      OrderedKeyStorageType,
+                                                      UnorderedDenseKeyStorage>;
         run_workload_with_storage<StorageType>(
             generators, PARTITION_COUNT, TEST_WORKERS,
             "HardThreadedRepartitioningKeyValueStorage");
@@ -848,16 +825,17 @@ void run_workload_for_engine_template(
     }
 }
 
-template <template <bool> class Engine>
+template <template <bool> class Engine,
+          template <typename> class OrderedKeyStorageType>
 void run_workload_for_engine_with_cli_sync(
     std::vector<std::unique_ptr<workload::RequestGenerator>> &generators,
     const char *engine_metrics_name) {
     if (STORAGE_SYNC) {
-        run_workload_for_engine_template<Engine, true>(generators,
-                                                       engine_metrics_name);
+        run_workload_for_engine_template<Engine, true, OrderedKeyStorageType>(
+            generators, engine_metrics_name);
     } else {
-        run_workload_for_engine_template<Engine, false>(generators,
-                                                        engine_metrics_name);
+        run_workload_for_engine_template<Engine, false, OrderedKeyStorageType>(
+            generators, engine_metrics_name);
     }
 }
 
@@ -867,22 +845,28 @@ void run_workload_for_engine_with_cli_sync(
 void execute_with_storage_config(
     std::vector<std::unique_ptr<workload::RequestGenerator>> &generators) {
     if (STORAGE_ENGINE == "tkrzw_tree") {
-        run_workload_for_engine_with_cli_sync<TkrzwTreeStorageEngine>(
+        run_workload_for_engine_with_cli_sync<TkrzwTreeStorageEngine,
+                                              TkrzwTreeKeyStorage>(
             generators, "TkrzwTreeStorageEngine");
     } else if (STORAGE_ENGINE == "tkrzw_hash") {
-        run_workload_for_engine_with_cli_sync<TkrzwHashStorageEngine>(
+        run_workload_for_engine_with_cli_sync<TkrzwHashStorageEngine,
+                                              TkrzwHashKeyStorage>(
             generators, "TkrzwHashStorageEngine");
     } else if (STORAGE_ENGINE == "lmdb") {
-        run_workload_for_engine_with_cli_sync<LmdbStorageEngine>(
+        run_workload_for_engine_with_cli_sync<LmdbStorageEngine,
+                                              LmdbKeyStorage>(
             generators, "LmdbStorageEngine");
     } else if (STORAGE_ENGINE == "leveldb") {
-        run_workload_for_engine_with_cli_sync<LevelDBStorageEngine>(
+        run_workload_for_engine_with_cli_sync<LevelDBStorageEngine,
+                                              LevelDBKeyStorage>(
             generators, "LevelDBStorageEngine");
     } else if (STORAGE_ENGINE == "map") {
-        run_workload_for_engine_with_cli_sync<MapStorageEngine>(
+        run_workload_for_engine_with_cli_sync<MapStorageEngine,
+                                              AbslBtreeKeyStorage>(
             generators, "MapStorageEngine");
     } else if (STORAGE_ENGINE == "tbb") {
-        run_workload_for_engine_with_cli_sync<TbbStorageEngine>(
+        run_workload_for_engine_with_cli_sync<TbbStorageEngine,
+                                              AbslBtreeKeyStorage>(
             generators, "TbbStorageEngine");
     }
 }
