@@ -37,6 +37,7 @@
 #include "keystorage/TkrzwHashKeyStorage.h"
 #include "keystorage/LmdbKeyStorage.h"
 #include "keystorage/AbslBtreeKeyStorage.h"
+#include "keystorage/LevelDBKeyStorage.h"
 #include "keystorage/UnorderedDenseKeyStorage.h"
 #include "repart_kv_api.h"
 #include <cassert>
@@ -51,8 +52,14 @@
  * one place (e.g. AbslBtreeKeyStorage, TkrzwTreeKeyStorage, LevelDBKeyStorage;
  * include "keystorage/LevelDBKeyStorage.h" when using it).
  */
+
+/*
 template <typename ValueType> using OrderedKeyStorage =
     LmdbKeyStorage<ValueType>;
+*/
+
+template <typename ValueType> using OrderedKeyStorage =
+    LevelDBKeyStorage<ValueType>;
 
 /*
 template <typename ValueType> using OrderedKeyStorage =

@@ -110,3 +110,6 @@ gmon.out
 *.blg
 
 reports/
+
+# Test binaries write under cwd
+test_resources/

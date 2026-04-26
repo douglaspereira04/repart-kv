@@ -143,6 +143,37 @@ function run_hard_experiments {
 
 }
 
+# Outer experiment grid over sync modes, repetitions, engines, workloads, and
+# thinking times. Array parameters are bash array *names* (nameref); pass
+# literals like SYNCON or STORAGE_ENGINES without $.
+# Arguments:
+#   $1  syncon             name of array (e.g. SYNCON)
+#   $2  repetitions        integer (e.g. REPETITIONS)
+#   $3  storage_engines    name of array (e.g. STORAGE_ENGINES)
+#   $4  workloads          name of array (e.g. WORKLOADS)
+#   $5  thinking_times     name of array (e.g. THINKING_TIMES)
+# Uses global TEST_WORKERS, PARTITIONS, TMP for run_hard_experiments.
+function run_experiment_set {
+    declare -n syncon=$1
+    local repetitions=$2
+    declare -n storage_engines=$3
+    declare -n workloads=$4
+    declare -n thinking_times=$5
+
+    for SYNC in "${syncon[@]}"; do
+        for TEST_NUMBER in $(seq 1 "$repetitions"); do
+            for STORAGE_ENGINE in "${storage_engines[@]}"; do
+                for WORKLOAD in "${workloads[@]}"; do
+                    for THINKING_TIME in "${thinking_times[@]}"; do
+                        echo "run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $SYNC ${TMP[@]}"
+                        run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $SYNC ${TMP[@]}
+                    done
+                done
+            done
+        done
+    done
+}
+
 TMP=("/media/douglas/340ebcc9-1b07-4111-a768-fc8ac9cad904")
 
 #deletes directories repart_kv_storage in each path
@@ -154,24 +185,19 @@ REPETITIONS=1
 
 STORAGE_ENGINES=(leveldb)
 WORKLOADS=(ycsb_a.toml)
-TEST_WORKERS="4"
+TEST_WORKERS="1,4,8,16"
 THINKING_TIMES=(50000)
 PARTITIONS="16"
+SYNCON=(false)
 
-#WORKLOADS=(ycsb_e.toml)
-#THINKING_TIMES=(5000)
 
-SYNCON=(false true)
+run_experiment_set SYNCON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES
 
-for SYNC in "${SYNCON[@]}"; do
-    for TEST_NUMBER in $(seq 1 $REPETITIONS); do
-        for STORAGE_ENGINE in ${STORAGE_ENGINES[@]}; do
-            for WORKLOAD in ${WORKLOADS[@]}; do
-                for THINKING_TIME in ${THINKING_TIMES[@]}; do
-                    echo "run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $SYNC ${TMP[@]}"
-                    run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $SYNC ${TMP[@]}
-                done
-            done
-        done
-    done
-done
+WORKLOADS=(ycsb_d.toml)
+
+run_experiment_set SYNCON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES
+
+WORKLOADS=(ycsb_e.toml)
+THINKING_TIMES=(5000)
+
+run_experiment_set SYNCON "$REPETITIONS"s STORAGE_ENGINES WORKLOADS THINKING_TIMES
