@@ -335,21 +335,14 @@ public:
                     partition_locks_[next_partition_idx]->lock();
                     partition_locks_[curr_partition_idx]->lock();
                 }
-                std::string value;
-                Status status =
-                    storages_[partition_idx]->remove(idx_to_vertex[i], value);
-                if (status != Status::SUCCESS) {
-                    partition_locks_[curr_partition_idx]->unlock();
-                    partition_locks_[next_partition_idx]->unlock();
-                    key_map_lock_.unlock();
-                    throw std::runtime_error(
-                        "Failed to read key from storage on repartitioning");
-                }
 
                 storage_map_.put(idx_to_vertex[i], next_partition_idx);
                 key_map_lock_.unlock();
 
+                std::string value;
+                storages_[partition_idx]->read(idx_to_vertex[i], value);
                 storages_[next_partition_idx]->write(idx_to_vertex[i], value);
+                storages_[partition_idx]->remove(idx_to_vertex[i], value);
 
                 partition_locks_[curr_partition_idx]->unlock();
                 partition_locks_[next_partition_idx]->unlock();
