@@ -124,8 +124,7 @@ public:
      */
     bool update(const std::string &key) {
         // Create a vector with a single key (copy the string)
-        std::vector<std::string> keys;
-        keys.push_back(key);
+        std::vector<std::string> keys = {key};
 
         // Insert into queue (thread-safe, blocking pop() will wake up
         // automatically)
