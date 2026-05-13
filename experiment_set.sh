@@ -28,7 +28,7 @@ function run_and_move_metrics {
     local REPARTITIONING_INTERVAL=$7
     local THINKING_TIME=$8
     local MAX_DURATION=$9
-    local SYNC=${10}
+    local SYNC="${10}"
     shift 10
     # set PATHS as the subsequent arguments
     local PATHS=("$@")
@@ -88,6 +88,21 @@ function run_and_move_metrics {
     #echo ""
 }
 
+# Experiment-mode names for nameref-backed arrays passed into run_hard_experiments /
+# run_experiment_set. Allowed entries: engine, lock stripping, partitioned, repartitioning.
+
+# Return 0 when $want is listed in the remaining $@ selection.
+_hard_experiment_type_enabled() {
+    local want="$1"
+    shift
+    local m
+    for m in "$@"; do
+        if [ "$m" = "$want" ]; then
+            return 0
+        fi
+    done
+    return 1
+}
 
 # Function to run hard experiments
 # Arguments:
@@ -98,11 +113,14 @@ function run_and_move_metrics {
 # 5. Comma separated partitions
 # 6. Thinking time (ns)
 # 7. Max duration (seconds, repart-kv-runner / MAX_DURATION)
-# 8. Non-zero hard repartition interval (ms); paired with 0 in REPARTITIONING_INTERVALS
+# 8. Non-zero hard repartition interval (ms); paired with partitioned vs repartitioning
 # 9. Storage engine sync (false/true)
-# 10 to n. Paths
+# 10. Name of a bash array of experiment modes to run: engine | lock stripping |
+#     partitioned | repartitioning (required; pass e.g. ALL_HARD_EXPERIMENT_TYPES).
+# 11 to n. Paths
 # Example:
-# run_hard_experiments 10 workload.txt tkrzw_tree 1,2,4 1,2,4 0 60 5000 false /tmp/path1
+# HARD_TYPES=(engine "partitioned")
+# run_hard_experiments 10 workload.txt tkrzw_tree 1,2,4 1,2,4 0 60 5000 false HARD_TYPES /tmp/path1
 function run_hard_experiments {
     local TEST_NUMBER=$1
     local WORKLOAD_FILE=$2
@@ -113,6 +131,13 @@ function run_hard_experiments {
     local MAX_DURATION=$7
     local HARD_REPART_INTERVAL_MS=$8
     local SYNC=$9
+    declare -n _EXPERIMENT_TYPES_REF="${10}"
+    shift 10
+
+    # set PATHS as the subsequent arguments
+    local PATHS=("$@")
+
+    local -a _exp_types=("${_EXPERIMENT_TYPES_REF[@]}")
 
     # Convert comma separated partitions to array
     local PARTITIONS=($(echo $COMMA_SEPARATED_PARTITIONS | tr ',' '\n'))
@@ -120,30 +145,30 @@ function run_hard_experiments {
     # Convert comma separated test workers to array
     local TEST_WORKERS=($(echo $COMMA_SEPARATED_TEST_WORKERS | tr ',' '\n'))
 
-    shift 9
-
-    # set PATHS as the subsequent arguments
-    local PATHS=("$@")
-
-    local REPARTITIONING_INTERVALS=(0 "$HARD_REPART_INTERVAL_MS")
-
     # for each worker count run experiment with pure engine
     for W in ${TEST_WORKERS[@]}; do
         #test repart-kv varying number of test workers, ...
 
         # test engine
-        run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE 1 $W engine $STORAGE_ENGINE 0 $THINKING_TIME $MAX_DURATION $SYNC ${PATHS[0]}
+        if _hard_experiment_type_enabled engine "${_exp_types[@]}"; then
+            run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE 1 $W engine $STORAGE_ENGINE 0 $THINKING_TIME $MAX_DURATION $SYNC ${PATHS[0]}
+        fi
 
         for P in ${PARTITIONS[@]}; do
             # test lock stripping
-            run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE 0 $THINKING_TIME $MAX_DURATION $SYNC ${PATHS[@]}
+            if _hard_experiment_type_enabled lock_stripping "${_exp_types[@]}"; then
+                run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE 0 $THINKING_TIME $MAX_DURATION $SYNC ${PATHS[@]}
+            fi
 
-            # test hard repartitioning
-            # ... repartition interval, ...
-            for INTERVAL in ${REPARTITIONING_INTERVALS[@]}; do
-                # ... number of partitions, ...
-                run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE $INTERVAL $THINKING_TIME $MAX_DURATION $SYNC ${PATHS[@]}
-            done 
+            # hard repartitioning: interval 0 (partitioned layout only)
+            if _hard_experiment_type_enabled partitioned "${_exp_types[@]}"; then
+                run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE 0 $THINKING_TIME $MAX_DURATION $SYNC ${PATHS[@]}
+            fi
+
+            # hard repartitioning: periodic repartitioning
+            if _hard_experiment_type_enabled repartitioning "${_exp_types[@]}"; then
+                run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W hard $STORAGE_ENGINE "$HARD_REPART_INTERVAL_MS" $THINKING_TIME $MAX_DURATION $SYNC ${PATHS[@]}
+            fi
         done
     done
 
@@ -153,30 +178,33 @@ function run_hard_experiments {
 # thinking times. Array parameters are bash array *names* (nameref); pass
 # literals like SYNCON or STORAGE_ENGINES without $.
 # Arguments:
-#   $1  syncon             name of array (e.g. SYNCON)
-#   $2  repetitions        integer (e.g. REPETITIONS)
-#   $3  storage_engines    name of array (e.g. STORAGE_ENGINES)
-#   $4  workloads          name of array (e.g. WORKLOADS)
-#   $5  thinking_times     name of array (e.g. THINKING_TIMES)
-#   $6  max_duration_sec        integer seconds for repart-kv-runner MAX_DURATION
-#   $7  hard_repart_interval_ms non-zero hard repartition interval (ms); also paired with 0
+#   $1  sync_on                  name of array (e.g. SYNC_ON)
+#   $2  repetitions              integer (e.g. REPETITIONS)
+#   $3  storage_engines          name of array (e.g. STORAGE_ENGINES)
+#   $4  workloads               name of array (e.g. WORKLOADS)
+#   $5  thinking_times          name of array (e.g. THINKING_TIMES)
+#   $6  max_duration_sec       integer seconds for repart-kv-runner MAX_DURATION
+#   $7  hard_repart_interval_ms non-zero hard repartition interval (ms) for mode repartitioning
+#   $8  hard_experiment_types   required name of array of modes to run:
+#                              engine | lock stripping | partitioned | repartitioning
 # Uses global TEST_WORKERS, PARTITIONS, TMP for run_hard_experiments.
 function run_experiment_set {
-    declare -n syncon=$1
+    declare -n sync_on=$1
     local repetitions=$2
     declare -n storage_engines=$3
     declare -n workloads=$4
     declare -n thinking_times=$5
     local max_duration_sec=$6
     local hard_repart_interval_ms=$7
+    local hard_types_ref="$8"
 
-    for SYNC in "${syncon[@]}"; do
+    for SYNC in "${sync_on[@]}"; do
         for TEST_NUMBER in $(seq 1 "$repetitions"); do
             for STORAGE_ENGINE in "${storage_engines[@]}"; do
                 for WORKLOAD in "${workloads[@]}"; do
                     for THINKING_TIME in "${thinking_times[@]}"; do
-                        echo "run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $max_duration_sec $hard_repart_interval_ms $SYNC ${TMP[@]}"
-                        run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $max_duration_sec $hard_repart_interval_ms $SYNC ${TMP[@]}
+                        echo "run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $max_duration_sec $hard_repart_interval_ms $SYNC $hard_types_ref ${TMP[@]}"
+                        run_hard_experiments $TEST_NUMBER $WORKLOAD $STORAGE_ENGINE $TEST_WORKERS $PARTITIONS $THINKING_TIME $max_duration_sec $hard_repart_interval_ms $SYNC "$hard_types_ref" ${TMP[@]}
                     done
                 done
             done
@@ -184,7 +212,7 @@ function run_experiment_set {
     done
 }
 
-TMP=("055a7abb-4de7-4973-96ca-2c96fc9cf83d" "ee8c0c0d-fdf9-4ae8-a9f0-4015c99554cb" "fdedd994-5a78-4a52-9109-4a8fe3d2bad7")
+TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d" "/media/douglas/ee8c0c0d-fdf9-4ae8-a9f0-4015c99554cb" "/media/douglas/fdedd994-5a78-4a52-9109-4a8fe3d2bad7")
 
 #deletes directories repart_kv_storage in each path
 for p in "${TMP[@]}"; do
@@ -197,20 +225,24 @@ REPETITIONS=1
 STORAGE_ENGINES=(leveldb)
 WORKLOADS=(ycsb_a.toml)
 TEST_WORKERS="1,4,8,12,16"
-THINKING_TIMES=(50000)
-PARTITIONS="16"
-SYNCON=(true)
+THINKING_TIMES=(50000 100000 500000 1000000 5000000)
+PARTITIONS="8"
+SYNC_ON=(true)
 
-MAX_DURATION_SEC=60
-HARD_REPART_INTERVAL_MS=5000
+# Explicit list matching _hard_experiment_type_enabled / run_hard_experiments docs;
+# pass this array name as arg 8 to run_experiment_set to run every variant.
+ALL_HARD_EXPERIMENT_TYPES=(engine lock_stripping partitioned repartitioning)
 
-run_experiment_set SYNCON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS"
+MAX_DURATION_SEC=30
+HARD_REPART_INTERVAL_MS=10000
+
+run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES
 
 WORKLOADS=(ycsb_d.toml)
 
-run_experiment_set SYNCON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS"
+#run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES
 
 WORKLOADS=(ycsb_e.toml)
 THINKING_TIMES=(5000)
 
-run_experiment_set SYNCON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS"
+#run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES
