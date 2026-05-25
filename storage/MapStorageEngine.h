@@ -73,6 +73,12 @@ public:
         return Status::SUCCESS;
     }
 
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        return write_impl(key, value);
+    }
+
+    Status force_sync_impl() { return Status::SUCCESS; }
+
     /**
      * @brief Implementation: Remove a key and return the stored value
      */

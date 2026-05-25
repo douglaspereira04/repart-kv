@@ -8,7 +8,9 @@
 #include "operation/ReadOperation.h"
 #include "operation/SyncOperation.h"
 #include "operation/WriteOperation.h"
+#include "operation/AsyncWriteOperation.h"
 #include "operation/ScanOperation.h"
+#include "operation/FlushPartitionsOperation.h"
 
 /**
  * @brief Worker class for processing operations in a soft partition
@@ -73,6 +75,12 @@ public:
         delete operation;
     }
 
+    void async_write(AsyncWriteOperation *operation) {
+        Status st = storage_.async_write(operation->key(), operation->value());
+        operation->status(st);
+        delete operation;
+    }
+
     /**
      * @brief Scan operation
      * @param operation The scan operation to perform
@@ -97,6 +105,14 @@ public:
         if (is_coordinator) {
             delete operation;
         }
+    }
+
+    void flush_partitions(FlushPartitionsOperation *operation) {
+        bool leader = operation->finish_worker_fence();
+        if (leader) {
+            operation->combine(storage_.force_sync());
+        }
+        operation->sync();
     }
 
     /**
@@ -167,11 +183,18 @@ public:
                 case Type::WRITE:
                     write(static_cast<WriteOperation *>(operation));
                     break;
+                case Type::ASYNC_WRITE:
+                    async_write(static_cast<AsyncWriteOperation *>(operation));
+                    break;
                 case Type::SCAN:
                     scan(static_cast<ScanOperation *>(operation));
                     break;
                 case Type::SYNC:
                     sync(static_cast<SyncOperation *>(operation));
+                    break;
+                case Type::PARTITION_FLUSH:
+                    flush_partitions(
+                        static_cast<FlushPartitionsOperation *>(operation));
                     break;
                 case Type::DONE:
                     static_cast<DoneOperation *>(operation)->wait();

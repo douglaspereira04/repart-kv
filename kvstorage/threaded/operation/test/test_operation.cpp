@@ -11,10 +11,15 @@ int tests_failed = 0;
 
 void test_type_enum() {
     TEST("type_enum")
-    // Test enum values
+    // Test enum values (order must match Operation.h)
     ASSERT_EQ(0, static_cast<int>(Type::READ));
     ASSERT_EQ(1, static_cast<int>(Type::WRITE));
-    ASSERT_EQ(2, static_cast<int>(Type::SCAN));
+    ASSERT_EQ(2, static_cast<int>(Type::ASYNC_WRITE));
+    ASSERT_EQ(3, static_cast<int>(Type::SCAN));
+    ASSERT_EQ(4, static_cast<int>(Type::DONE));
+    ASSERT_EQ(5, static_cast<int>(Type::SYNC));
+    ASSERT_EQ(6, static_cast<int>(Type::PARTITION_FLUSH));
+    ASSERT_EQ(7, static_cast<int>(Type::DUMMY));
     END_TEST("type_enum")
 }
 

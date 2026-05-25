@@ -24,7 +24,7 @@
  * increment_edge_weight_if_vertices_exist; otherwise they use
  * increment_vertex_weight and increment_edge_weight.
  */
-template <size_t MAX_GRAPH_SIZE = 100000> class Tracker {
+template <size_t MAX_GRAPH_SIZE = 10000> class Tracker {
 private:
     tbb::concurrent_bounded_queue<std::vector<std::string>>
         queue_;    // High-performance thread-safe bounded queue from TBB with

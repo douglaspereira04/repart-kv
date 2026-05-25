@@ -170,6 +170,24 @@ public:
         return Status::SUCCESS;
     }
 
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        if (!is_open_) {
+            return Status::ERROR;
+        }
+        tkrzw::Status status = db_->Set(key, value);
+        return status == tkrzw::Status::SUCCESS ? Status::SUCCESS
+                                                : Status::ERROR;
+    }
+
+    Status force_sync_impl() {
+        if (!is_open_) {
+            return Status::ERROR;
+        }
+        return db_->Synchronize(true) == tkrzw::Status::SUCCESS
+                   ? Status::SUCCESS
+                   : Status::ERROR;
+    }
+
     /**
      * @brief Implementation: Scan for key-value pairs from a starting point
      * @param initial_key_prefix The starting key (lower_bound)

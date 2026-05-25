@@ -82,6 +82,12 @@ public:
         return Status::SUCCESS;
     }
 
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        return write_impl(key, value);
+    }
+
+    Status force_sync_impl() { return Status::SUCCESS; }
+
     /**
      * @brief Implementation: Scan for key-value pairs from a starting point
      * @param initial_key_prefix The starting key (lower_bound)

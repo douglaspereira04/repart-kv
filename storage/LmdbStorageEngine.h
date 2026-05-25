@@ -46,15 +46,48 @@ private:
     MDB_dbi dbi_;
     bool is_open_;
     std::string db_path_;
+    /** True while MDB_NOSYNC / MDB_NOMETASYNC are off (durable commits). */
+    bool runtime_sync_on_;
 
     static std::atomic_int db_counter_;
     static std::string id_;
+
+    static constexpr unsigned nosync_flags() {
+        return MDB_NOSYNC | MDB_NOMETASYNC;
+    }
 
     static constexpr unsigned env_open_flags() {
         if constexpr (SYNC) {
             return 0;
         }
-        return MDB_NOSYNC | MDB_NOMETASYNC;
+        return nosync_flags();
+    }
+
+    Status enable_nosync() {
+        if (!runtime_sync_on_) {
+            return Status::SUCCESS;
+        }
+        int rc = mdb_env_set_flags(env_, nosync_flags(), 1);
+        if (rc != 0) {
+            return Status::ERROR;
+        }
+        runtime_sync_on_ = false;
+        return Status::SUCCESS;
+    }
+
+    Status restore_durable_sync() {
+        if constexpr (!SYNC) {
+            return Status::SUCCESS;
+        }
+        if (runtime_sync_on_) {
+            return Status::SUCCESS;
+        }
+        int rc = mdb_env_set_flags(env_, nosync_flags(), 0);
+        if (rc != 0) {
+            return Status::ERROR;
+        }
+        runtime_sync_on_ = true;
+        return Status::SUCCESS;
     }
 
 public:
@@ -69,7 +102,8 @@ public:
     explicit LmdbStorageEngine(size_t level = 0,
                                const std::string &path = "/tmp") :
         StorageEngine<LmdbStorageEngine<SYNC>, SYNC>(level, path),
-        env_(nullptr), dbi_(MDB_dbi{}), is_open_(false) {
+        env_(nullptr), dbi_(MDB_dbi{}), is_open_(false),
+        runtime_sync_on_(SYNC) {
 
         init();
     }
@@ -86,7 +120,8 @@ public:
                                size_t level = 0,
                                const std::string &path = "/tmp") :
         StorageEngine<LmdbStorageEngine<SYNC>, SYNC>(level, path),
-        env_(nullptr), dbi_(MDB_dbi{}), is_open_(false), db_path_(file_path) {
+        env_(nullptr), dbi_(MDB_dbi{}), is_open_(false), db_path_(file_path),
+        runtime_sync_on_(SYNC) {
 
         init_with_path(file_path, map_size);
     }
@@ -116,7 +151,8 @@ public:
     LmdbStorageEngine(LmdbStorageEngine &&other) noexcept :
         StorageEngine<LmdbStorageEngine<SYNC>, SYNC>(other.level_, other.path_),
         env_(other.env_), dbi_(other.dbi_), is_open_(other.is_open_),
-        db_path_(std::move(other.db_path_)) {
+        db_path_(std::move(other.db_path_)),
+        runtime_sync_on_(other.runtime_sync_on_) {
         other.env_ = nullptr;
         other.is_open_ = false;
     }
@@ -131,6 +167,7 @@ public:
             dbi_ = other.dbi_;
             is_open_ = other.is_open_;
             db_path_ = std::move(other.db_path_);
+            runtime_sync_on_ = other.runtime_sync_on_;
             other.env_ = nullptr;
             other.is_open_ = false;
         }
@@ -212,6 +249,35 @@ public:
         }
 
         return Status::SUCCESS;
+    }
+
+    /**
+     * @brief Relaxed write path: toggles MDB_NOSYNC / MDB_NOMETASYNC via
+     *        mdb_env_set_flags when SYNC=true, then commits like write_impl.
+     */
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        Status st = enable_nosync();
+        if (st != Status::SUCCESS) {
+            return st;
+        }
+        return write_impl(key, value);
+    }
+
+    /**
+     * @brief Hard flush, then restore durable env flags when SYNC=true.
+     */
+    Status force_sync_impl() {
+        if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        int rc = mdb_env_sync(env_, 1);
+        if (rc != 0) {
+            return Status::ERROR;
+        }
+        return restore_durable_sync();
     }
 
     /**

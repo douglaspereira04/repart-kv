@@ -15,6 +15,8 @@ concept StorageEngineImpl =
              std::vector<std::pair<std::string, std::string>> &results) {
         { constEngine.read_impl(key, value) } -> std::same_as<Status>;
         { engine.write_impl(key, value) } -> std::same_as<Status>;
+        { engine.async_write_impl(key, value) } -> std::same_as<Status>;
+        { engine.force_sync_impl() } -> std::same_as<Status>;
         { engine.remove_impl(key, value) } -> std::same_as<Status>;
         { constEngine.scan_impl(key, limit, results) } -> std::same_as<Status>;
     };

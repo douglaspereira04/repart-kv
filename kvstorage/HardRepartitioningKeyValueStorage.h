@@ -89,7 +89,7 @@ private:
     using IteratorType = typename StorageEngineType::IteratorType;
 
     static constexpr size_t MAX_PARTITION_COUNT =
-        32; // Maximum number of partitions
+        64; // Maximum number of partitions
 
 public:
     /**
@@ -243,6 +243,45 @@ public:
             }
         }
         return status;
+    }
+
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        size_t partition_idx;
+
+        key_map_lock_.lock();
+
+        bool found_storage = storage_map_.get(key, partition_idx);
+
+        if (!found_storage) {
+            partition_idx = hash_func_(key) % partition_count_;
+            storage_map_.put(key, partition_idx);
+        }
+
+        partition_locks_[partition_idx]->lock();
+        key_map_lock_.unlock();
+
+        Status status = storages_[partition_idx]->async_write(key, value);
+        partition_locks_[partition_idx]->unlock();
+
+        if (enable_tracking_) {
+            if (tracker_.update(key)) {
+                enable_tracking_ = false;
+            }
+        }
+        return status;
+    }
+
+    Status force_sync_impl() {
+        for (StorageEngineType *s : storages_) {
+            if (s == nullptr) {
+                return Status::ERROR;
+            }
+            Status st = s->force_sync();
+            if (st != Status::SUCCESS) {
+                return st;
+            }
+        }
+        return Status::SUCCESS;
     }
 
     /**

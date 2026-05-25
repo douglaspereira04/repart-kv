@@ -19,10 +19,8 @@
  * without virtual functions. Requires C++20 for compile-time polymorphism.
  *
  * Derived classes must implement:
- * - std::string read_impl(const std::string& key)
- * - void write_impl(const std::string& key, const std::string& value)
- * - std::vector<std::pair<std::string, std::string>> scan_impl(const
- * std::string& initial_key_prefix, size_t limit)
+ * - read_impl, write_impl, async_write_impl, force_sync_impl,
+ * - scan_impl(const std::string& initial_key_prefix, size_t limit, results&)
  */
 template <typename Derived, template <bool> class StorageEngineTemplate,
           bool STORAGE_SYNC = false>
@@ -54,6 +52,21 @@ public:
      */
     Status write(const std::string &key, const std::string &value) {
         return static_cast<Derived *>(this)->write_impl(key, value);
+    }
+
+    /**
+     * @brief Relaxed/fast write batching path (preload); pairing force_sync
+     * persists.
+     */
+    Status async_write(const std::string &key, const std::string &value) {
+        return static_cast<Derived *>(this)->async_write_impl(key, value);
+    }
+
+    /**
+     * @brief Hard flush across all backing storage engine instances/partitions.
+     */
+    Status force_sync() {
+        return static_cast<Derived *>(this)->force_sync_impl();
     }
 
     /**

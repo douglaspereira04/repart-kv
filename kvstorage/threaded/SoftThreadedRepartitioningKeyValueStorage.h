@@ -5,6 +5,8 @@
 #include "../../storage/StorageEngine.h"
 #include "../Tracker.h"
 #include "SoftPartitionWorker.h"
+#include "operation/AsyncWriteOperation.h"
+#include "operation/FlushPartitionsOperation.h"
 #include <string>
 #include <vector>
 #include <cstddef>
@@ -219,6 +221,34 @@ public:
         }
 
         return Status::SUCCESS;
+    }
+
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        key_map_lock_.lock();
+
+        size_t partition_idx;
+        size_t next_partition_idx = hash_func_(key) % partition_count_;
+        key_map_.get_or_insert(key, next_partition_idx, partition_idx);
+
+        auto *async_op = new AsyncWriteOperation(key, value);
+        workers_[partition_idx]->enqueue(async_op);
+
+        key_map_lock_.unlock();
+
+        if (enable_tracking_.load(std::memory_order_relaxed)) {
+            tracker_.update(key);
+        }
+
+        return Status::SUCCESS;
+    }
+
+    Status force_sync_impl() {
+        FlushPartitionsOperation op(partition_count_);
+        for (size_t i = 0; i < partition_count_; ++i) {
+            workers_[i]->enqueue(&op);
+        }
+        op.sync();
+        return op.status();
     }
 
     /**

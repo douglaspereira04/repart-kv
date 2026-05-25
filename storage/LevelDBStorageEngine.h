@@ -2,6 +2,7 @@
 
 #include "StorageEngineIterator.h"
 #include "StorageEngine.h"
+#include <iostream>
 #include <leveldb/db.h>
 #include <leveldb/options.h>
 #include <leveldb/status.h>
@@ -48,6 +49,12 @@ private:
     static leveldb::WriteOptions durable_write_options() {
         leveldb::WriteOptions o;
         o.sync = SYNC;
+        return o;
+    }
+
+    static leveldb::WriteOptions async_write_options() {
+        leveldb::WriteOptions o;
+        o.sync = false;
         return o;
     }
 
@@ -172,6 +179,29 @@ public:
             return Status::SUCCESS;
         }
         return Status::ERROR;
+    }
+
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        leveldb::Status status = db_->Put(async_write_options(), key, value);
+        if (status.ok()) {
+            return Status::SUCCESS;
+        }
+
+        return Status::ERROR;
+    }
+
+    Status force_sync_impl() {
+        if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        leveldb::WriteBatch batch;
+        leveldb::WriteOptions o;
+        o.sync = true;
+        leveldb::Status status = db_->Write(o, &batch);
+        return status.ok() ? Status::SUCCESS : Status::ERROR;
     }
 
     /**

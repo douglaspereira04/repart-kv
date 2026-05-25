@@ -65,8 +65,8 @@ std::chrono::milliseconds
 std::chrono::nanoseconds THINKING_TIME(0); // Thinking time delay (ns)
 long THINKING_SEED = 0;                    // Thinking seed
 
-std::chrono::high_resolution_clock::time_point **START_TIMES = nullptr;
-std::chrono::high_resolution_clock::time_point **END_TIMES = nullptr;
+std::chrono::steady_clock::time_point **START_TIMES = nullptr;
+std::chrono::steady_clock::time_point **END_TIMES = nullptr;
 size_t *TIMES_INDEX = nullptr;
 
 long MAX_DURATION = 20; // Maximum duration of the experiment in seconds
@@ -80,10 +80,9 @@ bool *RUNNING = nullptr;
  * @param experiment_start Reference time point for relative timestamps
  * @param test_workers Number of workers
  */
-void output_latency_csv(
-    const std::string &metrics_file,
-    std::chrono::high_resolution_clock::time_point experiment_start,
-    size_t test_workers) {
+void output_latency_csv(const std::string &metrics_file,
+                        std::chrono::steady_clock::time_point experiment_start,
+                        size_t test_workers) {
     if (START_TIMES == nullptr || END_TIMES == nullptr ||
         TIMES_INDEX == nullptr) {
         return;
@@ -116,7 +115,7 @@ void output_latency_csv(
 
     for (size_t written = 0; written < total; ++written) {
         size_t best_worker = test_workers;
-        std::chrono::high_resolution_clock::time_point best_start{};
+        std::chrono::steady_clock::time_point best_start{};
 
         for (size_t w = 0; w < test_workers; ++w) {
             if (worker_idx[w] < TIMES_INDEX[w]) {
@@ -356,8 +355,8 @@ void metrics_loop(const std::vector<size_t> &executed_counts,
     }
 
     start_barrier.arrive_and_wait();
-    std::chrono::high_resolution_clock::time_point start_time =
-        std::chrono::high_resolution_clock::now();
+    std::chrono::steady_clock::time_point start_time =
+        std::chrono::steady_clock::now();
 
     // Write CSV header
     file << "elapsed_time_ms,executed_count,memory_kb,disk_kb,Tracking,"
@@ -368,7 +367,7 @@ void metrics_loop(const std::vector<size_t> &executed_counts,
     bool prev_tracking_enabled = false;
 
     while (running) {
-        auto current_time = std::chrono::high_resolution_clock::now();
+        auto current_time = std::chrono::steady_clock::now();
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             current_time - start_time);
 
@@ -425,6 +424,47 @@ void metrics_loop(const std::vector<size_t> &executed_counts,
     }
 
     file.close();
+}
+
+/**
+ * Load phase writes use async_write followed by force_sync after the LOADING
+ * loop so durable backends amortize persistence.
+ */
+template <typename StorageType> void
+execute_preload_operation(const workload::Operation &op, StorageType &storage) {
+    switch (op.type) {
+        case workload::OperationType::READ: {
+            std::string value;
+            Status status = storage.read(op.key, value);
+            if (status != Status::SUCCESS) {
+                std::cerr << "Error: Failed to read key: " << op.key
+                          << std::endl;
+                exit(1);
+            }
+            break;
+        }
+        case workload::OperationType::WRITE: {
+            const std::string *value_ptr =
+                op.value.empty() ? &workload::DEFAULT_VALUE : &op.value;
+            Status status = storage.async_write(op.key, *value_ptr);
+            if (status != Status::SUCCESS) {
+                std::cerr << "Error: Failed preload write key: " << op.key
+                          << std::endl;
+                exit(1);
+            }
+            break;
+        }
+        case workload::OperationType::SCAN: {
+            std::vector<std::pair<std::string, std::string>> results;
+            Status status = storage.scan(op.key, op.limit, results);
+            if (status != Status::SUCCESS) {
+                std::cerr << "Error: Failed to scan key: " << op.key
+                          << std::endl;
+                exit(1);
+            }
+            break;
+        }
+    }
 }
 
 template <typename StorageType>
@@ -535,9 +575,9 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
         std::exponential_distribution<double> thinking_dist(
             1.0 / static_cast<double>(THINKING_TIME.count()));
         for (const auto &operation : operations) {
-            auto op_start = std::chrono::high_resolution_clock::now();
+            auto op_start = std::chrono::steady_clock::now();
             execute_operation(operation, storage);
-            auto op_end = std::chrono::high_resolution_clock::now();
+            auto op_end = std::chrono::steady_clock::now();
             executed_counts[worker_id]++;
             double delay_ns = thinking_dist(rng);
             if (latency_store_chance_dist(latency_store_chance_rng) < 5) {
@@ -549,15 +589,14 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
                 break;
             }
             auto target = std::chrono::duration<double, std::nano>(delay_ns);
-            while (std::chrono::high_resolution_clock::now() - op_end <
-                   target) {
+            while (std::chrono::steady_clock::now() - op_end < target) {
             }
         }
     } else {
         for (const auto &operation : operations) {
-            auto op_start = std::chrono::high_resolution_clock::now();
+            auto op_start = std::chrono::steady_clock::now();
             execute_operation(operation, storage);
-            auto op_end = std::chrono::high_resolution_clock::now();
+            auto op_end = std::chrono::steady_clock::now();
             executed_counts[worker_id]++;
             if (latency_store_chance_dist(latency_store_chance_rng) < 5) {
                 START_TIMES[worker_id][TIMES_INDEX[worker_id]] = op_start;
@@ -667,9 +706,17 @@ template <typename StorageType> void run_workload_with_storage(
     while (phase == workload::RequestGenerator::Phase::LOADING) {
         auto operation =
             make_operation_from_request(type, key, value, scan_size);
-        execute_operation(operation, storage);
+        execute_preload_operation(operation, storage);
         preload++;
         phase = primary_generator->next(type, key, value, scan_size);
+    }
+
+    if (preload > 0) {
+        Status flush_status = storage.force_sync();
+        if (flush_status != Status::SUCCESS) {
+            std::cerr << "Error: preload force_sync failed" << std::endl;
+            exit(1);
+        }
     }
 
     assert(primary_generator->current_phase() ==
@@ -699,12 +746,12 @@ template <typename StorageType> void run_workload_with_storage(
     start_barrier.arrive_and_wait();
     std::cout << " [DONE]" << std::endl;
 
-    auto start_time = std::chrono::high_resolution_clock::now();
+    auto start_time = std::chrono::steady_clock::now();
 
     std::cout << "Executing workload... " << std::flush;
 
     while (std::chrono::duration_cast<std::chrono::seconds>(
-               std::chrono::high_resolution_clock::now() - start_time)
+               std::chrono::steady_clock::now() - start_time)
                .count() < MAX_DURATION) {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
         // if any worker is running, continue
@@ -733,7 +780,7 @@ template <typename StorageType> void run_workload_with_storage(
     metrics_running = false;
     metrics_thread.join();
 
-    auto end_time = std::chrono::high_resolution_clock::now();
+    auto end_time = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         end_time - start_time);
 
@@ -1146,17 +1193,15 @@ int run_repart_kv(int argc, char *argv[]) {
     }
 
     size_t n_operations = generators[0]->config().n_operations * TEST_WORKERS;
-    START_TIMES =
-        new std::chrono::high_resolution_clock::time_point *[TEST_WORKERS];
-    END_TIMES =
-        new std::chrono::high_resolution_clock::time_point *[TEST_WORKERS];
+    START_TIMES = new std::chrono::steady_clock::time_point *[TEST_WORKERS];
+    END_TIMES = new std::chrono::steady_clock::time_point *[TEST_WORKERS];
     TIMES_INDEX = new size_t[TEST_WORKERS];
 
     for (size_t worker = 0; worker < TEST_WORKERS; ++worker) {
         START_TIMES[worker] =
-            new std::chrono::high_resolution_clock::time_point[n_operations];
+            new std::chrono::steady_clock::time_point[n_operations];
         END_TIMES[worker] =
-            new std::chrono::high_resolution_clock::time_point[n_operations];
+            new std::chrono::steady_clock::time_point[n_operations];
         TIMES_INDEX[worker] = 0;
     }
     THINKING_SEED = generators[0]->config().operation_seed;

@@ -7,8 +7,10 @@
 #include "operation/Operation.h"
 #include "operation/HardReadOperation.h"
 #include "operation/HardWriteOperation.h"
+#include "operation/HardAsyncWriteOperation.h"
 #include "operation/HardScanOperation.h"
 #include "operation/SyncOperation.h"
+#include "operation/HardFlushPartitionsOperation.h"
 
 /**
  * @brief Worker class for processing operations in a hard partition
@@ -76,6 +78,13 @@ public:
         delete operation;
     }
 
+    void async_write(HardAsyncWriteOperation<StorageEngineType> *operation) {
+        StorageEngineType *storage = operation->storage();
+        Status st = storage->async_write(operation->key(), operation->value());
+        operation->status(st);
+        delete operation;
+    }
+
     /**
      * @brief Scan operation
      * @param operation The scan operation to perform
@@ -130,6 +139,18 @@ public:
         if (is_coordinator) {
             delete operation;
         }
+    }
+
+    void flush_partitions(HardFlushPartitionsOperation<StorageEngineType> *op) {
+        op->finish_worker_fence();
+        const auto &engines = op->storages();
+        if (partition_idx_ < engines.size() &&
+            engines[partition_idx_] != nullptr) {
+            op->combine(engines[partition_idx_]->force_sync());
+        } else {
+            op->combine(Status::ERROR);
+        }
+        op->sync();
     }
 
     /**
@@ -202,12 +223,23 @@ public:
                     write(static_cast<HardWriteOperation<StorageEngineType> *>(
                         operation));
                     break;
+                case Type::ASYNC_WRITE:
+                    async_write(static_cast<
+                                HardAsyncWriteOperation<StorageEngineType> *>(
+                        operation));
+                    break;
                 case Type::SCAN:
                     scan(static_cast<HardScanOperation<StorageEngineType> *>(
                         operation));
                     break;
                 case Type::SYNC:
                     sync(static_cast<SyncOperation *>(operation));
+                    break;
+                case Type::PARTITION_FLUSH:
+                    flush_partitions(
+                        static_cast<
+                            HardFlushPartitionsOperation<StorageEngineType> *>(
+                            operation));
                     break;
                 case Type::DONE:
                     static_cast<DoneOperation *>(operation)->wait();

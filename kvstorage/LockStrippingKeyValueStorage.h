@@ -130,6 +130,27 @@ public:
         return status;
     }
 
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        size_t partition_idx = hash_func_(key) % partition_count_;
+        partition_locks_[partition_idx]->lock();
+        Status status = storages_[partition_idx]->async_write(key, value);
+        partition_locks_[partition_idx]->unlock();
+        return status;
+    }
+
+    Status force_sync_impl() {
+        for (StorageEngineType *s : storages_) {
+            if (s == nullptr) {
+                return Status::ERROR;
+            }
+            Status st = s->force_sync();
+            if (st != Status::SUCCESS) {
+                return st;
+            }
+        }
+        return Status::SUCCESS;
+    }
+
     /**
      * @brief Scan for key-value pairs starting with a given prefix
      * @param initial_key_prefix The initial key prefix to search for

@@ -7,7 +7,9 @@
 #include "HardPartitionWorker.h"
 #include "operation/HardReadOperation.h"
 #include "operation/HardWriteOperation.h"
+#include "operation/HardAsyncWriteOperation.h"
 #include "operation/HardScanOperation.h"
+#include "operation/HardFlushPartitionsOperation.h"
 #include "operation/SyncOperation.h"
 #include <string>
 #include <vector>
@@ -269,6 +271,56 @@ public:
         }
 
         return Status::SUCCESS;
+    }
+
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        key_map_lock_.lock();
+        size_t partition_idx = 0;
+
+        StorageEngineType *storage;
+
+        size_t next_partition_idx = hash_func_(key) % partition_count_;
+        StorageEngineType *next_storage = storages_[next_partition_idx];
+
+        bool found_storage =
+            storage_map_.get_or_insert(key, next_storage, storage);
+        if (found_storage) {
+            partition_map_.get(key, partition_idx);
+        } else {
+            partition_map_.get_or_insert(key, next_partition_idx,
+                                         partition_idx);
+        }
+
+        if (storage->level() != level_) {
+            storage = storages_[partition_idx];
+            storage_map_.put(key, storage);
+        }
+
+        HardAsyncWriteOperation<StorageEngineType> *async_operation =
+            new HardAsyncWriteOperation<StorageEngineType>(key, value, storage);
+        workers_[partition_idx]->enqueue(async_operation);
+
+        key_map_lock_.unlock();
+
+        if (enable_tracking_.load(std::memory_order_relaxed)) {
+            tracker_.update(key);
+        }
+
+        return Status::SUCCESS;
+    }
+
+    Status force_sync_impl() {
+        key_map_lock_.lock_shared();
+        std::vector<StorageEngineType *> snap(storages_);
+        key_map_lock_.unlock_shared();
+
+        HardFlushPartitionsOperation<StorageEngineType> op(partition_count_,
+                                                           std::move(snap));
+        for (size_t i = 0; i < partition_count_; ++i) {
+            workers_[i]->enqueue(&op);
+        }
+        op.sync();
+        return op.status();
     }
 
     /**

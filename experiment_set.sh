@@ -49,6 +49,15 @@ function run_and_move_metrics {
         *) SYNC_TAG="sync_off" ;;
     esac
 
+    local EXECUTE="./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL $MAX_DURATION $SYNC"
+    echo $EXECUTE
+
+    if { [ -f success.log ] && grep -Fxq "$EXECUTE" success.log; } || \
+       { [ -f fail.log ] && grep -Fxq "$EXECUTE" fail.log; }; then
+        echo "Skipping (already in success.log or fail.log): $EXECUTE"
+        return 0
+    fi
+
     # create repart_kv_storage directory in each path
     # stop if directory already exists
     for p in "${PATHS[@]}"; do
@@ -59,30 +68,43 @@ function run_and_move_metrics {
         mkdir -p "${p}/repart_kv_storage" || true
     done
 
-    local EXECUTE="./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL $MAX_DURATION $SYNC"
-    echo $EXECUTE
-
-
     local BASENAME=${WORKLOAD}__${W}__${KV_STORAGE_TYPE}__${PARTITIONS}__${STORAGE_ENGINE}__${NUMBER_OF_PATHS}__${REPARTITIONING_INTERVAL}__${THINKING_TIME}__${SYNC_TAG}
     
     # Create results folder if it doesn't exist
     mkdir -p results
 
-    #try run the experiment
-    ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL $MAX_DURATION $SYNC > "results/${BASENAME}(${TEST_NUMBER}).log"
-    
-    if [ $? -ne 0 ]; then
-        echo "Error: experiment failed"
-        exit 1
-    fi
+    # Run the experiment: 1 try + 3 retries (4 attempts total).
+    local attempt=1
+    local max_attempts=1
+    local experiment_succeeded=0
+    while [ "$attempt" -le "$max_attempts" ]; do
+        if ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL $MAX_DURATION $SYNC > "results/${BASENAME}(${TEST_NUMBER}).log"; then
+            experiment_succeeded=1
+            break
+        fi
+        if [ "$attempt" -eq "$max_attempts" ]; then
+            echo "Warning: experiment failed after $max_attempts attempts"
+            : > "results/${BASENAME}(${TEST_NUMBER}).log"
+            rm -f "${BASENAME}.csv" "${BASENAME}__latency.csv"
+            break
+        fi
+        echo "Warning: attempt $attempt failed, retrying ($((max_attempts - attempt)) attempts remaining)..."
+        attempt=$((attempt + 1))
+    done
 
     #deletes directories repart_kv_storage in each path
     for p in "${PATHS[@]}"; do
         rm -rf "$p/repart_kv_storage"
         rm -rf "$p/repart_kv_keystorage"
     done
-    mv "${BASENAME}.csv" "results/${BASENAME}(${TEST_NUMBER}).csv"
-    mv "${BASENAME}__latency.csv" "results/${BASENAME}__latency(${TEST_NUMBER}).csv"
+    if [ "$experiment_succeeded" -eq 1 ]; then
+        echo "$EXECUTE" >> success.log
+        mv "${BASENAME}.csv" "results/${BASENAME}(${TEST_NUMBER}).csv"
+        mv "${BASENAME}__latency.csv" "results/${BASENAME}__latency(${TEST_NUMBER}).csv"
+    else
+        echo "$EXECUTE" >> fail.log
+        rm -f "${BASENAME}.csv" "${BASENAME}__latency.csv"
+    fi
 
     #echo $BASENAME
     #echo ""
@@ -222,27 +244,33 @@ done
 
 REPETITIONS=1
 
-STORAGE_ENGINES=(leveldb)
+STORAGE_ENGINES=(leveldb lmdb tkrzw_tree)
 WORKLOADS=(ycsb_a.toml)
+#TEST_WORKERS="1,4,8,12,16,24,32"
 TEST_WORKERS="1,4,8,12,16"
-THINKING_TIMES=(50000 100000 500000 1000000 5000000)
-PARTITIONS="8"
-SYNC_ON=(true)
+THINKING_TIMES=(50000)
+#THINKING_TIMES=(5000000) # 5ms (if operations are instant, then it would at most 200ops*threads/second)
+PARTITIONS="1,8,16,32,64"
+SYNC_ON=(false)
 
 # Explicit list matching _hard_experiment_type_enabled / run_hard_experiments docs;
 # pass this array name as arg 8 to run_experiment_set to run every variant.
-ALL_HARD_EXPERIMENT_TYPES=(engine lock_stripping partitioned repartitioning)
+ALL_HARD_EXPERIMENT_TYPES=(engine partitioned repartitioning lock_stripping)
 
 MAX_DURATION_SEC=30
-HARD_REPART_INTERVAL_MS=10000
+HARD_REPART_INTERVAL_MS=5000 #3s
 
-run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES
+#run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES
 
+THINKING_TIMES=(5000)
 WORKLOADS=(ycsb_d.toml)
 
 #run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES
 
-WORKLOADS=(ycsb_e.toml)
-THINKING_TIMES=(5000)
+WORKLOADS=(ycsb_b.toml)
 
 #run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES
+
+WORKLOADS=(ycsb_e.toml)
+
+run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES

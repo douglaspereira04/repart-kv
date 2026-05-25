@@ -6,9 +6,11 @@
 enum class Type {
     READ,
     WRITE,
+    ASYNC_WRITE,
     SCAN,
     DONE,
     SYNC,
+    PARTITION_FLUSH,
     DUMMY
 };
 
@@ -23,8 +25,7 @@ public:
     Operation(std::string *key, Type type) :
         type_(type), key_(key), status_(Status::PENDING) {}
 
-    // Destructor (default)
-    ~Operation() = default;
+    virtual ~Operation() = default;
 
     // Copy constructor and assignment operator are deleted
     // to prevent copying of Operation objects

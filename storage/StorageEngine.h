@@ -26,6 +26,11 @@
  * Derived classes must implement:
  * - read_impl(const std::string& key, std::string& value) const
  * - write_impl(const std::string& key, const std::string& value)
+ * - async_write_impl(const std::string& key, const std::string& value):
+ *       fast / relaxed persistence path regardless of SYNC; used for bulk
+ * preload
+ * - force_sync_impl(): Durably flush persisted state (noop for pure in-memory
+ * backends)
  * - remove_impl(const std::string& key, std::string& removed_value)
  * - scan_impl(const std::string& initial_key_prefix, size_t limit,
  *   std::vector<std::pair<std::string, std::string>>& results) const
@@ -79,6 +84,26 @@ public:
         Derived *derived = static_cast<Derived *>(this);
         derived->operation_count_.fetch_add(1, std::memory_order_relaxed);
         return derived->write_impl(key, value);
+    }
+
+    /**
+     * @brief Append or update without forcing per-call durable sync semantics
+     *        of SYNC=true engines (relaxed/fast path suitable for preload).
+     *        Call force_sync() after the batch when durability is required.
+     */
+    Status async_write(const std::string &key, const std::string &value) {
+        Derived *derived = static_cast<Derived *>(this);
+        derived->operation_count_.fetch_add(1, std::memory_order_relaxed);
+        return derived->async_write_impl(key, value);
+    }
+
+    /**
+     * @brief Flush persisted data to stable storage where applicable (hard
+     * sync).
+     */
+    Status force_sync() {
+        Derived *derived = static_cast<Derived *>(this);
+        return derived->force_sync_impl();
     }
 
     /**

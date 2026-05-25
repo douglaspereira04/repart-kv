@@ -220,6 +220,43 @@ public:
         return status;
     }
 
+    Status async_write_impl(const std::string &key, const std::string &value) {
+        key_map_lock_.lock();
+
+        size_t partition_idx;
+        size_t next_partition_idx = hash_func_(key) % partition_count_;
+        partition_map_.get_or_insert(key, next_partition_idx, partition_idx);
+
+        partition_locks_[partition_idx]->lock();
+
+        key_map_lock_.unlock();
+
+        if (enable_tracking_) {
+            tracker_.update(key);
+        }
+
+        Status status = storage_.async_write(key, value);
+
+        partition_locks_[partition_idx]->unlock();
+        return status;
+    }
+
+    Status force_sync_impl() {
+        std::vector<size_t> order(partition_count_);
+        for (size_t i = 0; i < partition_count_; ++i) {
+            order[i] = i;
+        }
+        std::sort(order.begin(), order.end());
+        for (size_t partition_idx : order) {
+            partition_locks_[partition_idx]->lock();
+        }
+        Status st = storage_.force_sync();
+        for (size_t i = order.size(); i > 0; --i) {
+            partition_locks_[order[i - 1]]->unlock();
+        }
+        return st;
+    }
+
     /**
      * @brief Scan for key-value pairs starting with a given prefix
      * @param initial_key_prefix The initial key prefix to search for

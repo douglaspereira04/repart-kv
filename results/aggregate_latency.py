@@ -8,9 +8,9 @@ from collections import defaultdict
 
 import numpy as np
 
-# Sample 1/50 of values for faster aggregation (mod 50 == CHOSEN yields ~2% sample)
-SAMPLE_MOD = 1000
-SAMPLE_REMAINDER = 0  # include value when rand % 50 == 0
+# SAMPLE_MOD > 1 samples every SAMPLE_MOD-th row (for speed); 1 disables sampling (use all rows)
+SAMPLE_MOD = 1
+SAMPLE_REMAINDER = 0
 
 
 def parse_latency_filename(filename):
