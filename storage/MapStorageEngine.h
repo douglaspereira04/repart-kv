@@ -132,6 +132,38 @@ public:
     }
 
     /**
+     * @brief Scan and append key-value pairs to existing results
+     * @param key_start The starting key (returns keys >= key_start)
+     * @param limit Maximum number of key-value pairs to return
+     * @param results Reference to append scan results to (existing entries are
+     *        preserved)
+     * @return Status code indicating the result of the operation
+     */
+    Status
+    scan_append(const std::string &key_start, size_t limit,
+                std::vector<std::pair<std::string, std::string>> &results) {
+
+        lock_.lock_shared();
+        // Use lower_bound to find the first key >= key_prefix
+        auto it = storage_.lower_bound(key_start);
+
+        size_t i = 0;
+        while (it != storage_.end() && i < limit) {
+            results.emplace_back(it->first, it->second);
+            ++i;
+            ++it;
+        }
+
+        if (i == 0) {
+            lock_.unlock_shared();
+            return Status::NOT_FOUND;
+        }
+
+        lock_.unlock_shared();
+        return Status::SUCCESS;
+    }
+
+    /**
      * @brief std::map scan iterator for key lookups
      *
      * Provides the StorageEngineIterator interface with shared locking for

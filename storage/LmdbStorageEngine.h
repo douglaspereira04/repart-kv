@@ -359,6 +359,76 @@ public:
     }
 
     /**
+     * @brief Scan and append key-value pairs to existing results
+     */
+    Status
+    scan_append(const std::string &key_start, size_t limit,
+                std::vector<std::pair<std::string, std::string>> &results) {
+        if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+
+        MDB_txn *txn;
+        MDB_cursor *cursor;
+        MDB_val mdb_key;
+        MDB_val mdb_value;
+
+        int rc = mdb_txn_begin(env_, nullptr, MDB_RDONLY, &txn);
+        if (rc != 0) {
+            return Status::ERROR;
+        }
+
+        rc = mdb_cursor_open(txn, dbi_, &cursor);
+        if (rc != 0) {
+            mdb_txn_abort(txn);
+            return Status::ERROR;
+        }
+
+        // Set the cursor to the first key >= initial_key_prefix
+        if (key_start.empty()) {
+            // If prefix is empty, start from the very beginning of the database
+            rc = mdb_cursor_get(cursor, &mdb_key, &mdb_value, MDB_FIRST);
+        } else {
+            // Use MDB_SET_RANGE to find first key >= initial_key_prefix
+            mdb_key.mv_size = key_start.size();
+            mdb_key.mv_data = const_cast<void *>(
+                static_cast<const void *>(key_start.c_str()));
+
+            rc = mdb_cursor_get(cursor, &mdb_key, &mdb_value, MDB_SET_RANGE);
+        }
+        size_t i = 0;
+        if (rc == MDB_SUCCESS) {
+            // Add the first result
+            std::string key(reinterpret_cast<char *>(mdb_key.mv_data),
+                            mdb_key.mv_size);
+            std::string value(reinterpret_cast<char *>(mdb_value.mv_data),
+                              mdb_value.mv_size);
+            i++;
+            results.emplace_back(key, value);
+
+            // Continue iterating
+            while (i < limit && mdb_cursor_get(cursor, &mdb_key, &mdb_value,
+                                               MDB_NEXT) == 0) {
+                key = std::string(reinterpret_cast<char *>(mdb_key.mv_data),
+                                  mdb_key.mv_size);
+                value = std::string(reinterpret_cast<char *>(mdb_value.mv_data),
+                                    mdb_value.mv_size);
+                i++;
+                results.emplace_back(key, value);
+            }
+        }
+
+        mdb_cursor_close(cursor);
+        mdb_txn_abort(txn);
+
+        if (i == 0) {
+            return Status::NOT_FOUND;
+        }
+
+        return Status::SUCCESS;
+    }
+
+    /**
      * @brief Check if the database is open
      * @return true if open, false otherwise
      */

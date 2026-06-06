@@ -5,11 +5,15 @@
 # Uses aggregated_latency_latency_average (from per-rep latency_median_ns/latency_p95_ns).
 #
 # Usage:
-#   Rscript generate_throughput_latency_by_thinking_time_charts_latency_average.R [input_path] [output_path]
+#   Rscript generate_throughput_latency_by_thinking_time_charts_latency_average.R [input_path] [output_path] [max_y] [max_x] [width] [height] [show_titles]
 #
 # Arguments:
 #   input_path:  Directory (default: ./aggregated_latency_latency_average)
 #   output_path: Directory (default: ./charts/throughput_latency_by_thinking_time_latency_average)
+#   max_y:       Maximum Y-axis value; 0 = automatic (default: 0)
+#   max_x:       Maximum X-axis value; 0 = automatic (default: 0)
+#   width:       Chart width in pixels; 0 = 3600 (default: 0)
+#   height:      Chart height in pixels; 0 = 1800 (default: 0)
 #
 # Creates two charts per (workload, storage_engine, thinking_time, partition setting):
 #   - throughput_latency_median: X=throughput, Y=latency median
@@ -28,8 +32,13 @@ suppressPackageStartupMessages({
 source("chart_partition_utils.R")
 
 args <- commandArgs(trailingOnly = TRUE)
-input_path <- if (length(args) >= 1) args[1] else "./aggregated_latency_latency_average"
-output_path <- if (length(args) >= 2) args[2] else "./charts/throughput_latency_by_thinking_time_latency_average"
+chart_opts <- parse_chart_cli_args(
+  args,
+  default_input = "./aggregated_latency_latency_average",
+  default_output = "./charts/throughput_latency_by_thinking_time_latency_average"
+)
+input_path <- chart_opts$input_path
+output_path <- chart_opts$output_path
 
 if (!dir.exists(input_path)) {
   stop(paste("Error: Input path '", input_path, "' is not a directory", sep = ""))
@@ -42,6 +51,9 @@ if (length(csv_files) == 0) {
 }
 
 cat(paste("Found", length(csv_files), "aggregated latency CSV file(s)\n"))
+
+clear_rocksdb_engine_cache()
+
 dir.create(output_path, showWarnings = FALSE, recursive = TRUE)
 
 for (csv_file in csv_files) {
@@ -69,6 +81,7 @@ for (csv_file in csv_files) {
   thinking_times <- sort(unique(data$thinking_time))
   safe_workload <- str_replace_all(workload, "[^\\w\\-_]", "_")
   safe_engine <- str_replace_all(storage_engine, "[^\\w\\-_]", "_")
+  rocksdb_engine_rows <- get_rocksdb_engine_rows(input_path, workload, sync_mode)
 
   for (job in partition_chart_jobs(data)) {
     partition_setting <- job$setting
@@ -79,6 +92,9 @@ for (csv_file in csv_files) {
 
     for (think_time in thinking_times) {
       subset_data <- chart_data %>% filter(thinking_time == think_time)
+      subset_data <- append_rocksdb_baseline_rows(
+        subset_data, rocksdb_engine_rows, storage_engine, think_time
+      )
       if (nrow(subset_data) == 0) next
 
       subset_data$line_label <- make_storage_type_label(subset_data)
@@ -102,49 +118,43 @@ for (csv_file in csv_files) {
                                      group = line_label)) +
           geom_path(linewidth = 1.2, alpha = 0.8) +
           geom_point(size = 4, alpha = 0.8) +
-          geom_text(aes(label = workers), vjust = -0.5, size = 3.5, show.legend = FALSE) +
+          geom_text(aes(label = workers), vjust = -0.5, size = chart_dot_label_size(), show.legend = FALSE) +
           labs(
             x = "Thousand Operations per Second",
             y = y_label,
             title = paste("Throughput vs Latency (", if (metric == "median") "Median" else "95th pctl", "):", workload, "-", storage_engine),
             subtitle = partition_chart_subtitle(
               partition_setting, sync_mode,
-              paste("Thinking time:", think_time, "ns | Points = worker counts")
+              paste("Thinking time:", think_time, "ns | Points = worker counts"),
+              storage_engine
             ),
             color = "Configuration",
             linetype = "Configuration",
             shape = "Configuration"
           ) +
-          theme_minimal() +
-          theme(
-            plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
-            plot.subtitle = element_text(size = 14, hjust = 0.5),
-            axis.title = element_text(size = 16),
-            axis.text = element_text(size = 14),
-            legend.title = element_text(size = 14, face = "bold"),
-            legend.text = element_text(size = 12),
-            legend.position = "right",
-            panel.grid.major = element_line(color = "gray90", linewidth = 0.5),
-            panel.grid.minor = element_line(color = "gray95", linewidth = 0.25)
-          ) +
+          chart_theme() +
           scale_color_brewer(palette = "Set1") +
           scale_linetype_manual(values = c("solid", "dashed", "dotted", "dotdash", "longdash", "twodash", "11", "22", "44")) +
           scale_shape_manual(values = c(16, 17, 18, 15, 3, 4, 8, 1, 2)) +
           scale_x_continuous(
             expand = expansion(mult = c(0.05, 0.05)),
+            limits = x_axis_limits(chart_opts$max_x),
             breaks = pretty_breaks(n = 10)
           ) +
           scale_y_continuous(
             expand = expansion(mult = c(0, 0.15)),
-            limits = c(0, NA),
+            limits = y_axis_limits(chart_opts$max_y),
             breaks = pretty_breaks(n = 10)
           )
+
+        p <- add_coord_axis_limits(p, chart_opts)
+        p <- apply_chart_titles(p, chart_opts)
 
         output_file <- file.path(
           output_path,
           paste(c(safe_workload, safe_engine, think_time, sync_mode, p_parts, "throughput", metric_suffix, "png"), collapse = ".")
         )
-        ggsave(output_file, plot = p, width = 12, height = 6, dpi = 300, bg = "white")
+        ggsave_chart(output_file, p, chart_opts)
         cat(paste("Generated chart:", output_file, "\n"))
       }
     }

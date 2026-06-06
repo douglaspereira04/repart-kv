@@ -31,6 +31,7 @@
 #include "storage/TkrzwHashStorageEngine.h"
 #include "storage/LmdbStorageEngine.h"
 #include "storage/LevelDBStorageEngine.h"
+#include "storage/RocksDBStorageEngine.h"
 #include "storage/MapStorageEngine.h"
 #include "storage/TbbStorageEngine.h"
 #include "keystorage/TkrzwTreeKeyStorage.h"
@@ -430,101 +431,84 @@ void metrics_loop(const std::vector<size_t> &executed_counts,
  * Load phase writes use async_write followed by force_sync after the LOADING
  * loop so durable backends amortize persistence.
  */
-template <typename StorageType> void
-execute_preload_operation(const workload::Operation &op, StorageType &storage) {
-    switch (op.type) {
-        case workload::OperationType::READ: {
+template <typename StorageType>
+void execute_preload_operation(const loadgen::types::Type &type,
+                               const std::string &key, const std::string &value,
+                               size_t limit, StorageType &storage) {
+    switch (type) {
+        case loadgen::types::Type::READ: {
             std::string value;
-            Status status = storage.read(op.key, value);
+            Status status = storage.read(key, value);
             if (status != Status::SUCCESS) {
-                std::cerr << "Error: Failed to read key: " << op.key
-                          << std::endl;
+                std::cerr << "Error: Failed to read key: " << key << std::endl;
                 exit(1);
             }
             break;
         }
-        case workload::OperationType::WRITE: {
+        case loadgen::types::Type::WRITE: {
             const std::string *value_ptr =
-                op.value.empty() ? &workload::DEFAULT_VALUE : &op.value;
-            Status status = storage.async_write(op.key, *value_ptr);
+                value.empty() ? &workload::DEFAULT_VALUE : &value;
+            Status status = storage.async_write(key, *value_ptr);
             if (status != Status::SUCCESS) {
-                std::cerr << "Error: Failed preload write key: " << op.key
+                std::cerr << "Error: Failed preload write key: " << key
                           << std::endl;
                 exit(1);
             }
             break;
         }
-        case workload::OperationType::SCAN: {
+        case loadgen::types::Type::SCAN: {
             std::vector<std::pair<std::string, std::string>> results;
-            Status status = storage.scan(op.key, op.limit, results);
+            Status status = storage.scan(key, limit, results);
             if (status != Status::SUCCESS) {
-                std::cerr << "Error: Failed to scan key: " << op.key
-                          << std::endl;
+                std::cerr << "Error: Failed to scan key: " << key << std::endl;
                 exit(1);
             }
             break;
+        }
+        default: {
+            std::cerr << "Error: Invalid operation type" << std::endl;
+            exit(1);
         }
     }
 }
 
 template <typename StorageType>
-void execute_operation(const workload::Operation &op, StorageType &storage) {
-    switch (op.type) {
-        case workload::OperationType::READ: {
-            std::string value;
-            Status status = storage.read(op.key, value);
-            if (status != Status::SUCCESS) {
-                std::cerr << "Error: Failed to read key: " << op.key
-                          << std::endl;
-                exit(1);
-            }
-            break;
-        }
-        case workload::OperationType::WRITE: {
-            const std::string *value_ptr =
-                op.value.empty() ? &workload::DEFAULT_VALUE : &op.value;
-            Status status = storage.write(op.key, *value_ptr);
-            if (status != Status::SUCCESS) {
-                std::cerr << "Error: Failed to write key: " << op.key
-                          << std::endl;
-                exit(1);
-            }
-            break;
-        }
-        case workload::OperationType::SCAN: {
-            std::vector<std::pair<std::string, std::string>> results;
-            Status status = storage.scan(op.key, op.limit, results);
-            if (status != Status::SUCCESS) {
-                std::cerr << "Error: Failed to scan key: " << op.key
-                          << std::endl;
-                exit(1);
-            }
-            break;
-        }
-    }
-}
-
-static workload::Operation
-make_operation_from_request(loadgen::types::Type type, long key,
-                            const std::string &value, long scan_size) {
-    std::string key_str = std::to_string(key);
+void execute_operation(const loadgen::types::Type &type, const std::string &key,
+                       const std::string &value, size_t limit,
+                       StorageType &storage) {
     switch (type) {
         case loadgen::types::Type::READ: {
-            return workload::Operation(workload::OperationType::READ, key_str);
+            std::string value;
+            Status status = storage.read(key, value);
+            if (status != Status::SUCCESS) {
+                std::cerr << "Error: Failed to read key: " << key << std::endl;
+                exit(1);
+            }
+            break;
         }
         case loadgen::types::Type::WRITE: {
-            workload::Operation operation(workload::OperationType::WRITE,
-                                          key_str);
-            operation.value = value;
-            return operation;
+            const std::string *value_ptr =
+                value.empty() ? &workload::DEFAULT_VALUE : &value;
+            Status status = storage.write(key, *value_ptr);
+            if (status != Status::SUCCESS) {
+                std::cerr << "Error: Failed to write key: " << key << std::endl;
+                exit(1);
+            }
+            break;
         }
         case loadgen::types::Type::SCAN: {
-            size_t limit = scan_size < 0 ? 0 : static_cast<size_t>(scan_size);
-            return workload::Operation(workload::OperationType::SCAN, key_str,
-                                       limit);
+            std::vector<std::pair<std::string, std::string>> results;
+            Status status = storage.scan(key, limit, results);
+            if (status != Status::SUCCESS) {
+                std::cerr << "Error: Failed to scan key: " << key << std::endl;
+                exit(1);
+            }
+            break;
         }
-        default:
-            return workload::Operation(workload::OperationType::READ, key_str);
+        default: {
+            std::cerr << "Error: Invalid operation type" << std::endl;
+            exit(1);
+        }
     }
 }
 
@@ -544,24 +528,12 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
                      std::barrier<> &start_barrier) {
     loadgen::types::Type type;
     long key;
+    std::string string_key;
     std::string value;
     long scan_size;
 
-    if (generator.current_phase() ==
-        workload::RequestGenerator::Phase::LOADING) {
-        generator.skip_current_phase();
-    }
-
     assert(generator.current_phase() ==
            workload::RequestGenerator::Phase::OPERATIONS);
-    std::vector<workload::Operation> operations;
-    workload::RequestGenerator::Phase phase =
-        generator.next(type, key, value, scan_size);
-    while (phase == workload::RequestGenerator::Phase::OPERATIONS) {
-        operations.push_back(
-            make_operation_from_request(type, key, value, scan_size));
-        phase = generator.next(type, key, value, scan_size);
-    }
 
     start_barrier.arrive_and_wait();
 
@@ -571,12 +543,16 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
     std::mt19937 latency_store_chance_rng(
         static_cast<std::mt19937::result_type>(worker_id + THINKING_SEED + 1));
 
+    workload::RequestGenerator::Phase phase =
+        generator.next(type, key, value, scan_size);
+    string_key = std::to_string(key);
+
     if (THINKING_TIME.count() > 0) {
         std::exponential_distribution<double> thinking_dist(
             1.0 / static_cast<double>(THINKING_TIME.count()));
-        for (const auto &operation : operations) {
+        while (phase == workload::RequestGenerator::Phase::OPERATIONS) {
             auto op_start = std::chrono::steady_clock::now();
-            execute_operation(operation, storage);
+            execute_operation(type, string_key, value, scan_size, storage);
             auto op_end = std::chrono::steady_clock::now();
             executed_counts[worker_id]++;
             double delay_ns = thinking_dist(rng);
@@ -589,13 +565,15 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
                 break;
             }
             auto target = std::chrono::duration<double, std::nano>(delay_ns);
+            phase = generator.next(type, key, value, scan_size);
+            string_key = std::to_string(key);
             while (std::chrono::steady_clock::now() - op_end < target) {
             }
         }
     } else {
-        for (const auto &operation : operations) {
+        while (phase == workload::RequestGenerator::Phase::OPERATIONS) {
             auto op_start = std::chrono::steady_clock::now();
-            execute_operation(operation, storage);
+            execute_operation(type, string_key, value, scan_size, storage);
             auto op_end = std::chrono::steady_clock::now();
             executed_counts[worker_id]++;
             if (latency_store_chance_dist(latency_store_chance_rng) < 5) {
@@ -606,6 +584,8 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
             if (!RUNNING[worker_id]) {
                 break;
             }
+            phase = generator.next(type, key, value, scan_size);
+            string_key = std::to_string(key);
         }
     }
 
@@ -614,10 +594,10 @@ void worker_function(size_t worker_id, workload::RequestGenerator &generator,
 
 // Template function to run workload with any RepartitioningKeyValueStorage
 // implementation
-template <typename StorageType> void run_workload_with_storage(
-    std::vector<std::unique_ptr<workload::RequestGenerator>> &generators,
-    size_t partition_count, size_t test_workers,
-    const std::string &storage_type_name) {
+template <typename StorageType>
+void run_workload_with_storage(workload::RequestGenerator &generator,
+                               size_t partition_count, size_t test_workers,
+                               const std::string &storage_type_name) {
     // Create storage instance
     std::cout << "\n=== Initializing Storage ===" << std::endl;
 
@@ -695,20 +675,19 @@ template <typename StorageType> void run_workload_with_storage(
     std::cout << "Preload: executing preload operations... " << std::flush;
     size_t preload = 0;
 
-    auto &primary_generator = generators[0];
-
     loadgen::types::Type type;
     long key;
     std::string value;
     long scan_size;
+    std::string string_key;
     workload::RequestGenerator::Phase phase =
-        primary_generator->next(type, key, value, scan_size);
+        generator.next(type, key, value, scan_size);
+    string_key = std::to_string(key);
     while (phase == workload::RequestGenerator::Phase::LOADING) {
-        auto operation =
-            make_operation_from_request(type, key, value, scan_size);
-        execute_preload_operation(operation, storage);
+        execute_preload_operation(type, string_key, value, scan_size, storage);
         preload++;
-        phase = primary_generator->next(type, key, value, scan_size);
+        phase = generator.next(type, key, value, scan_size);
+        string_key = std::to_string(key);
     }
 
     if (preload > 0) {
@@ -719,7 +698,7 @@ template <typename StorageType> void run_workload_with_storage(
         }
     }
 
-    assert(primary_generator->current_phase() ==
+    assert(generator.current_phase() ==
            workload::RequestGenerator::Phase::OPERATIONS);
     std::cout << " [DONE]" << std::endl;
     std::barrier start_barrier(test_workers + 2);
@@ -737,7 +716,7 @@ template <typename StorageType> void run_workload_with_storage(
 
     for (size_t i = 0; i < test_workers; ++i) {
         worker_threads.emplace_back(worker_function<StorageType>, i,
-                                    std::ref(*generators[i]), std::ref(storage),
+                                    std::ref(generator), std::ref(storage),
                                     std::ref(executed_counts),
                                     std::ref(start_barrier));
     }
@@ -827,9 +806,8 @@ template <typename StorageType> void run_workload_with_storage(
  */
 template <template <bool> class Engine, bool StorageSync,
           template <typename> class OrderedKeyStorageType>
-void run_workload_for_engine_template(
-    std::vector<std::unique_ptr<workload::RequestGenerator>> &generators,
-    const char *engine_metrics_name) {
+void run_workload_for_engine_template(workload::RequestGenerator &generator,
+                                      const char *engine_metrics_name) {
     const std::string lock_stripping_label =
         std::string("LockStrippingKeyValueStorage<") + engine_metrics_name +
         (StorageSync ? ", true>" : ", false>");
@@ -838,20 +816,20 @@ void run_workload_for_engine_template(
             HardRepartitioningKeyValueStorage<Engine, StorageSync,
                                               OrderedKeyStorageType>;
         run_workload_with_storage<StorageType>(
-            generators, PARTITION_COUNT, TEST_WORKERS,
+            generator, PARTITION_COUNT, TEST_WORKERS,
             "HardRepartitioningKeyValueStorage");
     } else if (STORAGE_TYPE == "soft") {
         using StorageType = SoftRepartitioningKeyValueStorage<
             Engine, StorageSync, OrderedKeyStorageType, OrderedKeyStorageType>;
         run_workload_with_storage<StorageType>(
-            generators, PARTITION_COUNT, TEST_WORKERS,
+            generator, PARTITION_COUNT, TEST_WORKERS,
             "SoftRepartitioningKeyValueStorage");
     } else if (STORAGE_TYPE == "threaded") {
         using StorageType =
             SoftThreadedRepartitioningKeyValueStorage<Engine, StorageSync,
                                                       OrderedKeyStorageType>;
         run_workload_with_storage<StorageType>(
-            generators, PARTITION_COUNT, TEST_WORKERS,
+            generator, PARTITION_COUNT, TEST_WORKERS,
             "SoftThreadedRepartitioningKeyValueStorage");
     } else if (STORAGE_TYPE == "hard_threaded") {
         using StorageType =
@@ -859,62 +837,64 @@ void run_workload_for_engine_template(
                                                       OrderedKeyStorageType,
                                                       UnorderedDenseKeyStorage>;
         run_workload_with_storage<StorageType>(
-            generators, PARTITION_COUNT, TEST_WORKERS,
+            generator, PARTITION_COUNT, TEST_WORKERS,
             "HardThreadedRepartitioningKeyValueStorage");
     } else if (STORAGE_TYPE == "engine") {
         using StorageType = Engine<StorageSync>;
         run_workload_with_storage<StorageType>(
-            generators, PARTITION_COUNT, TEST_WORKERS, engine_metrics_name);
+            generator, PARTITION_COUNT, TEST_WORKERS, engine_metrics_name);
     } else if (STORAGE_TYPE == "lock_stripping") {
         using StorageType = LockStrippingKeyValueStorage<Engine, StorageSync>;
         run_workload_with_storage<StorageType>(
-            generators, PARTITION_COUNT, TEST_WORKERS, lock_stripping_label);
+            generator, PARTITION_COUNT, TEST_WORKERS, lock_stripping_label);
     }
 }
 
 template <template <bool> class Engine,
           template <typename> class OrderedKeyStorageType>
 void run_workload_for_engine_with_cli_sync(
-    std::vector<std::unique_ptr<workload::RequestGenerator>> &generators,
-    const char *engine_metrics_name) {
+    workload::RequestGenerator &generator, const char *engine_metrics_name) {
     if (STORAGE_SYNC) {
         run_workload_for_engine_template<Engine, true, OrderedKeyStorageType>(
-            generators, engine_metrics_name);
+            generator, engine_metrics_name);
     } else {
         run_workload_for_engine_template<Engine, false, OrderedKeyStorageType>(
-            generators, engine_metrics_name);
+            generator, engine_metrics_name);
     }
 }
 
 /**
  * @brief Helper function to execute workload with storage engine configuration
  */
-void execute_with_storage_config(
-    std::vector<std::unique_ptr<workload::RequestGenerator>> &generators) {
+void execute_with_storage_config(workload::RequestGenerator &generator) {
     if (STORAGE_ENGINE == "tkrzw_tree") {
         run_workload_for_engine_with_cli_sync<TkrzwTreeStorageEngine,
                                               TkrzwTreeKeyStorage>(
-            generators, "TkrzwTreeStorageEngine");
+            generator, "TkrzwTreeStorageEngine");
     } else if (STORAGE_ENGINE == "tkrzw_hash") {
         run_workload_for_engine_with_cli_sync<TkrzwHashStorageEngine,
                                               TkrzwHashKeyStorage>(
-            generators, "TkrzwHashStorageEngine");
+            generator, "TkrzwHashStorageEngine");
     } else if (STORAGE_ENGINE == "lmdb") {
         run_workload_for_engine_with_cli_sync<LmdbStorageEngine,
                                               LmdbKeyStorage>(
-            generators, "LmdbStorageEngine");
+            generator, "LmdbStorageEngine");
     } else if (STORAGE_ENGINE == "leveldb") {
         run_workload_for_engine_with_cli_sync<LevelDBStorageEngine,
                                               LevelDBKeyStorage>(
-            generators, "LevelDBStorageEngine");
+            generator, "LevelDBStorageEngine");
+    } else if (STORAGE_ENGINE == "rocksdb") {
+        run_workload_for_engine_with_cli_sync<RocksDBStorageEngine,
+                                              LevelDBKeyStorage>(
+            generator, "RocksDBStorageEngine");
     } else if (STORAGE_ENGINE == "map") {
         run_workload_for_engine_with_cli_sync<MapStorageEngine,
                                               AbslBtreeKeyStorage>(
-            generators, "MapStorageEngine");
+            generator, "MapStorageEngine");
     } else if (STORAGE_ENGINE == "tbb") {
         run_workload_for_engine_with_cli_sync<TbbStorageEngine,
                                               AbslBtreeKeyStorage>(
-            generators, "TbbStorageEngine");
+            generator, "TbbStorageEngine");
     }
 }
 
@@ -942,7 +922,8 @@ void print_usage(const char *program_name) {
               << std::endl;
     std::cout << "  storage_engine   Storage engine backend: 'tkrzw_tree', "
                  "'tkrzw_hash', "
-                 "'lmdb', 'leveldb', 'map', or 'tbb' (default: tkrzw_tree)"
+                 "'lmdb', 'leveldb', 'rocksdb', 'map', or 'tbb' (default: "
+                 "tkrzw_tree)"
               << std::endl;
     std::cout
         << "  thinking_time_ns Thinking time delay in nanoseconds (default: 0)"
@@ -993,6 +974,9 @@ void print_usage(const char *program_name) {
               << std::endl;
     std::cout
         << "  leveldb         LevelDBStorageEngine (LevelDB LSM-tree storage)"
+        << std::endl;
+    std::cout
+        << "  rocksdb         RocksDBStorageEngine (RocksDB LSM-tree storage)"
         << std::endl;
     std::cout
         << "  map             MapStorageEngine (in-memory std::map storage)"
@@ -1068,10 +1052,11 @@ int run_repart_kv(int argc, char *argv[]) {
         STORAGE_ENGINE = argv[5];
         if (STORAGE_ENGINE != "tkrzw_tree" && STORAGE_ENGINE != "tkrzw_hash" &&
             STORAGE_ENGINE != "lmdb" && STORAGE_ENGINE != "leveldb" &&
-            STORAGE_ENGINE != "map" && STORAGE_ENGINE != "tbb") {
+            STORAGE_ENGINE != "rocksdb" && STORAGE_ENGINE != "map" &&
+            STORAGE_ENGINE != "tbb") {
             std::cerr
                 << "Error: storage_engine must be 'tkrzw_tree', 'tkrzw_hash', "
-                   "'lmdb', 'leveldb', 'map', or 'tbb', got: "
+                   "'lmdb', 'leveldb', 'rocksdb', 'map', or 'tbb', got: "
                 << STORAGE_ENGINE << std::endl;
             return 1;
         }
@@ -1110,9 +1095,6 @@ int run_repart_kv(int argc, char *argv[]) {
         try {
             int64_t interval_ms = std::stoll(argv[8]);
             REPARTITION_INTERVAL = std::chrono::milliseconds(interval_ms);
-            if (interval_ms == 0) {
-                TRACKING_DURATION = std::chrono::milliseconds(interval_ms);
-            }
         } catch (const std::exception &e) {
             std::cerr << "Error: Invalid repartition_interval_ms: " << argv[8]
                       << std::endl;
@@ -1149,6 +1131,17 @@ int run_repart_kv(int argc, char *argv[]) {
         }
     }
 
+    if (argc >= 12) {
+        try {
+            int64_t duration_ms = std::stoll(argv[11]);
+            TRACKING_DURATION = std::chrono::milliseconds(duration_ms);
+        } catch (const std::exception &e) {
+            std::cerr << "Error: Invalid tracking_duration_ms: " << argv[11]
+                      << std::endl;
+            return 1;
+        }
+    }
+
     std::filesystem::path config_path(LOADGEN_CONFIG_FILE);
     WORKLOAD_NAME = config_path.stem().string();
     if (WORKLOAD_NAME.empty()) {
@@ -1178,21 +1171,10 @@ int run_repart_kv(int argc, char *argv[]) {
               << "ms" << std::endl;
     std::cout << std::endl;
 
-    std::vector<std::unique_ptr<workload::RequestGenerator>> generators;
-    generators.reserve(TEST_WORKERS);
-    for (size_t worker = 0; worker < TEST_WORKERS; ++worker) {
-        auto generator = std::make_unique<workload::RequestGenerator>(
-            LOADGEN_CONFIG_FILE, false);
-        auto &config = generator->config();
-        config.operation_seed += static_cast<long>(worker);
-        config.key_seed += static_cast<long>(worker);
-        config.scan_seed += static_cast<long>(worker);
-        config.n_operations = config.n_operations / TEST_WORKERS;
-        generator->initialize();
-        generators.push_back(std::move(generator));
-    }
+    workload::RequestGenerator generator(LOADGEN_CONFIG_FILE, false);
+    generator.initialize();
 
-    size_t n_operations = generators[0]->config().n_operations * TEST_WORKERS;
+    size_t n_operations = generator.config().n_operations;
     START_TIMES = new std::chrono::steady_clock::time_point *[TEST_WORKERS];
     END_TIMES = new std::chrono::steady_clock::time_point *[TEST_WORKERS];
     TIMES_INDEX = new size_t[TEST_WORKERS];
@@ -1204,19 +1186,14 @@ int run_repart_kv(int argc, char *argv[]) {
             new std::chrono::steady_clock::time_point[n_operations];
         TIMES_INDEX[worker] = 0;
     }
-    THINKING_SEED = generators[0]->config().operation_seed;
-
-    if (generators.empty()) {
-        std::cerr << "Error: No request generators created" << std::endl;
-        return 1;
-    }
+    THINKING_SEED = generator.config().operation_seed;
 
     RUNNING = new bool[TEST_WORKERS];
     for (size_t i = 0; i < TEST_WORKERS; ++i) {
         RUNNING[i] = true;
     }
 
-    const auto &summary_config = generators.front()->config();
+    const auto &summary_config = generator.config();
     std::cout << "Configured workload summary:" << std::endl;
     std::cout << "  Load records: " << summary_config.n_records << std::endl;
     std::cout << "  Operation phase: "
@@ -1234,7 +1211,7 @@ int run_repart_kv(int argc, char *argv[]) {
               << summary_config.min_scan_length << "-"
               << summary_config.max_scan_length << "]" << std::endl;
 
-    execute_with_storage_config(generators);
+    execute_with_storage_config(generator);
 
     return 0;
 }

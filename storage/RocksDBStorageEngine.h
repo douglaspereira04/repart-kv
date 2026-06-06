@@ -2,30 +2,28 @@
 
 #include "StorageEngineIterator.h"
 #include "StorageEngine.h"
-#include <iostream>
-#include <leveldb/db.h>
-#include <leveldb/options.h>
-#include <leveldb/status.h>
-#include <leveldb/write_batch.h>
+#include <rocksdb/db.h>
+#include <rocksdb/options.h>
+#include <rocksdb/status.h>
+#include <rocksdb/write_batch.h>
 #include <string>
 #include <vector>
 #include <memory>
-#include <ctime>
 #include <atomic>
 #include <chrono>
 #include <filesystem>
 
 /**
- * @brief LevelDB-based implementation of StorageEngine
+ * @brief RocksDB-based implementation of StorageEngine
  *
- * Uses Google's LevelDB for sorted key-value storage. LevelDB is an LSM-tree
- * based key-value store that provides:
+ * Uses Meta's RocksDB for sorted key-value storage. RocksDB is an LSM-tree
+ * based key-value store (LevelDB fork) that provides:
  * - Keys stored in sorted order (lexicographic)
  * - Efficient range queries and prefix scans
  * - Good write throughput with batching
  * - Persistence to disk
  *
- * Requires C++20 and libleveldb-dev to be installed.
+ * Requires C++20 and librocksdb-dev to be installed.
  *
  * Key features:
  * - Keys are stored in sorted order
@@ -37,23 +35,23 @@
  *
  * @tparam SYNC When true, all writes use WriteOptions.sync for durability.
  */
-template <bool SYNC = false> class LevelDBStorageEngine
-    : public StorageEngine<LevelDBStorageEngine<SYNC>, SYNC> {
+template <bool SYNC = false> class RocksDBStorageEngine
+    : public StorageEngine<RocksDBStorageEngine<SYNC>, SYNC> {
 private:
-    std::unique_ptr<leveldb::DB> db_;
+    std::unique_ptr<rocksdb::DB> db_;
     bool is_open_;
     std::string db_path_;
     static std::atomic_int db_counter_;
     static std::string id_;
 
-    static leveldb::WriteOptions durable_write_options() {
-        leveldb::WriteOptions o;
+    static rocksdb::WriteOptions durable_write_options() {
+        rocksdb::WriteOptions o;
         o.sync = SYNC;
         return o;
     }
 
-    static leveldb::WriteOptions async_write_options() {
-        leveldb::WriteOptions o;
+    static rocksdb::WriteOptions async_write_options() {
+        rocksdb::WriteOptions o;
         o.sync = false;
         return o;
     }
@@ -64,26 +62,26 @@ public:
      * @param level The hierarchy level for this storage engine (default: 0)
      * @param path Optional path for database files (default: /tmp)
      *
-     * Note: LevelDB requires a file path. Uses a temporary directory
+     * Note: RocksDB requires a file path. Uses a temporary directory
      * for in-memory-like behavior.
      */
-    explicit LevelDBStorageEngine(size_t level = 0,
+    explicit RocksDBStorageEngine(size_t level = 0,
                                   const std::string &path = "/tmp") :
-        StorageEngine<LevelDBStorageEngine<SYNC>, SYNC>(level, path),
+        StorageEngine<RocksDBStorageEngine<SYNC>, SYNC>(level, path),
         db_(nullptr), is_open_(false) {
         std::string temp_path =
             this->path_ + std::string("/repart_kv_storage/") + id_ +
-            std::string("/leveldb_temp_") +
+            std::string("/rocksdb_temp_") +
             std::to_string(db_counter_.fetch_add(1, std::memory_order_relaxed));
         std::filesystem::create_directories(
             this->path_ + std::string("/repart_kv_storage/") + id_);
 
-        leveldb::Options options;
+        rocksdb::Options options;
         options.create_if_missing = true;
         options.error_if_exists = false;
 
-        leveldb::DB *db = nullptr;
-        leveldb::Status status = leveldb::DB::Open(options, temp_path, &db);
+        rocksdb::DB *db = nullptr;
+        rocksdb::Status status = rocksdb::DB::Open(options, temp_path, &db);
         if (status.ok() && db) {
             db_.reset(db);
             db_path_ = temp_path;
@@ -97,17 +95,17 @@ public:
      * @param level The hierarchy level for this storage engine (default: 0)
      * @param path Optional path for database files (default: /tmp)
      */
-    explicit LevelDBStorageEngine(const std::string &file_path,
+    explicit RocksDBStorageEngine(const std::string &file_path,
                                   size_t level = 0,
                                   const std::string &path = "/tmp") :
-        StorageEngine<LevelDBStorageEngine<SYNC>, SYNC>(level, path),
+        StorageEngine<RocksDBStorageEngine<SYNC>, SYNC>(level, path),
         db_(nullptr), is_open_(false), db_path_(file_path) {
 
-        leveldb::Options options;
+        rocksdb::Options options;
         options.create_if_missing = true;
 
-        leveldb::DB *db = nullptr;
-        leveldb::Status status = leveldb::DB::Open(options, file_path, &db);
+        rocksdb::DB *db = nullptr;
+        rocksdb::Status status = rocksdb::DB::Open(options, file_path, &db);
         if (status.ok() && db) {
             db_.reset(db);
             is_open_ = true;
@@ -117,7 +115,7 @@ public:
     /**
      * @brief Destructor - closes the database
      */
-    ~LevelDBStorageEngine() {
+    ~RocksDBStorageEngine() {
         if (is_open_ && db_) {
             db_.reset();
             is_open_ = false;
@@ -125,19 +123,19 @@ public:
     }
 
     // Disable copy
-    LevelDBStorageEngine(const LevelDBStorageEngine &) = delete;
-    LevelDBStorageEngine &operator=(const LevelDBStorageEngine &) = delete;
+    RocksDBStorageEngine(const RocksDBStorageEngine &) = delete;
+    RocksDBStorageEngine &operator=(const RocksDBStorageEngine &) = delete;
 
     // Enable move
-    LevelDBStorageEngine(LevelDBStorageEngine &&other) noexcept :
-        StorageEngine<LevelDBStorageEngine<SYNC>, SYNC>(other.level_,
+    RocksDBStorageEngine(RocksDBStorageEngine &&other) noexcept :
+        StorageEngine<RocksDBStorageEngine<SYNC>, SYNC>(other.level_,
                                                         other.path_),
         db_(std::move(other.db_)), is_open_(other.is_open_),
         db_path_(std::move(other.db_path_)) {
         other.is_open_ = false;
     }
 
-    LevelDBStorageEngine &operator=(LevelDBStorageEngine &&other) noexcept {
+    RocksDBStorageEngine &operator=(RocksDBStorageEngine &&other) noexcept {
         if (this != &other) {
             if (is_open_ && db_) {
                 db_.reset();
@@ -157,7 +155,7 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
-        leveldb::Status status = db_->Get(leveldb::ReadOptions(), key, &value);
+        rocksdb::Status status = db_->Get(rocksdb::ReadOptions(), key, &value);
         if (status.ok()) {
             return Status::SUCCESS;
         }
@@ -174,7 +172,7 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
-        leveldb::Status status = db_->Put(durable_write_options(), key, value);
+        rocksdb::Status status = db_->Put(durable_write_options(), key, value);
         if (status.ok()) {
             return Status::SUCCESS;
         }
@@ -185,7 +183,7 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
-        leveldb::Status status = db_->Put(async_write_options(), key, value);
+        rocksdb::Status status = db_->Put(async_write_options(), key, value);
         if (status.ok()) {
             return Status::SUCCESS;
         }
@@ -197,17 +195,17 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
-        leveldb::WriteBatch batch;
-        leveldb::WriteOptions o;
+        rocksdb::WriteBatch batch;
+        rocksdb::WriteOptions o;
         o.sync = true;
-        leveldb::Status status = db_->Write(o, &batch);
+        rocksdb::Status status = db_->Write(o, &batch);
         return status.ok() ? Status::SUCCESS : Status::ERROR;
     }
 
     /**
      * @brief Implementation: Scan for key-value pairs from a starting point
      *
-     * LevelDB maintains sorted order, making this efficient.
+     * RocksDB maintains sorted order, making this efficient.
      * Uses Seek() to go to the first key >= initial_key_prefix.
      */
     Status
@@ -220,8 +218,8 @@ public:
         results.clear();
         results.reserve(std::min(limit, static_cast<size_t>(1000)));
 
-        leveldb::ReadOptions read_options;
-        std::unique_ptr<leveldb::Iterator> iter(db_->NewIterator(read_options));
+        rocksdb::ReadOptions read_options;
+        std::unique_ptr<rocksdb::Iterator> iter(db_->NewIterator(read_options));
 
         if (initial_key_prefix.empty()) {
             iter->SeekToFirst();
@@ -254,8 +252,8 @@ public:
             return Status::ERROR;
         }
 
-        leveldb::ReadOptions read_options;
-        std::unique_ptr<leveldb::Iterator> iter(db_->NewIterator(read_options));
+        rocksdb::ReadOptions read_options;
+        std::unique_ptr<rocksdb::Iterator> iter(db_->NewIterator(read_options));
 
         if (key_start.empty()) {
             iter->SeekToFirst();
@@ -290,8 +288,8 @@ public:
         if (!is_open_ || !db_) {
             return 0;
         }
-        leveldb::ReadOptions read_options;
-        std::unique_ptr<leveldb::Iterator> iter(db_->NewIterator(read_options));
+        rocksdb::ReadOptions read_options;
+        std::unique_ptr<rocksdb::Iterator> iter(db_->NewIterator(read_options));
         int64_t n = 0;
         for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
             ++n;
@@ -307,7 +305,7 @@ public:
             return false;
         }
         if constexpr (SYNC) {
-            leveldb::WriteBatch batch;
+            rocksdb::WriteBatch batch;
             return db_->Write(durable_write_options(), &batch).ok();
         }
         return true;
@@ -320,9 +318,9 @@ public:
         if (!is_open_ || !db_) {
             return;
         }
-        leveldb::ReadOptions read_options;
-        std::unique_ptr<leveldb::Iterator> iter(db_->NewIterator(read_options));
-        leveldb::WriteBatch batch;
+        rocksdb::ReadOptions read_options;
+        std::unique_ptr<rocksdb::Iterator> iter(db_->NewIterator(read_options));
+        rocksdb::WriteBatch batch;
         for (iter->SeekToFirst(); iter->Valid(); iter->Next()) {
             batch.Delete(iter->key());
         }
@@ -336,15 +334,15 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
-        leveldb::Status get_status =
-            db_->Get(leveldb::ReadOptions(), key, &removed_value);
+        rocksdb::Status get_status =
+            db_->Get(rocksdb::ReadOptions(), key, &removed_value);
         if (get_status.IsNotFound()) {
             return Status::NOT_FOUND;
         }
         if (!get_status.ok()) {
             return Status::ERROR;
         }
-        leveldb::Status del_status = db_->Delete(durable_write_options(), key);
+        rocksdb::Status del_status = db_->Delete(durable_write_options(), key);
         if (del_status.ok()) {
             return Status::SUCCESS;
         }
@@ -352,33 +350,33 @@ public:
     }
 
     /**
-     * @brief LevelDB scan iterator for locality-optimized key lookups
+     * @brief RocksDB scan iterator for locality-optimized key lookups
      */
-    class LevelDBIterator
-        : public StorageEngineIterator<LevelDBIterator,
-                                       LevelDBStorageEngine<SYNC>> {
+    class RocksDBIterator
+        : public StorageEngineIterator<RocksDBIterator,
+                                       RocksDBStorageEngine<SYNC>> {
     private:
-        std::unique_ptr<leveldb::Iterator> iter_;
+        std::unique_ptr<rocksdb::Iterator> iter_;
 
     public:
-        explicit LevelDBIterator(LevelDBStorageEngine &engine) :
-            StorageEngineIterator<LevelDBIterator, LevelDBStorageEngine<SYNC>>(
+        explicit RocksDBIterator(RocksDBStorageEngine &engine) :
+            StorageEngineIterator<RocksDBIterator, RocksDBStorageEngine<SYNC>>(
                 engine) {
             if (engine.is_open_ && engine.db_) {
-                iter_ = std::unique_ptr<leveldb::Iterator>(
-                    engine.db_->NewIterator(leveldb::ReadOptions()));
+                iter_ = std::unique_ptr<rocksdb::Iterator>(
+                    engine.db_->NewIterator(rocksdb::ReadOptions()));
             }
         }
 
-        LevelDBIterator(const LevelDBIterator &) = delete;
-        LevelDBIterator &operator=(const LevelDBIterator &) = delete;
+        RocksDBIterator(const RocksDBIterator &) = delete;
+        RocksDBIterator &operator=(const RocksDBIterator &) = delete;
 
-        LevelDBIterator(LevelDBIterator &&other) noexcept :
-            StorageEngineIterator<LevelDBIterator, LevelDBStorageEngine<SYNC>>(
+        RocksDBIterator(RocksDBIterator &&other) noexcept :
+            StorageEngineIterator<RocksDBIterator, RocksDBStorageEngine<SYNC>>(
                 *other.engine_),
             iter_(std::move(other.iter_)) {}
 
-        LevelDBIterator &operator=(LevelDBIterator &&other) noexcept {
+        RocksDBIterator &operator=(RocksDBIterator &&other) noexcept {
             if (this != &other) {
                 this->engine_ = other.engine_;
                 iter_ = std::move(other.iter_);
@@ -386,7 +384,7 @@ public:
             return *this;
         }
 
-        ~LevelDBIterator() = default;
+        ~RocksDBIterator() = default;
 
         Status find_impl(const std::string &key, std::string &value) const {
             if (!iter_ || !this->engine_->is_open_) {
@@ -405,17 +403,17 @@ public:
     };
 
     /**
-     * @brief Implementation: create and return a LevelDB scan iterator
+     * @brief Implementation: create and return a RocksDB scan iterator
      */
-    LevelDBIterator iterator_impl() { return LevelDBIterator(*this); }
+    RocksDBIterator iterator_impl() { return RocksDBIterator(*this); }
 
-    using IteratorType = LevelDBIterator;
+    using IteratorType = RocksDBIterator;
 };
 
 // Static member definitions
-template <bool SYNC> std::atomic_int LevelDBStorageEngine<SYNC>::db_counter_ =
+template <bool SYNC> std::atomic_int RocksDBStorageEngine<SYNC>::db_counter_ =
     0;
-template <bool SYNC> std::string LevelDBStorageEngine<SYNC>::id_ =
+template <bool SYNC> std::string RocksDBStorageEngine<SYNC>::id_ =
     std::to_string(
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             std::chrono::high_resolution_clock::now().time_since_epoch())

@@ -3,11 +3,15 @@
 # Generate charts from aggregated CSV metrics files.
 #
 # Usage:
-#   Rscript generate_charts.R [input_path] [output_path]
+#   Rscript generate_charts.R [input_path] [output_path] [max_y] [max_x] [width] [height] [show_titles]
 #
 # Arguments:
 #   input_path:  Directory containing aggregated throughput CSV files (default: ./aggregated_results/throughput)
 #   output_path: Directory to save charts (default: ./charts/throughput)
+#   max_y:       Maximum Y-axis value; 0 = automatic (default: 0)
+#   max_x:       Maximum X-axis value; 0 = automatic (default: 0)
+#   width:       Chart width in pixels; 0 = 3600 (default: 0)
+#   height:      Chart height in pixels; 0 = 1800 (default: 0)
 
 suppressPackageStartupMessages({
   library(ggplot2)
@@ -18,10 +22,14 @@ suppressPackageStartupMessages({
 
 source("chart_partition_utils.R")
 
-# Parse command line arguments
 args <- commandArgs(trailingOnly = TRUE)
-input_path <- if (length(args) >= 1) args[1] else "./aggregated_results/throughput"
-output_path <- if (length(args) >= 2) args[2] else "./charts/throughput"
+chart_opts <- parse_chart_cli_args(
+  args,
+  default_input = "./aggregated_results/throughput",
+  default_output = "./charts/throughput"
+)
+input_path <- chart_opts$input_path
+output_path <- chart_opts$output_path
 
 # Validate input path
 if (!dir.exists(input_path)) {
@@ -89,38 +97,30 @@ for (csv_file in csv_files) {
           x = "Number of Workers",
           y = "Thousand Operations per Second",
           title = paste(workload, "-", storage_engine),
-          subtitle = partition_chart_subtitle(partition_setting, sync_mode, paste("Thinking time:", tt, "ns")),
+          subtitle = partition_chart_subtitle(partition_setting, sync_mode, paste("Thinking time:", tt, "ns"), storage_engine),
           color = "Storage Type",
           linetype = "Storage Type",
           shape = "Storage Type"
         ) +
-        theme_minimal() +
-        theme(
-          plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
-          plot.subtitle = element_text(size = 14, hjust = 0.5),
-          axis.title = element_text(size = 16),
-          axis.text = element_text(size = 14),
-          legend.title = element_text(size = 14, face = "bold"),
-          legend.text = element_text(size = 12),
-          legend.position = "right",
-          panel.grid.major = element_line(color = "gray90", linewidth = 0.5),
-          panel.grid.minor = element_line(color = "gray95", linewidth = 0.25)
-        ) +
+        chart_theme() +
         scale_color_brewer(palette = "Set1") +
         scale_linetype_manual(values = c("solid", "dashed", "dotted", "dotdash", "longdash", "twodash", "11", "22", "44")) +
         scale_shape_manual(values = c(16, 17, 18, 15, 3, 4, 8, 1, 2)) +
         scale_y_continuous(
           expand = expansion(mult = c(0, 0.15)),
-          limits = c(0, NA),
+          limits = y_axis_limits(chart_opts$max_y),
           breaks = pretty_breaks(n = 10)
         )
+
+      p <- add_coord_axis_limits(p, chart_opts)
+      p <- apply_chart_titles(p, chart_opts)
 
       output_file <- file.path(
         output_path,
         paste(c(safe_workload, safe_engine, tt, sync_mode, p_parts, "throughput.png"), collapse = ".")
       )
 
-      ggsave(output_file, plot = p, width = 12, height = 6, dpi = 300, bg = "white")
+      ggsave_chart(output_file, p, chart_opts)
       cat(paste("Generated chart:", output_file, "\n"))
     }
   }

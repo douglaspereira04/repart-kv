@@ -251,6 +251,48 @@ public:
     }
 
     /**
+     * @brief Scan and append key-value pairs to existing results
+     */
+    Status
+    scan_append(const std::string &key_start, size_t limit,
+                std::vector<std::pair<std::string, std::string>> &results) {
+
+        // Create an iterator
+        auto iter = db_->MakeIterator();
+
+        // For empty prefix, start from beginning; otherwise jump to prefix
+        if (key_start.empty()) {
+            iter->First();
+        } else {
+            // Jump to the first key >= initial_key_prefix (TreeDBM is sorted)
+            iter->Jump(key_start);
+        }
+
+        // Collect key-value pairs (already in sorted order, no filtering)
+        std::string key, value;
+        size_t i = 0;
+        while (i < limit) {
+            tkrzw::Status status = iter->Get(&key, &value);
+            if (status != tkrzw::Status::SUCCESS) {
+                break; // No more entries
+            }
+
+            results.emplace_back(key, value);
+            ++i;
+            // Move to next entry
+            if (iter->Next() != tkrzw::Status::SUCCESS) {
+                break;
+            }
+        }
+        if (i == 0) {
+            return Status::NOT_FOUND;
+        }
+
+        // Results are already sorted (TreeDBM maintains order)
+        return Status::SUCCESS;
+    }
+
+    /**
      * @brief Check if the database is open
      * @return true if open, false otherwise
      */

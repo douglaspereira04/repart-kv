@@ -22,7 +22,7 @@
 #include <atomic>
 #include <condition_variable>
 #include <mutex>
-
+#include <ankerl/unordered_dense.h>
 /**
  * @brief Hard repartitioning key-value storage implementation
  *
@@ -301,8 +301,12 @@ public:
         key_map_lock_.lock_shared();
         storage_map_.scan(initial_key_prefix, limit, key_index_pairs);
 
+        ankerl::unordered_dense::map<size_t, std::vector<std::string>>
+            keys_by_partition;
+
         for (const auto &[key, partition_idx] : key_index_pairs) {
             partition_bitset.set(partition_idx);
+            keys_by_partition[partition_idx].push_back(key);
         }
 
         for (size_t i = 0; i < partition_count_; ++i) {
@@ -313,32 +317,31 @@ public:
 
         key_map_lock_.unlock_shared();
 
-        std::map<size_t, IteratorType> iterators;
-        for (const auto &[key, partition_idx] : key_index_pairs) {
-            iterators.try_emplace(partition_idx,
-                                  storages_[partition_idx]->iterator());
-        }
-
         // Read values from storages
         results.reserve(key_index_pairs.size());
         Status status = Status::NOT_FOUND;
-        for (const auto &[key, partition_idx] : key_index_pairs) {
-            std::string value;
-            IteratorType &iterator = iterators.at(partition_idx);
-            status = iterator.find(key, value);
-            if (status != Status::SUCCESS) {
-                break;
+        for (size_t partition_idx = 0; partition_idx < partition_count_;
+             ++partition_idx) {
+            if (partition_bitset.test(partition_idx)) {
+                const auto &keys = keys_by_partition[partition_idx];
+
+                std::string value;
+                IteratorType iterator = storages_[partition_idx]->iterator();
+                for (const auto &key : keys) {
+                    status = iterator.find(key, value);
+                    if (status != Status::SUCCESS) {
+                        break;
+                    }
+                    results.push_back({key, value});
+                }
+                partition_locks_[partition_idx]->unlock_shared();
             }
-            results.push_back({key, value});
         }
 
-        iterators.clear();
-
-        for (size_t i = 0; i < partition_count_; ++i) {
-            if (partition_bitset.test(i)) {
-                partition_locks_[i]->unlock_shared();
-            }
-        }
+        // sorts results by key
+        std::sort(
+            results.begin(), results.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
 
         // Track key access patterns if enabled
         if (enable_tracking_) {

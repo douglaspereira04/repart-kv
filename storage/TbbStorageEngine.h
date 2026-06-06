@@ -136,6 +136,45 @@ public:
     }
 
     /**
+     * @brief Scan and append key-value pairs to existing results
+     */
+    Status
+    scan_append(const std::string &key_start, size_t limit,
+                std::vector<std::pair<std::string, std::string>> &results) {
+        // Collect all key-value pairs (concurrent_hash_map is unordered)
+        std::vector<std::pair<std::string, std::string>> all_pairs;
+        all_pairs.reserve(storage_.size());
+
+        // Iterate through the concurrent_hash_map
+        for (auto it = storage_.begin(); it != storage_.end(); ++it) {
+            all_pairs.push_back({it->first, it->second});
+        }
+
+        // Sort all pairs by key
+        std::sort(
+            all_pairs.begin(), all_pairs.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
+
+        // Find first key >= initial_key_prefix and collect up to limit
+        size_t i = 0;
+        for (const auto &pair : all_pairs) {
+            if (pair.first >= key_start) {
+                results.push_back(pair);
+                i++;
+                if (i >= limit) {
+                    break;
+                }
+            }
+        }
+
+        if (i == 0) {
+            return Status::NOT_FOUND;
+        }
+
+        return Status::SUCCESS;
+    }
+
+    /**
      * @brief Get the number of records in the storage
      * @return Number of key-value pairs
      */

@@ -5,7 +5,13 @@
 # Data points are sampled every 100ms (elapsed_s has 0.01s resolution).
 #
 # Usage:
-#   Rscript generate_disk_time_charts.R [input_path] [output_path]
+#   Rscript generate_disk_time_charts.R [input_path] [output_path] [max_y] [max_x] [width] [height] [show_titles]
+#
+# Arguments:
+#   max_y:   Maximum Y-axis value; 0 = automatic (default: 0)
+#   max_x:   Maximum X-axis value; 0 = automatic (default: 0)
+#   width:   Chart width in pixels; 0 = 3600 (default: 0)
+#   height:  Chart height in pixels; 0 = 2400 (default: 0)
 #
 
 suppressPackageStartupMessages({
@@ -17,10 +23,15 @@ suppressPackageStartupMessages({
 
 source("chart_partition_utils.R")
 
-# Parse command line arguments
 args <- commandArgs(trailingOnly = TRUE)
-input_path <- if (length(args) >= 1) args[1] else "/home/douglas/Documentos/repart-kv/results/aggregated_throughput_time"
-output_path <- if (length(args) >= 2) args[2] else "/home/douglas/Documentos/repart-kv/results/charts/disk_time"
+chart_opts <- parse_chart_cli_args(
+  args,
+  default_input = "/home/douglas/Documentos/repart-kv/results/aggregated_throughput_time",
+  default_output = "/home/douglas/Documentos/repart-kv/results/charts/disk_time",
+  default_height_px = 2400L
+)
+input_path <- chart_opts$input_path
+output_path <- chart_opts$output_path
 
 # Validate input path
 if (!dir.exists(input_path)) {
@@ -77,7 +88,7 @@ for (csv_file in csv_files) {
     chart_data$disk_mib_mean <- chart_data$disk_kb_mean / 1024
     chart_data$disk_mib_min <- chart_data$disk_kb_min / 1024
     chart_data$disk_mib_max <- chart_data$disk_kb_max / 1024
-    chart_data$label <- make_time_series_label(chart_data)
+    chart_data$label <- make_time_series_label(chart_data, storage_engine)
 
     chart_data <- chart_data %>%
       arrange(label, elapsed_s) %>%
@@ -107,42 +118,35 @@ for (csv_file in csv_files) {
         title = paste("Disk Usage over Time:", workload, "-", storage_engine),
         subtitle = partition_chart_subtitle(
           partition_setting, sync_mode,
-          paste("Workers:", num_workers, "| Thinking time:", thinking_time, "ns")
+          paste("Workers:", num_workers, "| Thinking time:", thinking_time, "ns"),
+          storage_engine
         ),
         color = "Configuration",
         fill = "Configuration"
       ) +
-      theme_minimal() +
-      theme(
-        plot.title = element_text(size = 18, face = "bold", hjust = 0.5),
-        plot.subtitle = element_text(size = 14, hjust = 0.5),
-        axis.title = element_text(size = 14),
-        axis.text = element_text(size = 12),
-        legend.title = element_text(size = 12, face = "bold"),
-        legend.text = element_text(size = 10),
-        legend.position = "bottom",
-        legend.direction = "vertical",
-        panel.grid.major = element_line(color = "gray90", linewidth = 0.5),
-        panel.grid.minor = element_line(color = "gray95", linewidth = 0.25)
-      ) +
+      chart_theme() +
       scale_color_brewer(palette = "Set1") +
       scale_fill_brewer(palette = "Set1") +
       scale_x_continuous(
         breaks = pretty_breaks(n = 10),
-        expand = expansion(mult = c(0.02, 0))
+        expand = expansion(mult = c(0.02, 0)),
+        limits = x_axis_limits(chart_opts$max_x)
       ) +
       scale_y_continuous(
         expand = expansion(mult = c(0, 0.1)),
-        limits = c(0, NA),
+        limits = y_axis_limits(chart_opts$max_y),
         breaks = pretty_breaks(n = 8)
       )
+
+    p <- add_coord_axis_limits(p, chart_opts)
+    p <- apply_chart_titles(p, chart_opts)
 
     output_file <- file.path(
       output_path,
       paste(c(workload, storage_engine, num_workers, thinking_time, sync_mode, p_parts, "disk_time.png"), collapse = ".")
     )
 
-    ggsave(output_file, plot = p, width = 12, height = 8, dpi = 300, bg = "white")
+    ggsave_chart(output_file, p, chart_opts)
     cat(paste("Generated chart:", output_file, "\n"))
   }
 }

@@ -244,6 +244,49 @@ public:
     }
 
     /**
+     * @brief Scan and append key-value pairs to existing results
+     */
+    Status
+    scan_append(const std::string &key_start, size_t limit,
+                std::vector<std::pair<std::string, std::string>> &results) {
+        // Collect all key-value pairs first (HashDBM is unordered)
+        std::vector<std::pair<std::string, std::string>> all_pairs;
+        auto iter = db_->MakeIterator();
+        iter->First();
+
+        std::string key, value;
+        while (iter->Get(&key, &value) == tkrzw::Status::SUCCESS) {
+            all_pairs.push_back({key, value});
+            if (iter->Next() != tkrzw::Status::SUCCESS) {
+                break;
+            }
+        }
+
+        // Sort all pairs by key
+        std::sort(
+            all_pairs.begin(), all_pairs.end(),
+            [](const auto &a, const auto &b) { return a.first < b.first; });
+
+        // Find first key >= initial_key_prefix and collect up to limit
+        size_t i = 0;
+        for (const auto &pair : all_pairs) {
+            if (pair.first >= key_start) {
+                results.emplace_back(pair);
+                ++i;
+                if (i >= limit) {
+                    break;
+                }
+            }
+        }
+
+        if (i == 0) {
+            return Status::NOT_FOUND;
+        }
+
+        return Status::SUCCESS;
+    }
+
+    /**
      * @brief Check if the database is open
      * @return true if open, false otherwise
      */

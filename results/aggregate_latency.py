@@ -165,8 +165,10 @@ def main():
     for key, pooled_values in results.items():
         meta = metadata[key]
 
-        # Median and p95 across all raw latency values from all repetitions
+        # Latency stats across all raw latency values from all repetitions
         latency_median = float(np.median(pooled_values))
+        latency_average = float(np.mean(pooled_values))
+        latency_75 = float(np.percentile(pooled_values, 75))
         latency_95 = float(np.percentile(pooled_values, 95))
         throughput_key = (
             meta['workload'], meta['workers'], meta['storage_type'], meta['partitions'],
@@ -191,6 +193,8 @@ def main():
         grouped[output_key].append({
             **common_meta,
             'latency_median': latency_median,
+            'latency_average': latency_average,
+            'latency_75': latency_75,
             'latency_95': latency_95,
             'throughput_ops_per_sec': throughput_ops_per_sec if throughput_ops_per_sec is not None else '',
         })
@@ -212,6 +216,8 @@ def main():
                     'thinking_time',
                     'sync_mode',
                     'latency_median',
+                    'latency_average',
+                    'latency_75',
                     'latency_95',
                     'throughput_ops_per_sec',
                 ],

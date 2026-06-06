@@ -4,6 +4,7 @@
 #include "../TkrzwTreeStorageEngine.h"
 #include "../LmdbStorageEngine.h"
 #include "../LevelDBStorageEngine.h"
+#include "../RocksDBStorageEngine.h"
 #include "../TbbStorageEngine.h"
 #include "../../utils/test_assertions.h"
 #include "../../utils/test_resources.h"
@@ -399,6 +400,70 @@ template <typename EngineType> void test_scan_after_updates() {
     END_TEST("scan_after_updates")
 }
 
+template <typename EngineType> void test_scan_append_preserves_existing() {
+    TEST("scan_append_preserves_existing")
+    EngineType engine(0, repart_kv_test::test_resources_dir());
+
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("user:1001", "Alice"));
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("user:1002", "Bob"));
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("user:1003", "Charlie"));
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("item:2001", "Laptop"));
+
+    std::vector<std::pair<std::string, std::string>> results = {
+        {"existing:1", "keep1"}, {"existing:2", "keep2"}};
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan_append("user:", 2, results));
+
+    ASSERT_EQ(4, results.size());
+    ASSERT_STR_EQ("existing:1", results[0].first);
+    ASSERT_STR_EQ("keep1", results[0].second);
+    ASSERT_STR_EQ("existing:2", results[1].first);
+    ASSERT_STR_EQ("keep2", results[1].second);
+    ASSERT_STR_EQ("user:1001", results[2].first);
+    ASSERT_STR_EQ("Alice", results[2].second);
+    ASSERT_STR_EQ("user:1002", results[3].first);
+    ASSERT_STR_EQ("Bob", results[3].second);
+    END_TEST("scan_append_preserves_existing")
+}
+
+template <typename EngineType> void test_scan_append_no_matches() {
+    TEST("scan_append_no_matches")
+    EngineType engine(0, repart_kv_test::test_resources_dir());
+
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("apple", "fruit"));
+
+    std::vector<std::pair<std::string, std::string>> results = {
+        {"existing:1", "keep1"}};
+
+    ASSERT_STATUS_EQ(Status::NOT_FOUND,
+                     engine.scan_append("orange", 10, results));
+
+    ASSERT_EQ(1, results.size());
+    ASSERT_STR_EQ("existing:1", results[0].first);
+    ASSERT_STR_EQ("keep1", results[0].second);
+    END_TEST("scan_append_no_matches")
+}
+
+template <typename EngineType> void test_scan_append_multiple() {
+    TEST("scan_append_multiple")
+    EngineType engine(0, repart_kv_test::test_resources_dir());
+
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("item:2001", "Laptop"));
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("item:2002", "Phone"));
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("user:1001", "Alice"));
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.write("user:1002", "Bob"));
+
+    std::vector<std::pair<std::string, std::string>> results;
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan_append("item:", 2, results));
+    ASSERT_EQ(2, results.size());
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan_append("user:", 10, results));
+    ASSERT_EQ(4, results.size());
+    ASSERT_STR_EQ("item:2001", results[0].first);
+    ASSERT_STR_EQ("item:2002", results[1].first);
+    ASSERT_STR_EQ("user:1001", results[2].first);
+    ASSERT_STR_EQ("user:1002", results[3].first);
+    END_TEST("scan_append_multiple")
+}
+
 template <typename EngineType> void test_iterator_find_existing_key() {
     TEST("iterator_find_existing_key")
     EngineType engine(0, repart_kv_test::test_resources_dir());
@@ -506,6 +571,12 @@ void run_storage_engine_test_suite(const std::string &engine_name) {
         {"scan_sorted_order", []() { test_scan_sorted_order<EngineType>(); }},
         {"scan_after_updates", []() { test_scan_after_updates<EngineType>(); }},
         {"scan_empty_prefix", []() { test_scan_empty_prefix<EngineType>(); }},
+        {"scan_append_preserves_existing",
+         []() { test_scan_append_preserves_existing<EngineType>(); }},
+        {"scan_append_no_matches",
+         []() { test_scan_append_no_matches<EngineType>(); }},
+        {"scan_append_multiple",
+         []() { test_scan_append_multiple<EngineType>(); }},
         {"large_dataset", []() { test_large_dataset<EngineType>(); }},
         {"special_characters", []() { test_special_characters<EngineType>(); }},
         {"manual_locking", []() { test_manual_locking<EngineType>(); }},
@@ -547,6 +618,8 @@ int main() {
     run_storage_engine_test_suite<LmdbStorageEngine<>>("LmdbStorageEngine");
     run_storage_engine_test_suite<LevelDBStorageEngine<>>(
         "LevelDBStorageEngine");
+    run_storage_engine_test_suite<RocksDBStorageEngine<>>(
+        "RocksDBStorageEngine");
     run_storage_engine_test_suite<TbbStorageEngine<>>("TbbStorageEngine");
 
     // Iterator tests (only for engines that implement iterator_impl)
@@ -555,6 +628,7 @@ int main() {
     run_iterator_tests<TkrzwHashStorageEngine<>>("TkrzwHashStorageEngine");
     run_iterator_tests<LmdbStorageEngine<>>("LmdbStorageEngine");
     run_iterator_tests<LevelDBStorageEngine<>>("LevelDBStorageEngine");
+    run_iterator_tests<RocksDBStorageEngine<>>("RocksDBStorageEngine");
     run_iterator_tests<TkrzwTreeStorageEngine<>>("TkrzwTreeStorageEngine");
     run_iterator_tests<TbbStorageEngine<>>("TbbStorageEngine");
 
@@ -573,6 +647,8 @@ int main() {
         "LmdbStorageEngine (SYNC=true)");
     run_storage_engine_test_suite<LevelDBStorageEngine<true>>(
         "LevelDBStorageEngine (SYNC=true)");
+    run_storage_engine_test_suite<RocksDBStorageEngine<true>>(
+        "RocksDBStorageEngine (SYNC=true)");
     run_storage_engine_test_suite<TbbStorageEngine<true>>(
         "TbbStorageEngine (SYNC=true)");
 
@@ -585,6 +661,8 @@ int main() {
         "LmdbStorageEngine (SYNC=true)");
     run_iterator_tests<LevelDBStorageEngine<true>>(
         "LevelDBStorageEngine (SYNC=true)");
+    run_iterator_tests<RocksDBStorageEngine<true>>(
+        "RocksDBStorageEngine (SYNC=true)");
     run_iterator_tests<TkrzwTreeStorageEngine<true>>(
         "TkrzwTreeStorageEngine (SYNC=true)");
     run_iterator_tests<TbbStorageEngine<true>>("TbbStorageEngine (SYNC=true)");

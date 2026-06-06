@@ -68,6 +68,15 @@ else()
     message(WARNING "LevelDB library not found. Install libleveldb-dev to enable LevelDB storage engine.")
 endif()
 
+# Find RocksDB library (librocksdb-dev)
+find_library(ROCKSDB_LIB NAMES rocksdb)
+find_path(ROCKSDB_INCLUDE_DIR NAMES rocksdb/db.h)
+if(ROCKSDB_LIB AND ROCKSDB_INCLUDE_DIR)
+    message(STATUS "RocksDB library found: ${ROCKSDB_LIB}")
+else()
+    message(WARNING "RocksDB library not found. Install librocksdb-dev to enable RocksDB storage engine.")
+endif()
+
 # TKRZW compression dependencies (optional, used if available)
 find_library(LZMA_LIB NAMES lzma)
 find_library(LZ4_LIB NAMES lz4)
@@ -128,6 +137,7 @@ target_link_libraries(repart-kv-core PUBLIC
     ${METIS_LIB}
     ${LMDB_LIB}
     ${LEVELDB_LIB}
+    ${ROCKSDB_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     absl::btree
@@ -145,6 +155,7 @@ target_include_directories(repart-kv-core PUBLIC
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
     ${LEVELDB_INCLUDE_DIR}
+    ${ROCKSDB_INCLUDE_DIR}
 )
 
 if(BUILD_REPART_KV_RUNNER)
@@ -170,6 +181,7 @@ target_link_libraries(test_storage_engine PRIVATE
     ${TKRZW_ALL_LIBS}
     ${LMDB_LIB}
     ${LEVELDB_LIB}
+    ${ROCKSDB_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     absl::btree
@@ -178,6 +190,7 @@ target_include_directories(test_storage_engine PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
     ${LEVELDB_INCLUDE_DIR}
+    ${ROCKSDB_INCLUDE_DIR}
 )
 target_compile_features(test_storage_engine PRIVATE cxx_std_20)
 target_compile_options(test_storage_engine PRIVATE -Wall -Wextra -Wpedantic)

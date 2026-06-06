@@ -131,6 +131,34 @@ public:
     }
 
     /**
+     * @brief Scan and append key-value pairs to existing results
+     */
+    Status
+    scan_append(const std::string &key_start, size_t limit,
+                std::vector<std::pair<std::string, std::string>> &results) {
+        lock_.lock_shared();
+
+        // Use lower_bound to find the first key >= key_prefix
+        auto it = storage_.lower_bound(key_start);
+
+        // Iterate and collect key-value pairs
+        size_t i = 0;
+        while (it != storage_.end() && i < limit) {
+            results.emplace_back(it->first, it->second);
+            ++i;
+            ++it;
+        }
+
+        if (i == 0) {
+            lock_.unlock_shared();
+            return Status::NOT_FOUND;
+        }
+
+        lock_.unlock_shared();
+        return Status::SUCCESS;
+    }
+
+    /**
      * @brief absl::btree_map scan iterator for key lookups
      *
      * Provides the StorageEngineIterator interface with shared locking for
