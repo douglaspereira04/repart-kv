@@ -1,0 +1,5 @@
+workload,workers,storage_type,partitions,storage_engine,paths,interval,thinking_time,sync_mode,latency_median,latency_average,latency_75,latency_95,throughput_ops_per_sec
+ycsb_a,4,engine,1,rocksdb,1,0,100000,sync_off,14825.5,17248.688072997753,21371.0,38168.0,30806.28894828629
+ycsb_a,8,engine,1,rocksdb,1,0,100000,sync_off,17358.0,57022.73317739503,27565.0,51593.0,54999.43069648717
+ycsb_a,12,engine,1,rocksdb,1,0,100000,sync_off,19692.0,102734.37782911185,31336.0,62220.0,68451.06328592698
+ycsb_a,16,engine,1,rocksdb,1,0,100000,sync_off,29559.0,122502.37033622722,57116.25,380628.0,68024.31559915186

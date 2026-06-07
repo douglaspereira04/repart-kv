@@ -248,7 +248,7 @@ for p in "${TMP[@]}"; do
     rm -rf "$p/repart_kv_keystorage"
 done
 
-REPETITIONS=1
+REPETITIONS=5
 MAX_DURATION_SEC=30
 HARD_REPART_INTERVAL_MS=10000
 TRACKING_DURATION_MS=1000

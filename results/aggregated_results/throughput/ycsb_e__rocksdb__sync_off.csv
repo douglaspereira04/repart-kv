@@ -1,0 +1,5 @@
+workload,workers,storage_type,partitions,storage_engine,paths,interval,thinking_time,sync_mode,ops_per_second
+ycsb_e,4,engine,1,rocksdb,1,0,20000,sync_off,28601.94074824817
+ycsb_e,8,engine,1,rocksdb,1,0,20000,sync_off,49527.83003348903
+ycsb_e,12,engine,1,rocksdb,1,0,20000,sync_off,83111.66042429427
+ycsb_e,16,engine,1,rocksdb,1,0,20000,sync_off,99934.00251421865
