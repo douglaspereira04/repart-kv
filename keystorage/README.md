@@ -3,7 +3,7 @@
 The KeyStorage module provides a typed key/value mapping with:
 
 - **Keys**: `std::string`
-- **Values**: constrained by `KeyStorageValueType` (integral types or pointers)
+- **Values**: constrained by `KeyStorageValueType` (trivially copyable and default constructible)
 - **Range iteration**: `lower_bound()` + an iterator interface
 
 It is used by higher-level components (for example, to store mappings and indexes) where values are not plain strings.
@@ -16,6 +16,7 @@ It is used by higher-level components (for example, to store mappings and indexe
 
 - `get(const std::string& key, ValueType& out) -> bool`
 - `put(const std::string& key, const ValueType& value)`
+- `scan(const std::string& key_start, size_t limit, std::vector<std::pair<std::string, ValueType>>& results)`
 - `get_or_insert(const std::string& key, const ValueType& value_to_insert, ValueType& found_value) -> bool`
 - `lower_bound(const std::string& key) -> IteratorType`
 
@@ -32,14 +33,20 @@ It is used by higher-level components (for example, to store mappings and indexe
 
 `keystorage/KeyStorageConcepts.h` defines:
 
-- `KeyStorageValueType`: integral types (`std::integral`) or pointer types (`std::is_pointer_v`)
+- `KeyStorageValueType`: `std::is_trivially_copyable_v<T> && std::is_default_constructible_v<T>`
+
+That covers integrals, pointers, and small POD structs. Persistent backends round-trip the object representation via `keystorage/KeyStorageValueBinary.h`. Pointer fields store address bits only, not the pointed-to object.
 
 ## Implementations
 
 - `MapKeyStorage<T>`: `std::map` (ordered)
+- `AbslBtreeKeyStorage<T>`: `absl::btree_map` (ordered)
 - `TkrzwTreeKeyStorage<T>`: TKRZW TreeDBM (ordered)
 - `TkrzwHashKeyStorage<T>`: TKRZW HashDBM (unordered; builds sorted iteration by collecting and sorting keys)
 - `LmdbKeyStorage<T>`: LMDB (ordered)
+- `LmdbNolockKeyStorage<T>`: LMDB with `MDB_NOLOCK` (caller-owned sync)
+- `TokyoCabinetKeyStorage<T>`: Tokyo Cabinet TCBDB without `tcbdbsetmutex`
+- `LevelDBKeyStorage<T>`: LevelDB (ordered)
 - `UnorderedDenseKeyStorage<T>`: `ankerl::unordered_dense::map` (unordered; builds sorted iteration by collecting and sorting keys)
 
 ## Example
@@ -66,4 +73,4 @@ while (!it.is_end()) {
 
 - Interactive CLI: see [INTERACTIVE_USAGE.md](INTERACTIVE_USAGE.md)
 - Test suite: `build/test_keystorage`
-
+- Notes: [TEST_RESULTS.md](TEST_RESULTS.md)

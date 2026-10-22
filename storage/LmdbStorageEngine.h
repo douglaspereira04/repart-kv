@@ -38,9 +38,13 @@
  * @tparam SYNC When true, opens the environment without MDB_NOSYNC /
  *        MDB_NOMETASYNC so metadata (and data) are flushed on commit for
  *        higher durability; explicit sync() uses a hard flush.
+ * @tparam NOLOCK When true, opens with \c MDB_NOLOCK so LMDB does no locking;
+ *        the caller must enforce single-writer and that no reader uses a
+ *        stale transaction while a writer is active (e.g. a reader-writer
+ *        lock in kvstorage).
  */
-template <bool SYNC = false> class LmdbStorageEngine
-    : public StorageEngine<LmdbStorageEngine<SYNC>, SYNC> {
+template <bool SYNC = false, bool NOLOCK = false> class LmdbStorageEngine
+    : public StorageEngine<LmdbStorageEngine<SYNC, NOLOCK>, SYNC> {
 private:
     MDB_env *env_;
     MDB_dbi dbi_;
@@ -57,10 +61,14 @@ private:
     }
 
     static constexpr unsigned env_open_flags() {
-        if constexpr (SYNC) {
-            return 0;
+        unsigned flags = 0;
+        if constexpr (!SYNC) {
+            flags |= nosync_flags();
         }
-        return nosync_flags();
+        if constexpr (NOLOCK) {
+            flags |= MDB_NOLOCK;
+        }
+        return flags;
     }
 
     Status enable_nosync() {
@@ -101,7 +109,7 @@ public:
      */
     explicit LmdbStorageEngine(size_t level = 0,
                                const std::string &path = "/tmp") :
-        StorageEngine<LmdbStorageEngine<SYNC>, SYNC>(level, path),
+        StorageEngine<LmdbStorageEngine<SYNC, NOLOCK>, SYNC>(level, path),
         env_(nullptr), dbi_(MDB_dbi{}), is_open_(false),
         runtime_sync_on_(SYNC) {
 
@@ -111,15 +119,15 @@ public:
     /**
      * @brief Constructor with file path - creates a persistent database
      * @param file_path Path to the database directory
-     * @param map_size Maximum size of the memory map in bytes (default: 50GB)
+     * @param map_size Maximum size of the memory map in bytes (default: 96GiB)
      * @param level The hierarchy level for this storage engine (default: 0)
      * @param path Optional path for database files (default: /tmp)
      */
     explicit LmdbStorageEngine(const std::string &file_path,
-                               size_t map_size = 50ULL * 1024 * 1024 * 1024,
+                               size_t map_size = 96ULL * 1024 * 1024 * 1024,
                                size_t level = 0,
                                const std::string &path = "/tmp") :
-        StorageEngine<LmdbStorageEngine<SYNC>, SYNC>(level, path),
+        StorageEngine<LmdbStorageEngine<SYNC, NOLOCK>, SYNC>(level, path),
         env_(nullptr), dbi_(MDB_dbi{}), is_open_(false), db_path_(file_path),
         runtime_sync_on_(SYNC) {
 
@@ -149,7 +157,8 @@ public:
 
     // Enable move
     LmdbStorageEngine(LmdbStorageEngine &&other) noexcept :
-        StorageEngine<LmdbStorageEngine<SYNC>, SYNC>(other.level_, other.path_),
+        StorageEngine<LmdbStorageEngine<SYNC, NOLOCK>, SYNC>(other.level_,
+                                                             other.path_),
         env_(other.env_), dbi_(other.dbi_), is_open_(other.is_open_),
         db_path_(std::move(other.db_path_)),
         runtime_sync_on_(other.runtime_sync_on_) {
@@ -550,7 +559,8 @@ public:
      * traversal from the root for nearby keys.
      */
     class LmdbIterator
-        : public StorageEngineIterator<LmdbIterator, LmdbStorageEngine<SYNC>> {
+        : public StorageEngineIterator<LmdbIterator,
+                                       LmdbStorageEngine<SYNC, NOLOCK>> {
     private:
         MDB_txn *txn_;
         MDB_cursor *cursor_;
@@ -561,8 +571,8 @@ public:
          * @param engine The LMDB storage engine to scan
          */
         explicit LmdbIterator(LmdbStorageEngine &engine) :
-            StorageEngineIterator<LmdbIterator, LmdbStorageEngine<SYNC>>(
-                engine),
+            StorageEngineIterator<LmdbIterator,
+                                  LmdbStorageEngine<SYNC, NOLOCK>>(engine),
             txn_(nullptr), cursor_(nullptr) {
             if (engine.is_open_ && engine.env_) {
                 int rc = mdb_txn_begin(engine.env_, nullptr, MDB_RDONLY, &txn_);
@@ -580,7 +590,8 @@ public:
         LmdbIterator &operator=(const LmdbIterator &) = delete;
 
         LmdbIterator(LmdbIterator &&other) noexcept :
-            StorageEngineIterator<LmdbIterator, LmdbStorageEngine<SYNC>>(
+            StorageEngineIterator<LmdbIterator,
+                                  LmdbStorageEngine<SYNC, NOLOCK>>(
                 *other.engine_),
             txn_(other.txn_), cursor_(other.cursor_) {
             other.txn_ = nullptr;
@@ -667,7 +678,7 @@ private:
             std::to_string(db_counter_.fetch_add(1, std::memory_order_relaxed));
         std::filesystem::create_directories(db_path_);
 
-        init_with_path(db_path_, 50ULL * 1024 * 1024 * 1024);
+        init_with_path(db_path_, 96ULL * 1024 * 1024 * 1024);
     }
 
     /**
@@ -717,8 +728,10 @@ private:
 };
 
 // Static member definitions
-template <bool SYNC> std::atomic_int LmdbStorageEngine<SYNC>::db_counter_ = 0;
-template <bool SYNC> std::string LmdbStorageEngine<SYNC>::id_ = std::to_string(
+template <bool SYNC, bool NOLOCK>
+std::atomic_int LmdbStorageEngine<SYNC, NOLOCK>::db_counter_ = 0;
+template <bool SYNC, bool NOLOCK>
+std::string LmdbStorageEngine<SYNC, NOLOCK>::id_ = std::to_string(
     std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch())
         .count());

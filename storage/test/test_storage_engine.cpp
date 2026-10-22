@@ -3,8 +3,10 @@
 #include "../TkrzwHashStorageEngine.h"
 #include "../TkrzwTreeStorageEngine.h"
 #include "../LmdbStorageEngine.h"
+#include "../LmdbNolockStorageEngine.h"
 #include "../LevelDBStorageEngine.h"
 #include "../RocksDBStorageEngine.h"
+#include "../TokyoCabinetStorageEngine.h"
 #include "../TbbStorageEngine.h"
 #include "../../utils/test_assertions.h"
 #include "../../utils/test_resources.h"
@@ -252,6 +254,22 @@ template <typename EngineType> void test_special_characters() {
     END_TEST("special_characters")
 }
 
+template <typename EngineType> void test_lock_for_read(EngineType &engine) {
+    if constexpr (EngineType::allows_concurrent_reads) {
+        engine.lock_shared();
+    } else {
+        engine.lock();
+    }
+}
+
+template <typename EngineType> void test_unlock_for_read(EngineType &engine) {
+    if constexpr (EngineType::allows_concurrent_reads) {
+        engine.unlock_shared();
+    } else {
+        engine.unlock();
+    }
+}
+
 template <typename EngineType> void test_manual_locking() {
     TEST("manual_locking")
     EngineType engine(0, repart_kv_test::test_resources_dir());
@@ -261,12 +279,11 @@ template <typename EngineType> void test_manual_locking() {
     engine.write("locked_key", "locked_value");
     engine.unlock();
 
-    // Test shared lock
-    engine.lock_shared();
+    test_lock_for_read(engine);
     std::string read_value;
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.read("locked_key", read_value));
     ASSERT_STR_EQ("locked_value", read_value);
-    engine.unlock_shared();
+    test_unlock_for_read(engine);
 
     END_TEST("manual_locking")
 }
@@ -306,10 +323,10 @@ template <typename EngineType> void test_concurrent_writes() {
                               ":key:" + std::to_string(i);
             std::string expected_value = "value:" + std::to_string(i);
 
-            engine.lock_shared();
+            test_lock_for_read(engine);
             std::string actual_value;
             ASSERT_STATUS_EQ(Status::SUCCESS, engine.read(key, actual_value));
-            engine.unlock_shared();
+            test_unlock_for_read(engine);
 
             ASSERT_STR_EQ(expected_value, actual_value);
         }
@@ -340,12 +357,11 @@ template <typename EngineType> void test_concurrent_reads_writes() {
 
     auto reader = [&engine]() {
         for (int i = 0; i < 50; ++i) {
-            engine.lock_shared();
+            test_lock_for_read(engine);
             std::string value;
             ASSERT_STATUS_EQ(Status::SUCCESS,
                              engine.read("key:" + std::to_string(i), value));
-            engine.unlock_shared();
-            // Just ensure we can read without crashes
+            test_unlock_for_read(engine);
         }
     };
 
@@ -358,10 +374,10 @@ template <typename EngineType> void test_concurrent_reads_writes() {
     t3.join();
 
     // Verify final state
-    engine.lock_shared();
+    test_lock_for_read(engine);
     std::vector<std::pair<std::string, std::string>> results(100);
     ASSERT_STATUS_EQ(Status::SUCCESS, engine.scan("key:", 100, results));
-    engine.unlock_shared();
+    test_unlock_for_read(engine);
 
     ASSERT_EQ(100, results.size());
     END_TEST("concurrent_reads_writes")
@@ -616,6 +632,10 @@ int main() {
     run_storage_engine_test_suite<TkrzwTreeStorageEngine<>>(
         "TkrzwTreeStorageEngine");
     run_storage_engine_test_suite<LmdbStorageEngine<>>("LmdbStorageEngine");
+    run_storage_engine_test_suite<LmdbNolockStorageEngine<>>(
+        "LmdbNolockStorageEngine");
+    run_storage_engine_test_suite<TokyoCabinetStorageEngine<>>(
+        "TokyoCabinetStorageEngine");
     run_storage_engine_test_suite<LevelDBStorageEngine<>>(
         "LevelDBStorageEngine");
     run_storage_engine_test_suite<RocksDBStorageEngine<>>(
@@ -627,6 +647,9 @@ int main() {
     run_iterator_tests<AbslBtreeStorageEngine<>>("AbslBtreeStorageEngine");
     run_iterator_tests<TkrzwHashStorageEngine<>>("TkrzwHashStorageEngine");
     run_iterator_tests<LmdbStorageEngine<>>("LmdbStorageEngine");
+    run_iterator_tests<LmdbNolockStorageEngine<>>("LmdbNolockStorageEngine");
+    run_iterator_tests<TokyoCabinetStorageEngine<>>(
+        "TokyoCabinetStorageEngine");
     run_iterator_tests<LevelDBStorageEngine<>>("LevelDBStorageEngine");
     run_iterator_tests<RocksDBStorageEngine<>>("RocksDBStorageEngine");
     run_iterator_tests<TkrzwTreeStorageEngine<>>("TkrzwTreeStorageEngine");
@@ -645,6 +668,10 @@ int main() {
         "TkrzwTreeStorageEngine (SYNC=true)");
     run_storage_engine_test_suite<LmdbStorageEngine<true>>(
         "LmdbStorageEngine (SYNC=true)");
+    run_storage_engine_test_suite<LmdbNolockStorageEngine<true>>(
+        "LmdbNolockStorageEngine (SYNC=true)");
+    run_storage_engine_test_suite<TokyoCabinetStorageEngine<true>>(
+        "TokyoCabinetStorageEngine (SYNC=true)");
     run_storage_engine_test_suite<LevelDBStorageEngine<true>>(
         "LevelDBStorageEngine (SYNC=true)");
     run_storage_engine_test_suite<RocksDBStorageEngine<true>>(
@@ -659,6 +686,10 @@ int main() {
         "TkrzwHashStorageEngine (SYNC=true)");
     run_iterator_tests<LmdbStorageEngine<true>>(
         "LmdbStorageEngine (SYNC=true)");
+    run_iterator_tests<LmdbNolockStorageEngine<true>>(
+        "LmdbNolockStorageEngine (SYNC=true)");
+    run_iterator_tests<TokyoCabinetStorageEngine<true>>(
+        "TokyoCabinetStorageEngine (SYNC=true)");
     run_iterator_tests<LevelDBStorageEngine<true>>(
         "LevelDBStorageEngine (SYNC=true)");
     run_iterator_tests<RocksDBStorageEngine<true>>(

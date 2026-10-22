@@ -19,6 +19,10 @@ template <typename Derived, typename IteratorType,
           KeyStorageValueType ValueType>
 class KeyStorage {
 public:
+    /** When false, concurrent get/scan on one instance requires exclusive sync.
+     */
+    static constexpr bool allows_concurrent_reads = true;
+
     /**
      * @brief Get a value by key
      * @param key The key to look up

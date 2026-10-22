@@ -42,6 +42,12 @@ public:
     /** True when this engine was instantiated with durable sync enabled. */
     static constexpr bool sync_enabled = SYNC;
 
+    /**
+     * When false, callers must not invoke this engine from multiple threads
+     * concurrently even for reads.
+     */
+    static constexpr bool allows_concurrent_reads = true;
+
 protected:
     mutable std::shared_mutex _lock; // Mutex for thread-safe operations
     size_t level_;                   // Hierarchy level of this storage engine

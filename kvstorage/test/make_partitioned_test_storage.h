@@ -10,6 +10,7 @@
 #include "../../utils/test_resources.h"
 #include "../HardRepartitioningKeyValueStorage.h"
 #include "../LockStrippingKeyValueStorage.h"
+#include "../RangeLockStrippingKeyValueStorage.h"
 #include "../SoftRepartitioningKeyValueStorage.h"
 #include "../threaded/HardThreadedRepartitioningKeyValueStorage.h"
 #include "../threaded/SoftThreadedRepartitioningKeyValueStorage.h"
@@ -77,6 +78,17 @@ template <bool S> struct PartitionedStorageMaker<
     make(size_t partition_count) {
         return LockStrippingKeyValueStorage<MapStorageEngine, S>(
             partition_count, std::hash<std::string>{},
+            partitioned_kv_test_paths());
+    }
+};
+
+template <bool S> struct PartitionedStorageMaker<
+    RangeLockStrippingKeyValueStorage<MapStorageEngine, S>> {
+    static RangeLockStrippingKeyValueStorage<MapStorageEngine, S>
+    make(size_t partition_count) {
+        return RangeLockStrippingKeyValueStorage<MapStorageEngine, S>(
+            partition_count,
+            make_uniform_numeric_range_starts(1000000, partition_count),
             partitioned_kv_test_paths());
     }
 };

@@ -11,10 +11,13 @@ cd build
 
 ## Setup prompts
 
-1. Select a value type (for example: `int`, `long`, `uint64_t`).
-2. Select an implementation (for example: Map, TKRZW Hash/Tree).
+1. Select a value type: `int`, `long`, or `uint64_t`.
+2. Select an implementation:
+   1. `MapKeyStorage` (in-memory, `std::map`)
+   2. `TkrzwHashKeyStorage` (hash-based, unordered)
+   3. `TkrzwTreeKeyStorage` (tree-based, sorted)
 
-The set of available implementations depends on what was built and which optional dependencies are present.
+The interactive tool only exposes those three backends. LMDB, Tokyo Cabinet, LevelDB, Abseil btree, and `UnorderedDenseKeyStorage` are covered by `build/test_keystorage`, not this CLI.
 
 ## Commands
 
@@ -67,4 +70,3 @@ EOF
 
 - `keystorage/test_interactive_keystorage.sh`
 - `build/test_keystorage`
-

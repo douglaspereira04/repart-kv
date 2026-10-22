@@ -59,7 +59,7 @@ cd build
 
 # Build the project
 echo "Building project in $BUILD_TYPE mode..."
-make -j$(nproc)
+make -j2
 
 echo "Build completed successfully! (Build type: $BUILD_TYPE)"
 

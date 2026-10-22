@@ -8,7 +8,8 @@
 # 2. Workload file
 # 3. Partitions
 # 4. Test workers
-# 5. KV Storage type (hard, soft, threaded, hard_threaded, engine)
+# 5. KV Storage type (hard, soft, threaded, hard_threaded, engine,
+#    lock_stripping, range_lock_stripping)
 # 6. Storage engine
 # 7. Repartitioning interval
 # 8. Thinking time (ns)
@@ -181,9 +182,14 @@ function run_hard_experiments {
         fi
 
         for P in ${PARTITIONS[@]}; do
-            # test lock stripping
+            # test lock stripping (hash partitions)
             if _hard_experiment_type_enabled lock_stripping "${_exp_types[@]}"; then
                 run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W lock_stripping $STORAGE_ENGINE 0 $THINKING_TIME $MAX_DURATION $SYNC $TRACKING_DURATION_MS ${PATHS[@]}
+            fi
+
+            # test range lock stripping (uniform ranges from n_records)
+            if _hard_experiment_type_enabled range_lock_stripping "${_exp_types[@]}"; then
+                run_and_move_metrics $TEST_NUMBER $WORKLOAD_FILE $P $W range_lock_stripping $STORAGE_ENGINE 0 $THINKING_TIME $MAX_DURATION $SYNC $TRACKING_DURATION_MS ${PATHS[@]}
             fi
 
             # hard repartitioning: interval 0 (partitioned layout only)
@@ -253,7 +259,7 @@ MAX_DURATION_SEC=30
 HARD_REPART_INTERVAL_MS=10000
 TRACKING_DURATION_MS=1000
 
-STORAGE_ENGINES=(leveldb lmdb)
+STORAGE_ENGINES=(leveldb lmdb lmdb_nolock tokyo)
 #STORAGE_ENGINES=(leveldb)
 #TEST_WORKERS="1,4,8,12,16,24,32"
 #THINKING_TIMES=(5000000) # 5ms (if operations are instant, then it would at most 200ops*threads/second)
@@ -262,7 +268,7 @@ PARTITIONS="32"
 # Explicit list matching _hard_experiment_type_enabled / run_hard_experiments docs;
 # pass this array name as arg 8 to run_experiment_set to run every variant;
 # pass TRACKING_DURATION_MS as arg 9.
-ALL_HARD_EXPERIMENT_TYPES=(engine partitioned repartitioning lock_stripping)
+ALL_HARD_EXPERIMENT_TYPES=(engine partitioned repartitioning lock_stripping range_lock_stripping)
 #ALL_HARD_EXPERIMENT_TYPES=(engine)
 
 
@@ -277,7 +283,7 @@ run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIM
 THINKING_TIMES=(10000000)
 SYNC_ON=(true)
 run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
-ALL_HARD_EXPERIMENT_TYPES=(partitioned repartitioning lock_stripping)
+ALL_HARD_EXPERIMENT_TYPES=(partitioned repartitioning lock_stripping range_lock_stripping)
 
 TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d")
 
@@ -319,8 +325,8 @@ run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIM
 TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d" "/media/douglas/ee8c0c0d-fdf9-4ae8-a9f0-4015c99554cb" "/media/douglas/fdedd994-5a78-4a52-9109-4a8fe3d2bad7")
 
 
-STORAGE_ENGINES=(leveldb lmdb)
-ALL_HARD_EXPERIMENT_TYPES=(engine partitioned repartitioning lock_stripping)
+STORAGE_ENGINES=(leveldb lmdb lmdb_nolock tokyo)
+ALL_HARD_EXPERIMENT_TYPES=(engine partitioned repartitioning lock_stripping range_lock_stripping)
 
 
 WORKLOADS=(ycsb_d.toml ycsb_e.toml)
@@ -333,7 +339,7 @@ run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIM
 THINKING_TIMES=(200000)
 SYNC_ON=(true)
 run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
-ALL_HARD_EXPERIMENT_TYPES=(partitioned repartitioning lock_stripping)
+ALL_HARD_EXPERIMENT_TYPES=(partitioned repartitioning lock_stripping range_lock_stripping)
 
 TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d")
 

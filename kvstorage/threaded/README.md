@@ -9,10 +9,12 @@ This directory contains the threaded variants of the repartitioning storage laye
 - `SoftThreadedRepartitioningKeyValueStorage.h`
 - `HardThreadedRepartitioningKeyValueStorage.h`
 
-These are selected by the `repart-kv` CLI via `storage_type`:
+These are selected by `repart-kv-runner` via `storage_type`:
 
 - `threaded` maps to `SoftThreadedRepartitioningKeyValueStorage`
 - `hard_threaded` maps to `HardThreadedRepartitioningKeyValueStorage`
+
+(`lock_stripping` and `range_lock_stripping` are non-threaded strategies in `kvstorage/LockStrippingKeyValueStorage.h` and `kvstorage/RangeLockStrippingKeyValueStorage.h`.)
 
 ### Workers
 

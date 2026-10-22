@@ -18,6 +18,8 @@ The program prompts you to select one backend:
 3. `TkrzwTreeStorageEngine` (persistent, ordered keys)
 4. `TbbStorageEngine` (in-memory, `tbb::concurrent_hash_map`)
 
+LMDB, Tokyo Cabinet, LevelDB, RocksDB, and Abseil btree are exercised by `build/test_storage_engine` and (except Abseil btree) by `repart-kv-runner`, not by this interactive tool.
+
 ## Commands
 
 ### `write("key", "value")`

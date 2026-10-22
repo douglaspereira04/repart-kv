@@ -24,21 +24,26 @@
 #endif
 #include "kvstorage/HardRepartitioningKeyValueStorage.h"
 #include "kvstorage/LockStrippingKeyValueStorage.h"
+#include "kvstorage/RangeLockStrippingKeyValueStorage.h"
 #include "kvstorage/SoftRepartitioningKeyValueStorage.h"
 #include "kvstorage/threaded/SoftThreadedRepartitioningKeyValueStorage.h"
 #include "kvstorage/threaded/HardThreadedRepartitioningKeyValueStorage.h"
 #include "storage/TkrzwTreeStorageEngine.h"
 #include "storage/TkrzwHashStorageEngine.h"
 #include "storage/LmdbStorageEngine.h"
+#include "storage/LmdbNolockStorageEngine.h"
 #include "storage/LevelDBStorageEngine.h"
 #include "storage/RocksDBStorageEngine.h"
+#include "storage/TokyoCabinetStorageEngine.h"
 #include "storage/MapStorageEngine.h"
 #include "storage/TbbStorageEngine.h"
 #include "keystorage/TkrzwTreeKeyStorage.h"
 #include "keystorage/TkrzwHashKeyStorage.h"
 #include "keystorage/LmdbKeyStorage.h"
+#include "keystorage/LmdbNolockKeyStorage.h"
 #include "keystorage/AbslBtreeKeyStorage.h"
 #include "keystorage/LevelDBKeyStorage.h"
+#include "keystorage/TokyoCabinetKeyStorage.h"
 #include "keystorage/UnorderedDenseKeyStorage.h"
 #include "repart_kv_api.h"
 #include <cassert>
@@ -240,6 +245,14 @@ auto try_construct_partitioned(T *, size_t partition_count,
                                const std::vector<std::string> &paths)
     -> decltype(T(partition_count, std::hash<std::string>(), paths)) {
     return T(partition_count, std::hash<std::string>(), paths);
+}
+
+template <typename T> auto
+try_construct_range_partitioned(T *, size_t partition_count,
+                                const std::vector<std::string> &range_starts,
+                                const std::vector<std::string> &paths)
+    -> decltype(T(partition_count, range_starts, paths)) {
+    return T(partition_count, range_starts, paths);
 }
 
 template <typename T>
@@ -601,6 +614,12 @@ void run_workload_with_storage(workload::RequestGenerator &generator,
     // Create storage instance
     std::cout << "\n=== Initializing Storage ===" << std::endl;
 
+    const int n_records = generator.config().n_records;
+    const std::vector<std::string> range_starts =
+        make_uniform_numeric_range_starts(
+            n_records < 0 ? 0 : static_cast<size_t>(n_records),
+            partition_count);
+
     StorageType storage = [&]() -> StorageType {
         // Try RepartitioningKeyValueStorage constructor first
         if constexpr (requires {
@@ -616,6 +635,29 @@ void run_workload_with_storage(workload::RequestGenerator &generator,
             return try_construct_repartitioning(
                 static_cast<StorageType *>(nullptr), partition_count,
                 STORAGE_PATHS);
+        }
+        // Range lock stripping: uniform ranges from LoadGen n_records
+        else if constexpr (requires {
+                               try_construct_range_partitioned(
+                                   static_cast<StorageType *>(nullptr),
+                                   partition_count, range_starts,
+                                   STORAGE_PATHS);
+                           }) {
+            std::cout << "Created " << storage_type_name << " with "
+                      << partition_count
+                      << " partitions (RangeLockStripping), n_records="
+                      << n_records << std::endl;
+            std::cout << "Range starts: ";
+            for (size_t i = 0; i < range_starts.size(); ++i) {
+                if (i > 0) {
+                    std::cout << ", ";
+                }
+                std::cout << range_starts[i];
+            }
+            std::cout << std::endl;
+            return try_construct_range_partitioned(
+                static_cast<StorageType *>(nullptr), partition_count,
+                range_starts, STORAGE_PATHS);
         }
         // Try PartitionedKeyValueStorage constructor (e.g. LockStripping)
         else if constexpr (requires {
@@ -811,6 +853,9 @@ void run_workload_for_engine_template(workload::RequestGenerator &generator,
     const std::string lock_stripping_label =
         std::string("LockStrippingKeyValueStorage<") + engine_metrics_name +
         (StorageSync ? ", true>" : ", false>");
+    const std::string range_lock_stripping_label =
+        std::string("RangeLockStrippingKeyValueStorage<") +
+        engine_metrics_name + (StorageSync ? ", true>" : ", false>");
     if (STORAGE_TYPE == "hard") {
         using StorageType =
             HardRepartitioningKeyValueStorage<Engine, StorageSync,
@@ -847,6 +892,12 @@ void run_workload_for_engine_template(workload::RequestGenerator &generator,
         using StorageType = LockStrippingKeyValueStorage<Engine, StorageSync>;
         run_workload_with_storage<StorageType>(
             generator, PARTITION_COUNT, TEST_WORKERS, lock_stripping_label);
+    } else if (STORAGE_TYPE == "range_lock_stripping") {
+        using StorageType =
+            RangeLockStrippingKeyValueStorage<Engine, StorageSync>;
+        run_workload_with_storage<StorageType>(generator, PARTITION_COUNT,
+                                               TEST_WORKERS,
+                                               range_lock_stripping_label);
     }
 }
 
@@ -879,6 +930,14 @@ void execute_with_storage_config(workload::RequestGenerator &generator) {
         run_workload_for_engine_with_cli_sync<LmdbStorageEngine,
                                               LmdbKeyStorage>(
             generator, "LmdbStorageEngine");
+    } else if (STORAGE_ENGINE == "lmdb_nolock") {
+        run_workload_for_engine_with_cli_sync<LmdbNolockStorageEngine,
+                                              LmdbNolockKeyStorage>(
+            generator, "LmdbNolockStorageEngine");
+    } else if (STORAGE_ENGINE == "tokyo") {
+        run_workload_for_engine_with_cli_sync<TokyoCabinetStorageEngine,
+                                              TokyoCabinetKeyStorage>(
+            generator, "TokyoCabinetStorageEngine");
     } else if (STORAGE_ENGINE == "leveldb") {
         run_workload_for_engine_with_cli_sync<LevelDBStorageEngine,
                                               LevelDBKeyStorage>(
@@ -917,13 +976,15 @@ void print_usage(const char *program_name) {
     std::cout << "  test_workers     Number of worker threads (default: 1)"
               << std::endl;
     std::cout << "  storage_type     Storage implementation: 'hard', 'soft', "
-                 "'threaded', 'hard_threaded', 'engine', or 'lock_stripping' "
+                 "'threaded', 'hard_threaded', 'engine', 'lock_stripping', or "
+                 "'range_lock_stripping' "
                  "(default: soft)"
               << std::endl;
     std::cout << "  storage_engine   Storage engine backend: 'tkrzw_tree', "
                  "'tkrzw_hash', "
-                 "'lmdb', 'leveldb', 'rocksdb', 'map', or 'tbb' (default: "
-                 "tkrzw_tree)"
+                 "'lmdb', 'lmdb_nolock', 'tokyo', 'leveldb', "
+                 "'rocksdb', 'map', or 'tbb' "
+                 "(default: tkrzw_tree)"
               << std::endl;
     std::cout
         << "  thinking_time_ns Thinking time delay in nanoseconds (default: 0)"
@@ -962,8 +1023,12 @@ void print_usage(const char *program_name) {
         << std::endl;
     std::cout
         << "  lock_stripping  LockStrippingKeyValueStorage (partitioned with "
-           "lock striping, no repartitioning)"
+           "hash lock striping, no repartitioning)"
         << std::endl;
+    std::cout << "  range_lock_stripping  RangeLockStrippingKeyValueStorage "
+                 "(static range partitions from workload.n_records, no "
+                 "repartitioning)"
+              << std::endl;
     std::cout << "\nStorage Engines:" << std::endl;
     std::cout
         << "  tkrzw_tree      TkrzwTreeStorageEngine (sorted key-value storage)"
@@ -971,6 +1036,13 @@ void print_usage(const char *program_name) {
     std::cout << "  tkrzw_hash      TkrzwHashStorageEngine (hash-based storage)"
               << std::endl;
     std::cout << "  lmdb            LmdbStorageEngine (LMDB-based storage)"
+              << std::endl;
+    std::cout
+        << "  lmdb_nolock     LmdbNolockStorageEngine (LMDB + MDB_NOLOCK, "
+           "caller-owned sync)"
+        << std::endl;
+    std::cout << "  tokyo           TokyoCabinetStorageEngine (TCBDB, no "
+                 "tcbdbsetmutex)"
               << std::endl;
     std::cout
         << "  leveldb         LevelDBStorageEngine (LevelDB LSM-tree storage)"
@@ -1039,10 +1111,11 @@ int run_repart_kv(int argc, char *argv[]) {
         STORAGE_TYPE = argv[4];
         if (STORAGE_TYPE != "hard" && STORAGE_TYPE != "soft" &&
             STORAGE_TYPE != "threaded" && STORAGE_TYPE != "hard_threaded" &&
-            STORAGE_TYPE != "engine" && STORAGE_TYPE != "lock_stripping") {
+            STORAGE_TYPE != "engine" && STORAGE_TYPE != "lock_stripping" &&
+            STORAGE_TYPE != "range_lock_stripping") {
             std::cerr << "Error: storage_type must be 'hard', 'soft', "
-                         "'threaded', 'hard_threaded', 'engine', or "
-                         "'lock_stripping', got: "
+                         "'threaded', 'hard_threaded', 'engine', "
+                         "'lock_stripping', or 'range_lock_stripping', got: "
                       << STORAGE_TYPE << std::endl;
             return 1;
         }
@@ -1051,12 +1124,14 @@ int run_repart_kv(int argc, char *argv[]) {
     if (argc >= 6) {
         STORAGE_ENGINE = argv[5];
         if (STORAGE_ENGINE != "tkrzw_tree" && STORAGE_ENGINE != "tkrzw_hash" &&
-            STORAGE_ENGINE != "lmdb" && STORAGE_ENGINE != "leveldb" &&
+            STORAGE_ENGINE != "lmdb" && STORAGE_ENGINE != "lmdb_nolock" &&
+            STORAGE_ENGINE != "tokyo" && STORAGE_ENGINE != "leveldb" &&
             STORAGE_ENGINE != "rocksdb" && STORAGE_ENGINE != "map" &&
             STORAGE_ENGINE != "tbb") {
             std::cerr
                 << "Error: storage_engine must be 'tkrzw_tree', 'tkrzw_hash', "
-                   "'lmdb', 'leveldb', 'rocksdb', 'map', or 'tbb', got: "
+                   "'lmdb', 'lmdb_nolock', 'tokyo', 'leveldb', "
+                   "'rocksdb', 'map', or 'tbb', got: "
                 << STORAGE_ENGINE << std::endl;
             return 1;
         }

@@ -77,6 +77,15 @@ else()
     message(WARNING "RocksDB library not found. Install librocksdb-dev to enable RocksDB storage engine.")
 endif()
 
+# Tokyo Cabinet B+tree (libtokyocabinet-dev) — no tcbdbsetmutex
+find_library(TOKYOCABINET_LIB NAMES tokyocabinet)
+find_path(TOKYOCABINET_INCLUDE_DIR NAMES tcbdb.h)
+if(TOKYOCABINET_LIB AND TOKYOCABINET_INCLUDE_DIR)
+    message(STATUS "Tokyo Cabinet library found: ${TOKYOCABINET_LIB}")
+else()
+    message(WARNING "Tokyo Cabinet not found. Install libtokyocabinet-dev to enable the tokyo storage engine.")
+endif()
+
 # TKRZW compression dependencies (optional, used if available)
 find_library(LZMA_LIB NAMES lzma)
 find_library(LZ4_LIB NAMES lz4)
@@ -138,6 +147,7 @@ target_link_libraries(repart-kv-core PUBLIC
     ${LMDB_LIB}
     ${LEVELDB_LIB}
     ${ROCKSDB_LIB}
+    ${TOKYOCABINET_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     absl::btree
@@ -156,6 +166,7 @@ target_include_directories(repart-kv-core PUBLIC
     ${TKRZW_INCLUDE_DIRS}
     ${LEVELDB_INCLUDE_DIR}
     ${ROCKSDB_INCLUDE_DIR}
+    ${TOKYOCABINET_INCLUDE_DIR}
 )
 
 if(BUILD_REPART_KV_RUNNER)
@@ -182,6 +193,7 @@ target_link_libraries(test_storage_engine PRIVATE
     ${LMDB_LIB}
     ${LEVELDB_LIB}
     ${ROCKSDB_LIB}
+    ${TOKYOCABINET_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     absl::btree
@@ -191,6 +203,7 @@ target_include_directories(test_storage_engine PRIVATE
     ${TKRZW_INCLUDE_DIRS}
     ${LEVELDB_INCLUDE_DIR}
     ${ROCKSDB_INCLUDE_DIR}
+    ${TOKYOCABINET_INCLUDE_DIR}
 )
 target_compile_features(test_storage_engine PRIVATE cxx_std_20)
 target_compile_options(test_storage_engine PRIVATE -Wall -Wextra -Wpedantic)
@@ -245,6 +258,7 @@ target_link_libraries(test_keystorage PRIVATE
     unordered_dense::unordered_dense
     ${LMDB_LIB}
     ${LEVELDB_LIB}
+    ${TOKYOCABINET_LIB}
     absl::btree
 )
 target_compile_features(test_keystorage PRIVATE cxx_std_20)
@@ -253,6 +267,7 @@ target_include_directories(test_keystorage PRIVATE
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
     ${LEVELDB_INCLUDE_DIR}
+    ${TOKYOCABINET_INCLUDE_DIR}
 )
 
 # Generic partitioned key-value storage tests
@@ -265,6 +280,7 @@ target_link_libraries(test_partitioned_kv_storage PRIVATE
     ${TKRZW_ALL_LIBS}
     ${LMDB_LIB}
     ${METIS_LIB}
+    ${TOKYOCABINET_LIB}
     ${TBB_LIBRARIES}
     unordered_dense::unordered_dense
     absl::btree
@@ -274,6 +290,7 @@ target_compile_options(test_partitioned_kv_storage PRIVATE -Wall -Wextra -Wpedan
 target_include_directories(test_partitioned_kv_storage PRIVATE 
     ${CMAKE_SOURCE_DIR}
     ${TKRZW_INCLUDE_DIRS}
+    ${TOKYOCABINET_INCLUDE_DIR}
 )
 
 # Graph tracking tests for repartitioning storage

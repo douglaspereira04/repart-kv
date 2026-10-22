@@ -6,8 +6,11 @@
 #include "../../keystorage/MapKeyStorage.h"
 #include "../../keystorage/LmdbKeyStorage.h"
 #include "../../keystorage/TkrzwTreeKeyStorage.h"
+#include "../../keystorage/LmdbNolockKeyStorage.h"
+#include "../../keystorage/TokyoCabinetKeyStorage.h"
 #include "../../utils/test_assertions.h"
 #include "../LockStrippingKeyValueStorage.h"
+#include "../RangeLockStrippingKeyValueStorage.h"
 #include "make_partitioned_test_storage.h"
 #include <iostream>
 #include <vector>
@@ -445,8 +448,8 @@ void run_partitioned_kv_test_suite(const std::string &storage_name) {
 
 /**
  * Runs repartitioning-threaded and hard/soft partitioned suites that share the
- * same key-map template (e.g. MapKeyStorage, LmdbKeyStorage). Lock stripping
- * uses no separate key storage and is run once in main.
+ * same key-map template (e.g. MapKeyStorage, LmdbKeyStorage). Hash and range
+ * lock stripping use no separate key storage and are run once in main.
  *
  * @tparam STORAGE_SYNC Engine durable-sync flag for embedded \c
  * MapStorageEngine.
@@ -491,6 +494,10 @@ int main() {
     run_partitioned_kv_suites_for_key_storage<LmdbKeyStorage>("LmdbKeyStorage");
     run_partitioned_kv_suites_for_key_storage<TkrzwTreeKeyStorage>(
         "TkrzwTreeKeyStorage");
+    run_partitioned_kv_suites_for_key_storage<LmdbNolockKeyStorage>(
+        "LmdbNolockKeyStorage");
+    run_partitioned_kv_suites_for_key_storage<TokyoCabinetKeyStorage>(
+        "TokyoCabinetKeyStorage");
 
     run_partitioned_kv_test_suite<
         LockStrippingKeyValueStorage<MapStorageEngine, false>>(
@@ -498,6 +505,54 @@ int main() {
     run_partitioned_kv_test_suite<
         LockStrippingKeyValueStorage<MapStorageEngine, true>>(
         "LockStrippingKeyValueStorage [STORAGE_SYNC=true]");
+
+    run_partitioned_kv_test_suite<
+        RangeLockStrippingKeyValueStorage<MapStorageEngine, false>>(
+        "RangeLockStrippingKeyValueStorage");
+    run_partitioned_kv_test_suite<
+        RangeLockStrippingKeyValueStorage<MapStorageEngine, true>>(
+        "RangeLockStrippingKeyValueStorage [STORAGE_SYNC=true]");
+
+    run_test_suite(
+        "RangeLockStripping numeric ranges",
+        {{"range_lock_stripping_numeric_ranges", []() {
+              TEST("range_lock_stripping_numeric_ranges")
+              const size_t n_records = 100;
+              const size_t partitions = 4;
+              auto starts =
+                  make_uniform_numeric_range_starts(n_records, partitions);
+              ASSERT_EQ(4, starts.size());
+              ASSERT_STR_EQ("0", starts[0]);
+              ASSERT_STR_EQ("25", starts[1]);
+              ASSERT_STR_EQ("50", starts[2]);
+              ASSERT_STR_EQ("75", starts[3]);
+
+              RangeLockStrippingKeyValueStorage<MapStorageEngine, false>
+                  storage(partitions, starts,
+                          repart_kv_test::partitioned_kv_test_paths());
+              ASSERT_EQ(0, storage.partition_index("0"));
+              ASSERT_EQ(0, storage.partition_index("24"));
+              ASSERT_EQ(1, storage.partition_index("25"));
+              ASSERT_EQ(2, storage.partition_index("50"));
+              ASSERT_EQ(3, storage.partition_index("75"));
+              ASSERT_EQ(3, storage.partition_index("99"));
+              ASSERT_EQ(3, storage.partition_index("100000"));
+              ASSERT_EQ(0, storage.partition_index(""));
+
+              for (int i = 0; i < 100; ++i) {
+                  Status status =
+                      storage.write(std::to_string(i), "v" + std::to_string(i));
+                  ASSERT_STATUS_EQ(Status::SUCCESS, status);
+              }
+              std::string value;
+              Status status = storage.read("0", value);
+              ASSERT_STATUS_EQ(Status::SUCCESS, status);
+              ASSERT_STR_EQ("v0", value);
+              status = storage.read("99", value);
+              ASSERT_STATUS_EQ(Status::SUCCESS, status);
+              ASSERT_STR_EQ("v99", value);
+              END_TEST("range_lock_stripping_numeric_ranges")
+          }}});
 
     std::cout << "\n========================================" << std::endl;
     std::cout << "  Overall Test Results" << std::endl;
@@ -517,6 +572,10 @@ int main() {
         std::cout << "✓ LockStrippingKeyValueStorage: PASSED (STORAGE_SYNC "
                      "false and true)"
                   << std::endl;
+        std::cout
+            << "✓ RangeLockStrippingKeyValueStorage: PASSED (STORAGE_SYNC "
+               "false and true)"
+            << std::endl;
         return 0;
     } else {
         std::cout << "✗ Some tests failed!" << std::endl;

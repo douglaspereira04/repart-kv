@@ -2,10 +2,10 @@
 
 This module provides:
 
-- `graph/Graph.h`: a weighted directed graph keyed by `std::string`
+- `graph/Graph.h`: a weighted **undirected** graph keyed by `std::string`
 - `graph/MetisGraph.h`: a METIS adapter (CSR conversion + partitioning)
 
-It is used by the partitioned storage layer to build an access graph and compute partitions.
+It is used by the partitioned storage layer to build an access graph and compute partitions. Edges are stored symmetrically because METIS requires an undirected adjacency structure.
 
 ## `Graph`
 
@@ -17,14 +17,19 @@ It is used by the partitioned storage layer to build an access graph and compute
 Implementation notes:
 
 - Uses `ankerl::unordered_dense::map` for vertices and adjacency lists.
-- Vertices and edges are created on first increment.
+- Vertices and edges are created on first increment (`increment_vertex_weight` / `increment_edge_weight`).
+- `increment_edge_weight(A, B)` updates both `A→B` and `B→A`.
+- `get_edge_count()` returns the number of undirected edges (adjacency size / 2).
 
 ### Core API
 
 - `increment_vertex_weight(vertex)`
 - `increment_edge_weight(source, destination)`
+- `increment_vertex_weight_if_exists(vertex)`
+- `increment_edge_weight_if_vertices_exist(source, destination)`
 - `get_vertex_weight(vertex)`
 - `get_edge_weight(source, destination)`
+- `has_vertex(vertex)`, `has_edge(source, destination)`
 - `get_vertex_count()`, `get_edge_count()`
 - `clear()`
 
@@ -33,7 +38,9 @@ Implementation notes:
 `MetisGraph` converts a `Graph` into METIS CSR data structures and runs METIS partitioning:
 
 - `prepare_from_graph(graph)`: builds CSR arrays and internal index mappings
-- `partition(num_partitions)`: runs METIS (recursive bisection for small `nparts`, k-way otherwise)
+- `partition(num_partitions)`: runs `METIS_PartGraphKway`
+
+A `use_recursive_bisection_` flag exists on the class but is never enabled; `partition()` always uses k-way partitioning.
 
 ## Build targets
 
@@ -58,4 +65,3 @@ cd build
 ./test_metis_graph
 ./example_metis_graph
 ```
-

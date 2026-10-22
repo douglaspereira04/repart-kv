@@ -42,8 +42,9 @@ template <KeyStorageValueType ValueType> class LmdbKeyStorageIterator;
  * Note: This class is NOT thread-safe by default. Users must manually
  * call lock()/unlock() or lock_shared()/unlock_shared() when needed.
  */
-template <KeyStorageValueType ValueType> class LmdbKeyStorage
-    : public KeyStorage<LmdbKeyStorage<ValueType>,
+template <KeyStorageValueType ValueType, bool NOLOCK = false>
+class LmdbKeyStorage
+    : public KeyStorage<LmdbKeyStorage<ValueType, NOLOCK>,
                         LmdbKeyStorageIterator<ValueType>, ValueType> {
 private:
     MDB_env *env_;
@@ -434,8 +435,11 @@ private:
         mdb_env_set_maxdbs(env_, 1);
         mdb_env_set_mapsize(env_, map_size);
 
-        rc =
-            mdb_env_open(env_, path.c_str(), MDB_NOSYNC | MDB_NOMETASYNC, 0664);
+        unsigned flags = MDB_NOSYNC | MDB_NOMETASYNC;
+        if constexpr (NOLOCK) {
+            flags |= MDB_NOLOCK;
+        }
+        rc = mdb_env_open(env_, path.c_str(), flags, 0664);
         if (rc != 0) {
             mdb_env_close(env_);
             env_ = nullptr;
@@ -685,17 +689,18 @@ public:
 };
 
 // Implementation of lower_bound_impl
-template <KeyStorageValueType ValueType> LmdbKeyStorageIterator<ValueType>
-LmdbKeyStorage<ValueType>::lower_bound_impl(const std::string &key) {
+template <KeyStorageValueType ValueType, bool NOLOCK>
+LmdbKeyStorageIterator<ValueType>
+LmdbKeyStorage<ValueType, NOLOCK>::lower_bound_impl(const std::string &key) {
     return LmdbKeyStorageIterator<ValueType>(env_, dbi_, key);
 }
 
 // Static member definitions
-template <KeyStorageValueType ValueType>
-inline std::atomic_int LmdbKeyStorage<ValueType>::db_counter_ = 0;
+template <KeyStorageValueType ValueType, bool NOLOCK>
+inline std::atomic_int LmdbKeyStorage<ValueType, NOLOCK>::db_counter_ = 0;
 
-template <KeyStorageValueType ValueType>
-inline std::string LmdbKeyStorage<ValueType>::id_ = std::to_string(
+template <KeyStorageValueType ValueType, bool NOLOCK>
+inline std::string LmdbKeyStorage<ValueType, NOLOCK>::id_ = std::to_string(
     std::chrono::duration_cast<std::chrono::nanoseconds>(
         std::chrono::high_resolution_clock::now().time_since_epoch())
         .count());
