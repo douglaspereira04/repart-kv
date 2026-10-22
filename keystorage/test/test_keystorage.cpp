@@ -5,7 +5,6 @@
 #include "../LmdbKeyStorage.h"
 #include "../LmdbNolockKeyStorage.h"
 #include "../LevelDBKeyStorage.h"
-#include "../TokyoCabinetKeyStorage.h"
 #include "../UnorderedDenseKeyStorage.h"
 #include "../../utils/test_assertions.h"
 #include "../../utils/test_resources.h"
@@ -675,8 +674,6 @@ int main() {
     run_storage_test_suite<LmdbKeyStorage<int>, int>("LmdbKeyStorage", "int");
     run_storage_test_suite<LmdbNolockKeyStorage<int>, int>(
         "LmdbNolockKeyStorage", "int");
-    run_storage_test_suite<TokyoCabinetKeyStorage<int>, int>(
-        "TokyoCabinetKeyStorage", "int");
     run_storage_test_suite<LevelDBKeyStorage<int>, int>("LevelDBKeyStorage",
                                                         "int");
     run_storage_test_suite<UnorderedDenseKeyStorage<int>, int>(
@@ -695,8 +692,6 @@ int main() {
                                                        "long");
     run_storage_test_suite<LmdbNolockKeyStorage<long>, long>(
         "LmdbNolockKeyStorage", "long");
-    run_storage_test_suite<TokyoCabinetKeyStorage<long>, long>(
-        "TokyoCabinetKeyStorage", "long");
     run_storage_test_suite<LevelDBKeyStorage<long>, long>("LevelDBKeyStorage",
                                                           "long");
     run_storage_test_suite<UnorderedDenseKeyStorage<long>, long>(
@@ -716,8 +711,6 @@ int main() {
                                                                "uint64_t");
     run_storage_test_suite<LmdbNolockKeyStorage<uint64_t>, uint64_t>(
         "LmdbNolockKeyStorage", "uint64_t");
-    run_storage_test_suite<TokyoCabinetKeyStorage<uint64_t>, uint64_t>(
-        "TokyoCabinetKeyStorage", "uint64_t");
     run_storage_test_suite<LevelDBKeyStorage<uint64_t>, uint64_t>(
         "LevelDBKeyStorage", "uint64_t");
     run_storage_test_suite<UnorderedDenseKeyStorage<uint64_t>, uint64_t>(
@@ -737,8 +730,6 @@ int main() {
         "LmdbKeyStorage", "IndexType");
     run_storage_test_suite<LmdbNolockKeyStorage<IndexType>, IndexType>(
         "LmdbNolockKeyStorage", "IndexType");
-    run_storage_test_suite<TokyoCabinetKeyStorage<IndexType>, IndexType>(
-        "TokyoCabinetKeyStorage", "IndexType");
     run_storage_test_suite<LevelDBKeyStorage<IndexType>, IndexType>(
         "LevelDBKeyStorage", "IndexType");
     run_storage_test_suite<UnorderedDenseKeyStorage<IndexType>, IndexType>(

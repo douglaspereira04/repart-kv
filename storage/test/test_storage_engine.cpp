@@ -6,7 +6,6 @@
 #include "../LmdbNolockStorageEngine.h"
 #include "../LevelDBStorageEngine.h"
 #include "../RocksDBStorageEngine.h"
-#include "../TokyoCabinetStorageEngine.h"
 #include "../TbbStorageEngine.h"
 #include "../../utils/test_assertions.h"
 #include "../../utils/test_resources.h"
@@ -634,8 +633,6 @@ int main() {
     run_storage_engine_test_suite<LmdbStorageEngine<>>("LmdbStorageEngine");
     run_storage_engine_test_suite<LmdbNolockStorageEngine<>>(
         "LmdbNolockStorageEngine");
-    run_storage_engine_test_suite<TokyoCabinetStorageEngine<>>(
-        "TokyoCabinetStorageEngine");
     run_storage_engine_test_suite<LevelDBStorageEngine<>>(
         "LevelDBStorageEngine");
     run_storage_engine_test_suite<RocksDBStorageEngine<>>(
@@ -648,8 +645,6 @@ int main() {
     run_iterator_tests<TkrzwHashStorageEngine<>>("TkrzwHashStorageEngine");
     run_iterator_tests<LmdbStorageEngine<>>("LmdbStorageEngine");
     run_iterator_tests<LmdbNolockStorageEngine<>>("LmdbNolockStorageEngine");
-    run_iterator_tests<TokyoCabinetStorageEngine<>>(
-        "TokyoCabinetStorageEngine");
     run_iterator_tests<LevelDBStorageEngine<>>("LevelDBStorageEngine");
     run_iterator_tests<RocksDBStorageEngine<>>("RocksDBStorageEngine");
     run_iterator_tests<TkrzwTreeStorageEngine<>>("TkrzwTreeStorageEngine");
@@ -670,8 +665,6 @@ int main() {
         "LmdbStorageEngine (SYNC=true)");
     run_storage_engine_test_suite<LmdbNolockStorageEngine<true>>(
         "LmdbNolockStorageEngine (SYNC=true)");
-    run_storage_engine_test_suite<TokyoCabinetStorageEngine<true>>(
-        "TokyoCabinetStorageEngine (SYNC=true)");
     run_storage_engine_test_suite<LevelDBStorageEngine<true>>(
         "LevelDBStorageEngine (SYNC=true)");
     run_storage_engine_test_suite<RocksDBStorageEngine<true>>(
@@ -688,8 +681,6 @@ int main() {
         "LmdbStorageEngine (SYNC=true)");
     run_iterator_tests<LmdbNolockStorageEngine<true>>(
         "LmdbNolockStorageEngine (SYNC=true)");
-    run_iterator_tests<TokyoCabinetStorageEngine<true>>(
-        "TokyoCabinetStorageEngine (SYNC=true)");
     run_iterator_tests<LevelDBStorageEngine<true>>(
         "LevelDBStorageEngine (SYNC=true)");
     run_iterator_tests<RocksDBStorageEngine<true>>(

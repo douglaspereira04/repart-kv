@@ -7,7 +7,6 @@
 #include "../../keystorage/LmdbKeyStorage.h"
 #include "../../keystorage/TkrzwTreeKeyStorage.h"
 #include "../../keystorage/LmdbNolockKeyStorage.h"
-#include "../../keystorage/TokyoCabinetKeyStorage.h"
 #include "../../utils/test_assertions.h"
 #include "../LockStrippingKeyValueStorage.h"
 #include "../RangeLockStrippingKeyValueStorage.h"
@@ -496,9 +495,6 @@ int main() {
         "TkrzwTreeKeyStorage");
     run_partitioned_kv_suites_for_key_storage<LmdbNolockKeyStorage>(
         "LmdbNolockKeyStorage");
-    run_partitioned_kv_suites_for_key_storage<TokyoCabinetKeyStorage>(
-        "TokyoCabinetKeyStorage");
-
     run_partitioned_kv_test_suite<
         LockStrippingKeyValueStorage<MapStorageEngine, false>>(
         "LockStrippingKeyValueStorage");

@@ -17,7 +17,7 @@ cd build
    2. `TkrzwHashKeyStorage` (hash-based, unordered)
    3. `TkrzwTreeKeyStorage` (tree-based, sorted)
 
-The interactive tool only exposes those three backends. LMDB, Tokyo Cabinet, LevelDB, Abseil btree, and `UnorderedDenseKeyStorage` are covered by `build/test_keystorage`, not this CLI.
+The interactive tool only exposes those three backends. LMDB, LevelDB, Abseil btree, and `UnorderedDenseKeyStorage` are covered by `build/test_keystorage`, not this CLI.
 
 ## Commands
 

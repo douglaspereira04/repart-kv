@@ -45,7 +45,6 @@ That covers integrals, pointers, and small POD structs. Persistent backends roun
 - `TkrzwHashKeyStorage<T>`: TKRZW HashDBM (unordered; builds sorted iteration by collecting and sorting keys)
 - `LmdbKeyStorage<T>`: LMDB (ordered)
 - `LmdbNolockKeyStorage<T>`: LMDB with `MDB_NOLOCK` (caller-owned sync)
-- `TokyoCabinetKeyStorage<T>`: Tokyo Cabinet TCBDB without `tcbdbsetmutex`
 - `LevelDBKeyStorage<T>`: LevelDB (ordered)
 - `UnorderedDenseKeyStorage<T>`: `ankerl::unordered_dense::map` (unordered; builds sorted iteration by collecting and sorting keys)
 

@@ -46,7 +46,7 @@ cd build
 - **partition_count**: number of partitions (default: `4`)
 - **test_workers**: worker threads for workload execution (default: `1`)
 - **storage_type**: `hard`, `soft`, `threaded`, `hard_threaded`, `engine`, `lock_stripping`, or `range_lock_stripping` (default: `soft`)
-- **storage_engine**: `tkrzw_tree`, `tkrzw_hash`, `lmdb`, `lmdb_nolock`, `tokyo`, `leveldb`, `rocksdb`, `map`, or `tbb` (default: `tkrzw_tree`). Caller-owned sync (pair with kvstorage RW locks): `lmdb_nolock`, `tokyo`.
+- **storage_engine**: `tkrzw_tree`, `tkrzw_hash`, `lmdb`, `lmdb_nolock`, `leveldb`, `rocksdb`, `map`, or `tbb` (default: `tkrzw_tree`). Caller-owned sync (pair with kvstorage RW locks): `lmdb_nolock`.
 - **thinking_time_ns**: per-operation delay in nanoseconds (default: `0`)
 - **storage_paths**: comma-separated directories used for embedded DB files (default: `/tmp`)
 - **repartition_interval_ms**: interval between repartitioning cycles (default: `5000`). Does **not** change tracking duration.
@@ -180,8 +180,11 @@ repart-kv/
   workload/     Shared workload helpers (default write value)
   utils/        Shared test utilities
   ycsb_*.toml           LoadGen workload configs (use *_large.toml for 32 GiB)
+  experiment_set_lib.sh Shared runners for experiment_set*.sh (--dry-run)
   experiment_set.sh     Experiment grid (1 GiB YCSB configs)
   experiment_set_large.sh  Same grid with *_large.toml
+  experiment_set_mini.sh   Smoke grid with *_mini.toml
+  experiment_set_mini_full.sh  Same grid as experiment_set.sh with *_mini.toml
   main.cpp              Thin CLI trampoline for repart-kv-runner
   build.sh              Configure/build/test script
   run_tests.sh          Test runner for build artifacts

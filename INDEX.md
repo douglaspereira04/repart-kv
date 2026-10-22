@@ -31,7 +31,6 @@ Module docs:
 - `storage/TkrzwTreeStorageEngine.h`: TKRZW TreeDBM
 - `storage/LmdbStorageEngine.h`: LMDB backend
 - `storage/LmdbNolockStorageEngine.h`: LMDB with `MDB_NOLOCK`
-- `storage/TokyoCabinetStorageEngine.h`: Tokyo Cabinet TCBDB (no `tcbdbsetmutex`)
 - `storage/LevelDBStorageEngine.h`: LevelDB LSM-tree backend
 - `storage/RocksDBStorageEngine.h`: RocksDB LSM-tree backend
 - `storage/TbbStorageEngine.h`: in-memory `tbb::concurrent_hash_map`
@@ -49,7 +48,6 @@ Module docs:
   - `keystorage/TkrzwTreeKeyStorage.h`
   - `keystorage/LmdbKeyStorage.h`
   - `keystorage/LmdbNolockKeyStorage.h`
-  - `keystorage/TokyoCabinetKeyStorage.h`
   - `keystorage/LevelDBKeyStorage.h`
   - `keystorage/UnorderedDenseKeyStorage.h`
 
@@ -75,6 +73,7 @@ Module docs:
 - LoadGen (FetchContent): `workload::RequestGenerator` used by `src/repart_kv.cpp`
 - `ycsb_a.toml` … `ycsb_e.toml`: bundled LoadGen configs (~1 GiB payload)
 - `ycsb_a_large.toml`, `ycsb_d_large.toml`, `ycsb_e_large.toml`: same mixes, 32 GiB of values (`experiment_set_large.sh`)
+- `ycsb_a_mini.toml`, `ycsb_d_mini.toml`, `ycsb_e_mini.toml`: same mixes, 10240 records (`experiment_set_mini.sh`, `experiment_set_mini_full.sh`)
 
 ### `src/`
 
@@ -86,8 +85,11 @@ Module docs:
 - `CMakeLists.txt`: defines `repart-kv-core` and the opt-in `repart-kv-runner`
 - `build.sh`: configure/build/test helper (also runs `clang-format`; pass `-t` to build runner)
 - `run_tests.sh`: runs `build/test_*` executables
+- `experiment_set_lib.sh`: shared runners sourced by `experiment_set*.sh` (`--dry-run` / `-n` lists runner commands)
 - `experiment_set.sh`: experiment grid for the 1 GiB YCSB configs
 - `experiment_set_large.sh`: same grid with `*_large.toml` (32 GiB payloads)
+- `experiment_set_mini.sh`: small smoke grid with `*_mini.toml`
+- `experiment_set_mini_full.sh`: same grid as `experiment_set.sh` with `*_mini.toml`
 - `main.cpp`: CLI trampoline that forwards into `run_repart_kv`
 
 ## CMake targets

@@ -14,7 +14,6 @@ sudo apt-get install -y \
   libboost-dev \
   libtbb-dev \
   liblmdb-dev \
-  libtokyocabinet-dev \
   libleveldb-dev \
   librocksdb-dev \
   clang-format
@@ -23,7 +22,7 @@ sudo apt-get install -y \
 Notes:
 
 - `libabsl-dev` is required (CMake calls `find_package(absl REQUIRED)`).
-- `libtbb-dev`, `liblmdb-dev`, `libtokyocabinet-dev`, `libleveldb-dev`, and `librocksdb-dev` are only needed for the corresponding engines (`tbb`, `lmdb`/`lmdb_nolock`, `tokyo`, `leveldb`, `rocksdb`).
+- `libtbb-dev`, `liblmdb-dev`, `libleveldb-dev`, and `librocksdb-dev` are only needed for the corresponding engines (`tbb`, `lmdb`/`lmdb_nolock`, `leveldb`, `rocksdb`).
 - LoadGen and `unordered_dense` are downloaded by CMake (FetchContent); they do not need a system package.
 - `clang-format` is used by `build.sh`. If you build manually, it is optional.
 

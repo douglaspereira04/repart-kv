@@ -34,7 +34,6 @@
 #include "storage/LmdbNolockStorageEngine.h"
 #include "storage/LevelDBStorageEngine.h"
 #include "storage/RocksDBStorageEngine.h"
-#include "storage/TokyoCabinetStorageEngine.h"
 #include "storage/MapStorageEngine.h"
 #include "storage/TbbStorageEngine.h"
 #include "keystorage/TkrzwTreeKeyStorage.h"
@@ -43,7 +42,6 @@
 #include "keystorage/LmdbNolockKeyStorage.h"
 #include "keystorage/AbslBtreeKeyStorage.h"
 #include "keystorage/LevelDBKeyStorage.h"
-#include "keystorage/TokyoCabinetKeyStorage.h"
 #include "keystorage/UnorderedDenseKeyStorage.h"
 #include "repart_kv_api.h"
 #include <cassert>
@@ -934,10 +932,6 @@ void execute_with_storage_config(workload::RequestGenerator &generator) {
         run_workload_for_engine_with_cli_sync<LmdbNolockStorageEngine,
                                               LmdbNolockKeyStorage>(
             generator, "LmdbNolockStorageEngine");
-    } else if (STORAGE_ENGINE == "tokyo") {
-        run_workload_for_engine_with_cli_sync<TokyoCabinetStorageEngine,
-                                              TokyoCabinetKeyStorage>(
-            generator, "TokyoCabinetStorageEngine");
     } else if (STORAGE_ENGINE == "leveldb") {
         run_workload_for_engine_with_cli_sync<LevelDBStorageEngine,
                                               LevelDBKeyStorage>(
@@ -982,7 +976,7 @@ void print_usage(const char *program_name) {
               << std::endl;
     std::cout << "  storage_engine   Storage engine backend: 'tkrzw_tree', "
                  "'tkrzw_hash', "
-                 "'lmdb', 'lmdb_nolock', 'tokyo', 'leveldb', "
+                 "'lmdb', 'lmdb_nolock', 'leveldb', "
                  "'rocksdb', 'map', or 'tbb' "
                  "(default: tkrzw_tree)"
               << std::endl;
@@ -1039,11 +1033,8 @@ void print_usage(const char *program_name) {
               << std::endl;
     std::cout
         << "  lmdb_nolock     LmdbNolockStorageEngine (LMDB + MDB_NOLOCK, "
-           "caller-owned sync)"
+           "caller-owned sync; not valid with storage_type engine)"
         << std::endl;
-    std::cout << "  tokyo           TokyoCabinetStorageEngine (TCBDB, no "
-                 "tcbdbsetmutex)"
-              << std::endl;
     std::cout
         << "  leveldb         LevelDBStorageEngine (LevelDB LSM-tree storage)"
         << std::endl;
@@ -1125,16 +1116,22 @@ int run_repart_kv(int argc, char *argv[]) {
         STORAGE_ENGINE = argv[5];
         if (STORAGE_ENGINE != "tkrzw_tree" && STORAGE_ENGINE != "tkrzw_hash" &&
             STORAGE_ENGINE != "lmdb" && STORAGE_ENGINE != "lmdb_nolock" &&
-            STORAGE_ENGINE != "tokyo" && STORAGE_ENGINE != "leveldb" &&
-            STORAGE_ENGINE != "rocksdb" && STORAGE_ENGINE != "map" &&
-            STORAGE_ENGINE != "tbb") {
+            STORAGE_ENGINE != "leveldb" && STORAGE_ENGINE != "rocksdb" &&
+            STORAGE_ENGINE != "map" && STORAGE_ENGINE != "tbb") {
             std::cerr
                 << "Error: storage_engine must be 'tkrzw_tree', 'tkrzw_hash', "
-                   "'lmdb', 'lmdb_nolock', 'tokyo', 'leveldb', "
+                   "'lmdb', 'lmdb_nolock', 'leveldb', "
                    "'rocksdb', 'map', or 'tbb', got: "
                 << STORAGE_ENGINE << std::endl;
             return 1;
         }
+    }
+
+    if (STORAGE_ENGINE == "lmdb_nolock" && STORAGE_TYPE == "engine") {
+        std::cerr << "Error: lmdb_nolock cannot be used with storage_type "
+                     "'engine' (MDB_NOLOCK needs caller-owned locking)"
+                  << std::endl;
+        return 1;
     }
 
     if (argc >= 7) {

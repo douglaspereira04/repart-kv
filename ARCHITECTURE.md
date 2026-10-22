@@ -27,7 +27,6 @@ Implemented backends:
 - **`TkrzwTreeStorageEngine`**: TKRZW TreeDBM (persistent, ordered keys)
 - **`LmdbStorageEngine`**: LMDB (persistent, ordered keys)
 - **`LmdbNolockStorageEngine`**: LMDB with `MDB_NOLOCK` (caller-owned sync)
-- **`TokyoCabinetStorageEngine`**: Tokyo Cabinet TCBDB, no `tcbdbsetmutex`
 - **`LevelDBStorageEngine`**: LevelDB (persistent, ordered keys, LSM-tree)
 - **`RocksDBStorageEngine`**: RocksDB (persistent, ordered keys, LSM-tree)
 - **`TbbStorageEngine`**: in-memory `tbb::concurrent_hash_map`
@@ -52,7 +51,6 @@ Implementations:
 - `MapKeyStorage`, `AbslBtreeKeyStorage`
 - `TkrzwHashKeyStorage`, `TkrzwTreeKeyStorage`
 - `LmdbKeyStorage`, `LmdbNolockKeyStorage`, `LevelDBKeyStorage`
-- `TokyoCabinetKeyStorage`
 - `UnorderedDenseKeyStorage` (hash-based; builds sorted iteration by collecting and sorting keys)
 
 ### `graph/`: Access graph + METIS adapter
@@ -143,7 +141,7 @@ If the dependency is optional, follow the pattern used for METIS/TBB/LMDB/RocksD
 Update `src/repart_kv.cpp` so `repart-kv-runner` can select the backend:
 
 - Add a new accepted value to the `storage_engine` argument validation.
-- Add a new branch in `execute_with_storage_config()` that maps that value to your engine type (similar to `tkrzw_tree`, `rocksdb`, `tokyo`, `tbb`).
+- Add a new branch in `execute_with_storage_config()` that maps that value to your engine type (similar to `tkrzw_tree`, `rocksdb`, `tbb`).
 - Update `print_usage()` so the new engine appears in `--help` output.
 
 `main.cpp` is only a trampoline; do not put engine dispatch there.

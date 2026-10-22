@@ -22,7 +22,7 @@ cd build
 
 KeyStorage requires an ordered iteration API (`lower_bound`). Some backends are naturally ordered; others simulate it:
 
-- **Naturally ordered**: `MapKeyStorage`, `AbslBtreeKeyStorage`, `TkrzwTreeKeyStorage`, `LmdbKeyStorage`, `LmdbNolockKeyStorage`, `TokyoCabinetKeyStorage`, `LevelDBKeyStorage`
+- **Naturally ordered**: `MapKeyStorage`, `AbslBtreeKeyStorage`, `TkrzwTreeKeyStorage`, `LmdbKeyStorage`, `LmdbNolockKeyStorage`, `LevelDBKeyStorage`
 - **Simulated order**: `TkrzwHashKeyStorage`, `UnorderedDenseKeyStorage`
 
 For simulated order, `lower_bound` typically:

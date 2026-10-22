@@ -38,14 +38,13 @@ sudo apt-get install -y libmetis-dev
 - **Boost Lockfree** (`libboost-dev`): threaded workers (`boost::lockfree::spsc_queue`)
 - **Intel TBB** (`libtbb-dev`): `tbb` storage engine and some internal queues
 - **LMDB** (`liblmdb-dev`): `lmdb` and `lmdb_nolock` (`MDB_NOLOCK`) engines and KeyStorage
-- **Tokyo Cabinet** (`libtokyocabinet-dev`): `tokyo` engine (`TCBDB`, no `tcbdbsetmutex`)
 - **LevelDB** (`libleveldb-dev`): `leveldb` storage engine and `LevelDBKeyStorage`
 - **RocksDB** (`librocksdb-dev`): `rocksdb` storage engine
 
 On Ubuntu/Debian:
 
 ```bash
-sudo apt-get install -y libboost-dev libtbb-dev liblmdb-dev libtokyocabinet-dev libleveldb-dev librocksdb-dev
+sudo apt-get install -y libboost-dev libtbb-dev liblmdb-dev libleveldb-dev librocksdb-dev
 ```
 
 ## Optional (developer convenience)
@@ -65,7 +64,7 @@ sudo dnf install -y cmake gcc-c++ pkgconfig \
   tkrzw-devel xz-devel lz4-devel libzstd-devel \
   abseil-cpp-devel \
   metis-devel \
-  boost-devel tbb-devel lmdb-devel tokyocabinet-devel \
+  boost-devel tbb-devel lmdb-devel \
   leveldb-devel rocksdb-devel
 ```
 
@@ -74,14 +73,14 @@ sudo dnf install -y cmake gcc-c++ pkgconfig \
 ```bash
 sudo pacman -S --needed cmake base-devel pkgconf \
   tkrzw xz lz4 zstd abseil-cpp metis \
-  boost tbb lmdb tokyocabinet leveldb rocksdb \
+  boost tbb lmdb leveldb rocksdb \
   clang-format
 ```
 
 ### macOS (Homebrew)
 
 ```bash
-brew install cmake pkg-config tkrzw xz lz4 zstd abseil metis boost tbb lmdb tokyo-cabinet leveldb rocksdb llvm
+brew install cmake pkg-config tkrzw xz lz4 zstd abseil metis boost tbb lmdb leveldb rocksdb llvm
 ```
 
 ## Verify installation

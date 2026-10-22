@@ -24,12 +24,11 @@ String key/value backends:
 - `TkrzwTreeStorageEngine`: TKRZW TreeDBM
 - `LmdbStorageEngine`: LMDB
 - `LmdbNolockStorageEngine`: LMDB + `MDB_NOLOCK` (caller-owned sync)
-- `TokyoCabinetStorageEngine`: Tokyo Cabinet TCBDB without `tcbdbsetmutex`
 - `LevelDBStorageEngine`: LevelDB (LSM-tree, sorted keys)
 - `RocksDBStorageEngine`: RocksDB (LSM-tree, sorted keys)
 - `TbbStorageEngine`: in-memory `tbb::concurrent_hash_map`
 
-CLI `storage_engine` values: `tkrzw_tree`, `tkrzw_hash`, `lmdb`, `lmdb_nolock`, `tokyo`, `leveldb`, `rocksdb`, `map`, `tbb`.
+CLI `storage_engine` values: `tkrzw_tree`, `tkrzw_hash`, `lmdb`, `lmdb_nolock`, `leveldb`, `rocksdb`, `map`, `tbb`.
 
 ### KeyStorage (`keystorage/`)
 
@@ -38,7 +37,6 @@ String keys mapping to trivially copyable, default-constructible values, with a 
 - `MapKeyStorage`, `AbslBtreeKeyStorage`
 - `TkrzwHashKeyStorage`, `TkrzwTreeKeyStorage`
 - `LmdbKeyStorage`, `LmdbNolockKeyStorage`, `LevelDBKeyStorage`
-- `TokyoCabinetKeyStorage`
 - `UnorderedDenseKeyStorage`
 
 ### Partitioned / repartitioning storage (`kvstorage/`)
