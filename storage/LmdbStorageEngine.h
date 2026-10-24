@@ -2,6 +2,7 @@
 
 #include "StorageEngineIterator.h"
 #include "StorageEngine.h"
+#include "AsyncWriteBatch.h"
 #include <lmdb.h>
 #include <string>
 #include <vector>
@@ -52,6 +53,8 @@ private:
     std::string db_path_;
     /** True while MDB_NOSYNC / MDB_NOMETASYNC are off (durable commits). */
     bool runtime_sync_on_;
+    /** Copied puts; flushed on one thread so the LMDB txn is not shared. */
+    AsyncWriteBatch async_batch_;
 
     static std::atomic_int db_counter_;
     static std::string id_;
@@ -98,6 +101,42 @@ private:
         return Status::SUCCESS;
     }
 
+    Status flush_async_batch() {
+        if (async_batch_.empty()) {
+            return Status::SUCCESS;
+        }
+        if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        Status st = enable_nosync();
+        if (st != Status::SUCCESS) {
+            return st;
+        }
+        MDB_txn *txn = nullptr;
+        int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
+        if (rc != 0) {
+            return Status::ERROR;
+        }
+        for (const auto &[key, value] : async_batch_.entries) {
+            MDB_val mdb_key;
+            MDB_val mdb_value;
+            mdb_key.mv_size = key.size();
+            mdb_key.mv_data =
+                const_cast<void *>(static_cast<const void *>(key.c_str()));
+            mdb_value.mv_size = value.size();
+            mdb_value.mv_data =
+                const_cast<void *>(static_cast<const void *>(value.c_str()));
+            rc = mdb_put(txn, dbi_, &mdb_key, &mdb_value, 0);
+            if (rc != 0) {
+                mdb_txn_abort(txn);
+                return Status::ERROR;
+            }
+        }
+        rc = mdb_txn_commit(txn);
+        async_batch_.clear();
+        return rc == 0 ? Status::SUCCESS : Status::ERROR;
+    }
+
 public:
     /**
      * @brief Constructor - creates an in-memory database
@@ -139,6 +178,7 @@ public:
      */
     ~LmdbStorageEngine() {
         if (is_open_ && env_) {
+            (void)flush_async_batch();
             mdb_dbi_close(env_, dbi_);
             mdb_env_close(env_);
             is_open_ = false;
@@ -161,7 +201,8 @@ public:
                                                              other.path_),
         env_(other.env_), dbi_(other.dbi_), is_open_(other.is_open_),
         db_path_(std::move(other.db_path_)),
-        runtime_sync_on_(other.runtime_sync_on_) {
+        runtime_sync_on_(other.runtime_sync_on_),
+        async_batch_(std::move(other.async_batch_)) {
         other.env_ = nullptr;
         other.is_open_ = false;
     }
@@ -169,6 +210,7 @@ public:
     LmdbStorageEngine &operator=(LmdbStorageEngine &&other) noexcept {
         if (this != &other) {
             if (is_open_ && env_) {
+                (void)flush_async_batch();
                 mdb_dbi_close(env_, dbi_);
                 mdb_env_close(env_);
             }
@@ -177,6 +219,7 @@ public:
             is_open_ = other.is_open_;
             db_path_ = std::move(other.db_path_);
             runtime_sync_on_ = other.runtime_sync_on_;
+            async_batch_ = std::move(other.async_batch_);
             other.env_ = nullptr;
             other.is_open_ = false;
         }
@@ -191,6 +234,10 @@ public:
      */
     Status read_impl(const std::string &key, std::string &value) const {
         if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        if (const_cast<LmdbStorageEngine *>(this)->flush_async_batch() !=
+            Status::SUCCESS) {
             return Status::ERROR;
         }
 
@@ -227,6 +274,9 @@ public:
      */
     Status write_impl(const std::string &key, const std::string &value) {
         if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        if (flush_async_batch() != Status::SUCCESS) {
             return Status::ERROR;
         }
 
@@ -268,11 +318,11 @@ public:
         if (!is_open_ || !env_) {
             return Status::ERROR;
         }
-        Status st = enable_nosync();
-        if (st != Status::SUCCESS) {
-            return st;
+        async_batch_.add(key, value);
+        if (async_batch_.should_flush()) {
+            return flush_async_batch();
         }
-        return write_impl(key, value);
+        return Status::SUCCESS;
     }
 
     /**
@@ -280,6 +330,9 @@ public:
      */
     Status force_sync_impl() {
         if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        if (flush_async_batch() != Status::SUCCESS) {
             return Status::ERROR;
         }
         int rc = mdb_env_sync(env_, 1);
@@ -303,6 +356,10 @@ public:
     scan_impl(const std::string &initial_key_prefix, size_t limit,
               std::vector<std::pair<std::string, std::string>> &results) const {
         if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        if (const_cast<LmdbStorageEngine *>(this)->flush_async_batch() !=
+            Status::SUCCESS) {
             return Status::ERROR;
         }
 
@@ -374,6 +431,9 @@ public:
     scan_append(const std::string &key_start, size_t limit,
                 std::vector<std::pair<std::string, std::string>> &results) {
         if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        if (flush_async_batch() != Status::SUCCESS) {
             return Status::ERROR;
         }
 
@@ -451,6 +511,10 @@ public:
         if (!is_open_ || !env_) {
             return 0;
         }
+        if (const_cast<LmdbStorageEngine *>(this)->flush_async_batch() !=
+            Status::SUCCESS) {
+            return 0;
+        }
 
         MDB_txn *txn;
         MDB_stat stat;
@@ -478,6 +542,9 @@ public:
         if (!is_open_ || !env_) {
             return false;
         }
+        if (flush_async_batch() != Status::SUCCESS) {
+            return false;
+        }
 
         int rc = mdb_env_sync(env_, SYNC ? 1 : 0);
         return rc == 0;
@@ -490,6 +557,7 @@ public:
         if (!is_open_ || !env_) {
             return;
         }
+        async_batch_.clear();
 
         MDB_txn *txn;
         int rc = mdb_txn_begin(env_, nullptr, 0, &txn);
@@ -511,6 +579,9 @@ public:
      */
     Status remove_impl(const std::string &key, std::string &removed_value) {
         if (!is_open_ || !env_) {
+            return Status::ERROR;
+        }
+        if (flush_async_batch() != Status::SUCCESS) {
             return Status::ERROR;
         }
 
@@ -663,7 +734,10 @@ public:
      * @brief Implementation: create and return an LMDB scan iterator
      * @return An LmdbIterator bound to this engine
      */
-    LmdbIterator iterator_impl() { return LmdbIterator(*this); }
+    LmdbIterator iterator_impl() {
+        (void)flush_async_batch();
+        return LmdbIterator(*this);
+    }
 
     using IteratorType = LmdbIterator;
 

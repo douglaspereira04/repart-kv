@@ -194,6 +194,28 @@ template <typename EngineType> void test_scan_sorted_order() {
     END_TEST("scan_sorted_order")
 }
 
+template <typename EngineType> void test_async_write_batch_then_read() {
+    TEST("async_write_batch_then_read")
+    EngineType engine(0, repart_kv_test::test_resources_dir());
+    const int n = 600;
+    for (int i = 0; i < n; ++i) {
+        std::string key = "aw:" + std::to_string(i);
+        std::string value = "v" + std::to_string(i);
+        ASSERT_STATUS_EQ(Status::SUCCESS, engine.async_write(key, value));
+    }
+    std::string read_value;
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.read("aw:0", read_value));
+    ASSERT_STR_EQ("v0", read_value);
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.read("aw:512", read_value));
+    ASSERT_STR_EQ("v512", read_value);
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.read("aw:599", read_value));
+    ASSERT_STR_EQ("v599", read_value);
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.force_sync());
+    ASSERT_STATUS_EQ(Status::SUCCESS, engine.read("aw:100", read_value));
+    ASSERT_STR_EQ("v100", read_value);
+    END_TEST("async_write_batch_then_read")
+}
+
 template <typename EngineType> void test_large_dataset() {
     TEST("large_dataset")
     EngineType engine(0, repart_kv_test::test_resources_dir());
@@ -592,6 +614,8 @@ void run_storage_engine_test_suite(const std::string &engine_name) {
          []() { test_scan_append_no_matches<EngineType>(); }},
         {"scan_append_multiple",
          []() { test_scan_append_multiple<EngineType>(); }},
+        {"async_write_batch_then_read",
+         []() { test_async_write_batch_then_read<EngineType>(); }},
         {"large_dataset", []() { test_large_dataset<EngineType>(); }},
         {"special_characters", []() { test_special_characters<EngineType>(); }},
         {"manual_locking", []() { test_manual_locking<EngineType>(); }},

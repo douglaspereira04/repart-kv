@@ -2,6 +2,7 @@
 
 #include "StorageEngineIterator.h"
 #include "StorageEngine.h"
+#include "AsyncWriteBatch.h"
 #include <rocksdb/db.h>
 #include <rocksdb/options.h>
 #include <rocksdb/status.h>
@@ -41,6 +42,7 @@ private:
     std::unique_ptr<rocksdb::DB> db_;
     bool is_open_;
     std::string db_path_;
+    AsyncWriteBatch async_batch_;
     static std::atomic_int db_counter_;
     static std::string id_;
 
@@ -54,6 +56,22 @@ private:
         rocksdb::WriteOptions o;
         o.sync = false;
         return o;
+    }
+
+    Status flush_async_batch() {
+        if (async_batch_.empty()) {
+            return Status::SUCCESS;
+        }
+        if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        rocksdb::WriteBatch batch;
+        for (const auto &[key, value] : async_batch_.entries) {
+            batch.Put(key, value);
+        }
+        rocksdb::Status status = db_->Write(async_write_options(), &batch);
+        async_batch_.clear();
+        return status.ok() ? Status::SUCCESS : Status::ERROR;
     }
 
 public:
@@ -117,6 +135,7 @@ public:
      */
     ~RocksDBStorageEngine() {
         if (is_open_ && db_) {
+            (void)flush_async_batch();
             db_.reset();
             is_open_ = false;
         }
@@ -131,18 +150,21 @@ public:
         StorageEngine<RocksDBStorageEngine<SYNC>, SYNC>(other.level_,
                                                         other.path_),
         db_(std::move(other.db_)), is_open_(other.is_open_),
-        db_path_(std::move(other.db_path_)) {
+        db_path_(std::move(other.db_path_)),
+        async_batch_(std::move(other.async_batch_)) {
         other.is_open_ = false;
     }
 
     RocksDBStorageEngine &operator=(RocksDBStorageEngine &&other) noexcept {
         if (this != &other) {
             if (is_open_ && db_) {
+                (void)flush_async_batch();
                 db_.reset();
             }
             db_ = std::move(other.db_);
             is_open_ = other.is_open_;
             db_path_ = std::move(other.db_path_);
+            async_batch_ = std::move(other.async_batch_);
             other.is_open_ = false;
         }
         return *this;
@@ -153,6 +175,10 @@ public:
      */
     Status read_impl(const std::string &key, std::string &value) const {
         if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        if (const_cast<RocksDBStorageEngine *>(this)->flush_async_batch() !=
+            Status::SUCCESS) {
             return Status::ERROR;
         }
         rocksdb::Status status = db_->Get(rocksdb::ReadOptions(), key, &value);
@@ -172,6 +198,9 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
+        if (flush_async_batch() != Status::SUCCESS) {
+            return Status::ERROR;
+        }
         rocksdb::Status status = db_->Put(durable_write_options(), key, value);
         if (status.ok()) {
             return Status::SUCCESS;
@@ -183,16 +212,18 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
-        rocksdb::Status status = db_->Put(async_write_options(), key, value);
-        if (status.ok()) {
-            return Status::SUCCESS;
+        async_batch_.add(key, value);
+        if (async_batch_.should_flush()) {
+            return flush_async_batch();
         }
-
-        return Status::ERROR;
+        return Status::SUCCESS;
     }
 
     Status force_sync_impl() {
         if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        if (flush_async_batch() != Status::SUCCESS) {
             return Status::ERROR;
         }
         rocksdb::WriteBatch batch;
@@ -212,6 +243,10 @@ public:
     scan_impl(const std::string &initial_key_prefix, size_t limit,
               std::vector<std::pair<std::string, std::string>> &results) const {
         if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        if (const_cast<RocksDBStorageEngine *>(this)->flush_async_batch() !=
+            Status::SUCCESS) {
             return Status::ERROR;
         }
 
@@ -251,6 +286,9 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
+        if (flush_async_batch() != Status::SUCCESS) {
+            return Status::ERROR;
+        }
 
         rocksdb::ReadOptions read_options;
         std::unique_ptr<rocksdb::Iterator> iter(db_->NewIterator(read_options));
@@ -288,6 +326,10 @@ public:
         if (!is_open_ || !db_) {
             return 0;
         }
+        if (const_cast<RocksDBStorageEngine *>(this)->flush_async_batch() !=
+            Status::SUCCESS) {
+            return 0;
+        }
         rocksdb::ReadOptions read_options;
         std::unique_ptr<rocksdb::Iterator> iter(db_->NewIterator(read_options));
         int64_t n = 0;
@@ -304,6 +346,9 @@ public:
         if (!is_open_ || !db_) {
             return false;
         }
+        if (flush_async_batch() != Status::SUCCESS) {
+            return false;
+        }
         if constexpr (SYNC) {
             rocksdb::WriteBatch batch;
             return db_->Write(durable_write_options(), &batch).ok();
@@ -318,6 +363,7 @@ public:
         if (!is_open_ || !db_) {
             return;
         }
+        async_batch_.clear();
         rocksdb::ReadOptions read_options;
         std::unique_ptr<rocksdb::Iterator> iter(db_->NewIterator(read_options));
         rocksdb::WriteBatch batch;
@@ -332,6 +378,9 @@ public:
      */
     Status remove_impl(const std::string &key, std::string &removed_value) {
         if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        if (flush_async_batch() != Status::SUCCESS) {
             return Status::ERROR;
         }
         rocksdb::Status get_status =
@@ -405,7 +454,10 @@ public:
     /**
      * @brief Implementation: create and return a RocksDB scan iterator
      */
-    RocksDBIterator iterator_impl() { return RocksDBIterator(*this); }
+    RocksDBIterator iterator_impl() {
+        (void)flush_async_batch();
+        return RocksDBIterator(*this);
+    }
 
     using IteratorType = RocksDBIterator;
 };

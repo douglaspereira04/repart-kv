@@ -13,13 +13,12 @@ TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d" "/media/douglas/ee8c0
 
 experiment_clear_storage_paths "${TMP[@]}"
 
-REPETITIONS=5
+REPETITIONS=3
 MAX_DURATION_SEC=30
 HARD_REPART_INTERVAL_MS=10000
 TRACKING_DURATION_MS=1000
 
-STORAGE_ENGINES=(leveldb lmdb lmdb_nolock)
-#STORAGE_ENGINES=(leveldb)
+STORAGE_ENGINES=(lmdb_nolock)
 #TEST_WORKERS="1,4,8,12,16,24,32"
 #THINKING_TIMES=(5000000) # 5ms (if operations are instant, then it would at most 200ops*threads/second)
 PARTITIONS="32"
@@ -76,7 +75,7 @@ run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIM
 TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d" "/media/douglas/ee8c0c0d-fdf9-4ae8-a9f0-4015c99554cb" "/media/douglas/fdedd994-5a78-4a52-9109-4a8fe3d2bad7")
 
 
-STORAGE_ENGINES=(leveldb lmdb lmdb_nolock)
+STORAGE_ENGINES=(lmdb_nolock)
 ALL_HARD_EXPERIMENT_TYPES=(engine partitioned repartitioning lock_stripping range_lock_stripping)
 
 

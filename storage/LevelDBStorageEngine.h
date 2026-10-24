@@ -2,6 +2,7 @@
 
 #include "StorageEngineIterator.h"
 #include "StorageEngine.h"
+#include "AsyncWriteBatch.h"
 #include <iostream>
 #include <leveldb/db.h>
 #include <leveldb/options.h>
@@ -43,6 +44,7 @@ private:
     std::unique_ptr<leveldb::DB> db_;
     bool is_open_;
     std::string db_path_;
+    AsyncWriteBatch async_batch_;
     static std::atomic_int db_counter_;
     static std::string id_;
 
@@ -56,6 +58,22 @@ private:
         leveldb::WriteOptions o;
         o.sync = false;
         return o;
+    }
+
+    Status flush_async_batch() {
+        if (async_batch_.empty()) {
+            return Status::SUCCESS;
+        }
+        if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        leveldb::WriteBatch batch;
+        for (const auto &[key, value] : async_batch_.entries) {
+            batch.Put(key, value);
+        }
+        leveldb::Status status = db_->Write(async_write_options(), &batch);
+        async_batch_.clear();
+        return status.ok() ? Status::SUCCESS : Status::ERROR;
     }
 
 public:
@@ -119,6 +137,7 @@ public:
      */
     ~LevelDBStorageEngine() {
         if (is_open_ && db_) {
+            (void)flush_async_batch();
             db_.reset();
             is_open_ = false;
         }
@@ -133,18 +152,21 @@ public:
         StorageEngine<LevelDBStorageEngine<SYNC>, SYNC>(other.level_,
                                                         other.path_),
         db_(std::move(other.db_)), is_open_(other.is_open_),
-        db_path_(std::move(other.db_path_)) {
+        db_path_(std::move(other.db_path_)),
+        async_batch_(std::move(other.async_batch_)) {
         other.is_open_ = false;
     }
 
     LevelDBStorageEngine &operator=(LevelDBStorageEngine &&other) noexcept {
         if (this != &other) {
             if (is_open_ && db_) {
+                (void)flush_async_batch();
                 db_.reset();
             }
             db_ = std::move(other.db_);
             is_open_ = other.is_open_;
             db_path_ = std::move(other.db_path_);
+            async_batch_ = std::move(other.async_batch_);
             other.is_open_ = false;
         }
         return *this;
@@ -155,6 +177,10 @@ public:
      */
     Status read_impl(const std::string &key, std::string &value) const {
         if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        if (const_cast<LevelDBStorageEngine *>(this)->flush_async_batch() !=
+            Status::SUCCESS) {
             return Status::ERROR;
         }
         leveldb::Status status = db_->Get(leveldb::ReadOptions(), key, &value);
@@ -174,6 +200,9 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
+        if (flush_async_batch() != Status::SUCCESS) {
+            return Status::ERROR;
+        }
         leveldb::Status status = db_->Put(durable_write_options(), key, value);
         if (status.ok()) {
             return Status::SUCCESS;
@@ -185,16 +214,18 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
-        leveldb::Status status = db_->Put(async_write_options(), key, value);
-        if (status.ok()) {
-            return Status::SUCCESS;
+        async_batch_.add(key, value);
+        if (async_batch_.should_flush()) {
+            return flush_async_batch();
         }
-
-        return Status::ERROR;
+        return Status::SUCCESS;
     }
 
     Status force_sync_impl() {
         if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        if (flush_async_batch() != Status::SUCCESS) {
             return Status::ERROR;
         }
         leveldb::WriteBatch batch;
@@ -214,6 +245,10 @@ public:
     scan_impl(const std::string &initial_key_prefix, size_t limit,
               std::vector<std::pair<std::string, std::string>> &results) const {
         if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        if (const_cast<LevelDBStorageEngine *>(this)->flush_async_batch() !=
+            Status::SUCCESS) {
             return Status::ERROR;
         }
 
@@ -253,6 +288,9 @@ public:
         if (!is_open_ || !db_) {
             return Status::ERROR;
         }
+        if (flush_async_batch() != Status::SUCCESS) {
+            return Status::ERROR;
+        }
 
         leveldb::ReadOptions read_options;
         std::unique_ptr<leveldb::Iterator> iter(db_->NewIterator(read_options));
@@ -290,6 +328,10 @@ public:
         if (!is_open_ || !db_) {
             return 0;
         }
+        if (const_cast<LevelDBStorageEngine *>(this)->flush_async_batch() !=
+            Status::SUCCESS) {
+            return 0;
+        }
         leveldb::ReadOptions read_options;
         std::unique_ptr<leveldb::Iterator> iter(db_->NewIterator(read_options));
         int64_t n = 0;
@@ -306,6 +348,9 @@ public:
         if (!is_open_ || !db_) {
             return false;
         }
+        if (flush_async_batch() != Status::SUCCESS) {
+            return false;
+        }
         if constexpr (SYNC) {
             leveldb::WriteBatch batch;
             return db_->Write(durable_write_options(), &batch).ok();
@@ -320,6 +365,7 @@ public:
         if (!is_open_ || !db_) {
             return;
         }
+        async_batch_.clear();
         leveldb::ReadOptions read_options;
         std::unique_ptr<leveldb::Iterator> iter(db_->NewIterator(read_options));
         leveldb::WriteBatch batch;
@@ -334,6 +380,9 @@ public:
      */
     Status remove_impl(const std::string &key, std::string &removed_value) {
         if (!is_open_ || !db_) {
+            return Status::ERROR;
+        }
+        if (flush_async_batch() != Status::SUCCESS) {
             return Status::ERROR;
         }
         leveldb::Status get_status =
@@ -407,7 +456,10 @@ public:
     /**
      * @brief Implementation: create and return a LevelDB scan iterator
      */
-    LevelDBIterator iterator_impl() { return LevelDBIterator(*this); }
+    LevelDBIterator iterator_impl() {
+        (void)flush_async_batch();
+        return LevelDBIterator(*this);
+    }
 
     using IteratorType = LevelDBIterator;
 };

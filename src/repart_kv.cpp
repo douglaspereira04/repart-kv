@@ -49,6 +49,7 @@
 #include <barrier>
 #include <random>
 #include <set>
+#include <algorithm>
 
 // Global parameters
 size_t PARTITION_COUNT = 4;
@@ -711,26 +712,79 @@ void run_workload_with_storage(workload::RequestGenerator &generator,
     // Execute operations
     std::cout << "\n=== Executing Workload ===" << std::endl;
 
-    // Execute preload
-    std::cout << "Preload: executing preload operations... " << std::flush;
-    size_t preload = 0;
-
-    loadgen::types::Type type;
-    long key;
-    std::string value;
-    long scan_size;
-    std::string string_key;
-    workload::RequestGenerator::Phase phase =
-        generator.next(type, key, value, scan_size);
-    string_key = std::to_string(key);
-    while (phase == workload::RequestGenerator::Phase::LOADING) {
-        execute_preload_operation(type, string_key, value, scan_size, storage);
-        preload++;
-        phase = generator.next(type, key, value, scan_size);
-        string_key = std::to_string(key);
+    // Execute preload: sequential keys 0..n_records-1. LoadGen's LOADING
+    // next() is skipped so value generation is not a serial bottleneck;
+    // payload size still follows gen_values / DEFAULT_VALUE.
+    std::string preload_payload;
+    const std::string *preload_value = &workload::DEFAULT_VALUE;
+    if (generator.config().gen_values) {
+        long lo = generator.config().value_min_size;
+        long hi = generator.config().value_max_size;
+        if (lo < 0) {
+            lo = 0;
+        }
+        if (hi < lo) {
+            hi = lo;
+        }
+        preload_payload.assign(static_cast<size_t>(hi), '*');
+        preload_value = &preload_payload;
     }
 
-    if (preload > 0) {
+    const size_t preload_workers = std::max<size_t>(1, test_workers);
+    std::cout << "Preload: inserting "
+              << format_with_separators(n_records < 0 ? 0 : n_records)
+              << " records with " << preload_workers << " workers... "
+              << std::flush;
+    const auto preload_t0 = std::chrono::steady_clock::now();
+
+    std::atomic<int> preload_key{0};
+    std::atomic<size_t> preload{0};
+    auto preload_worker = [&]() {
+        while (true) {
+            const int key = preload_key.fetch_add(1, std::memory_order_relaxed);
+            if (n_records <= 0 || key >= n_records) {
+                break;
+            }
+            const std::string string_key = std::to_string(key);
+            if constexpr (requires(StorageType &s) {
+                              s.lock();
+                              s.unlock();
+                          }) {
+                storage.lock();
+                execute_preload_operation(loadgen::types::Type::WRITE,
+                                          string_key, *preload_value, 0,
+                                          storage);
+                storage.unlock();
+            } else {
+                execute_preload_operation(loadgen::types::Type::WRITE,
+                                          string_key, *preload_value, 0,
+                                          storage);
+            }
+            const size_t done =
+                preload.fetch_add(1, std::memory_order_relaxed) + 1;
+            if (done % 1000000 == 0) {
+                std::cout << done << "... " << std::flush;
+            }
+        }
+    };
+
+    if (n_records > 0) {
+        std::vector<std::thread> preload_threads;
+        preload_threads.reserve(preload_workers);
+        for (size_t i = 0; i < preload_workers; ++i) {
+            preload_threads.emplace_back(preload_worker);
+        }
+        for (auto &thread : preload_threads) {
+            thread.join();
+        }
+    }
+
+    if (generator.current_phase() ==
+        workload::RequestGenerator::Phase::LOADING) {
+        generator.skip_current_phase();
+    }
+
+    if (preload.load() > 0) {
         Status flush_status = storage.force_sync();
         if (flush_status != Status::SUCCESS) {
             std::cerr << "Error: preload force_sync failed" << std::endl;
@@ -740,7 +794,11 @@ void run_workload_with_storage(workload::RequestGenerator &generator,
 
     assert(generator.current_phase() ==
            workload::RequestGenerator::Phase::OPERATIONS);
-    std::cout << " [DONE]" << std::endl;
+    const auto preload_ms =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - preload_t0)
+            .count();
+    std::cout << " [DONE] preload_ms=" << preload_ms << std::endl;
     std::barrier start_barrier(test_workers + 2);
 
     // Execute workload
@@ -814,9 +872,9 @@ void run_workload_with_storage(workload::RequestGenerator &generator,
 
     std::cout << "\n=== Results ===" << std::endl;
     std::cout << "Storage type: " << storage_type_name << std::endl;
-    if (preload > 0) {
-        std::cout << "Preload operations: " << format_with_separators(preload)
-                  << std::endl;
+    if (preload.load() > 0) {
+        std::cout << "Preload operations: "
+                  << format_with_separators(preload.load()) << std::endl;
     }
     std::cout << "Total operations executed (excluding preload): "
               << format_with_separators(total_operations) << std::endl;
