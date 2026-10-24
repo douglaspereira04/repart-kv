@@ -9,7 +9,10 @@ _EXPERIMENT_SET_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_EXPERIMENT_SET_DIR}/experiment_set_lib.sh"
 experiment_enable_dry_run_from_args "$@"
 
-TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d" "/media/douglas/ee8c0c0d-fdf9-4ae8-a9f0-4015c99554cb" "/media/douglas/fdedd994-5a78-4a52-9109-4a8fe3d2bad7")
+MULTIPLE_DIRS=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d" "/media/douglas/ee8c0c0d-fdf9-4ae8-a9f0-4015c99554cb" "/media/douglas/fdedd994-5a78-4a52-9109-4a8fe3d2bad7")
+SINGLE_DIR=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d")
+
+TMP=("${MULTIPLE_DIRS[@]}")
 
 experiment_clear_storage_paths "${TMP[@]}"
 
@@ -44,7 +47,7 @@ SYNC_ON=(true)
 run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
 ALL_HARD_EXPERIMENT_TYPES=(partitioned repartitioning lock_stripping range_lock_stripping)
 
-TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d")
+TMP=("${SINGLE_DIR[@]}")
 
 experiment_clear_storage_paths "${TMP[@]}"
 
@@ -73,7 +76,7 @@ run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIM
 
 
 #READ WORKLOADS
-TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d" "/media/douglas/ee8c0c0d-fdf9-4ae8-a9f0-4015c99554cb" "/media/douglas/fdedd994-5a78-4a52-9109-4a8fe3d2bad7")
+TMP=("${MULTIPLE_DIRS[@]}")
 
 
 STORAGE_ENGINES=(leveldb lmdb lmdb_nolock)
@@ -92,7 +95,7 @@ SYNC_ON=(true)
 run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
 ALL_HARD_EXPERIMENT_TYPES=(partitioned repartitioning lock_stripping range_lock_stripping)
 
-TMP=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d")
+TMP=("${SINGLE_DIR[@]}")
 
 experiment_clear_storage_paths "${TMP[@]}"
 

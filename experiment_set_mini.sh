@@ -9,7 +9,9 @@ _EXPERIMENT_SET_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${_EXPERIMENT_SET_DIR}/experiment_set_lib.sh"
 experiment_enable_dry_run_from_args "$@"
 
-TMP=("/tmp/repart-kv-mini")
+SINGLE_DIR=("/tmp/repart-kv-mini")
+
+TMP=("${SINGLE_DIR[@]}")
 mkdir -p "${TMP[@]}"
 
 experiment_clear_storage_paths "${TMP[@]}"
