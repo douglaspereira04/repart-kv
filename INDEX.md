@@ -72,7 +72,7 @@ Module docs:
 - `workload/Workload.h`: default 1KB write value; unused CSV parser
 - LoadGen (FetchContent): `workload::RequestGenerator` used by `src/repart_kv.cpp`
 - `ycsb_a.toml` … `ycsb_e.toml`: bundled LoadGen configs (~1 GiB payload)
-- `ycsb_a_large.toml`, `ycsb_d_large.toml`, `ycsb_e_large.toml`: same mixes, 32 GiB of values (`experiment_set_large.sh`)
+- `ycsb_a_large.toml`, `ycsb_d_large.toml`, `ycsb_e_large.toml`: same mixes, 16 GiB of values (`experiment_set_large.sh`)
 - `ycsb_a_mini.toml`, `ycsb_d_mini.toml`, `ycsb_e_mini.toml`: same mixes, 10240 records (`experiment_set_mini.sh`, `experiment_set_mini_full.sh`)
 
 ### `src/`
@@ -87,7 +87,7 @@ Module docs:
 - `run_tests.sh`: runs `build/test_*` executables
 - `experiment_set_lib.sh`: shared runners sourced by `experiment_set*.sh` (`--dry-run` / `-n` lists runner commands)
 - `experiment_set.sh`: experiment grid for the 1 GiB YCSB configs
-- `experiment_set_large.sh`: same grid with `*_large.toml` (32 GiB payloads)
+- `experiment_set_large.sh`: same grid with `*_large.toml` (16 GiB payloads)
 - `experiment_set_mini.sh`: small smoke grid with `*_mini.toml`
 - `experiment_set_mini_full.sh`: same grid as `experiment_set.sh` with `*_mini.toml`
 - `main.cpp`: CLI trampoline that forwards into `run_repart_kv`

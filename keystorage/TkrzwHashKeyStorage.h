@@ -3,6 +3,7 @@
 #include "KeyStorage.h"
 #include "KeyStorageIterator.h"
 #include "KeyStorageValueBinary.h"
+#include "../storage/InstanceId.h"
 #include <tkrzw_dbm_hash.h>
 #include <string>
 #include <memory>
@@ -65,7 +66,7 @@ public:
         tuning_params.num_buckets = 100000;
 
         tkrzw::Status status = db_->OpenAdvanced(
-            db_file_path_, true, tkrzw::File::OPEN_TRUNCATE, tuning_params);
+            db_file_path_, true, tkrzw::File::OPEN_DEFAULT, tuning_params);
 
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;
@@ -80,7 +81,7 @@ public:
             db_->Close();
             is_open_ = false;
         }
-        if (!db_file_path_.empty()) {
+        if (!db_file_path_.empty() && !repart_kv_keep_storage()) {
             std::error_code ec;
             std::filesystem::remove(db_file_path_, ec);
         }
@@ -320,7 +321,5 @@ template <KeyStorageValueType ValueType>
 inline std::atomic_int TkrzwHashKeyStorage<ValueType>::db_counter_ = 0;
 
 template <KeyStorageValueType ValueType>
-inline std::string TkrzwHashKeyStorage<ValueType>::id_ = std::to_string(
-    std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch())
-        .count());
+inline std::string TkrzwHashKeyStorage<ValueType>::id_ =
+    repart_kv_instance_id();

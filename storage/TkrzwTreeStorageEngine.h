@@ -2,6 +2,7 @@
 
 #include "StorageEngineIterator.h"
 #include "StorageEngine.h"
+#include "InstanceId.h"
 #include <tkrzw_dbm_tree.h>
 #include <string>
 #include <vector>
@@ -76,11 +77,11 @@ public:
         tkrzw::TreeDBM::TuningParameters tuning_params;
         tuning_params.record_comp_mode = tkrzw::HashDBM::RECORD_COMP_ZLIB;
 
-        tkrzw::Status status =
-            db_->OpenAdvanced(temp_path,
-                              true,                       // writable
-                              tkrzw::File::OPEN_TRUNCATE, // Create new
-                              tuning_params);
+        tkrzw::Status status = db_->OpenAdvanced(
+            temp_path,
+            true,                      // writable
+            tkrzw::File::OPEN_DEFAULT, // keep an existing file
+            tuning_params);
 
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;
@@ -439,7 +440,4 @@ public:
 template <bool SYNC> std::atomic_int TkrzwTreeStorageEngine<SYNC>::db_counter_ =
     0;
 template <bool SYNC> std::string TkrzwTreeStorageEngine<SYNC>::id_ =
-    std::to_string(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::high_resolution_clock::now().time_since_epoch())
-            .count());
+    repart_kv_instance_id();

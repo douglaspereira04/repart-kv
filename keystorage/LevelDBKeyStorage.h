@@ -3,6 +3,7 @@
 #include "KeyStorage.h"
 #include "KeyStorageIterator.h"
 #include "KeyStorageValueBinary.h"
+#include "../storage/InstanceId.h"
 #include <leveldb/db.h>
 #include <leveldb/options.h>
 #include <leveldb/status.h>
@@ -74,7 +75,7 @@ public:
         if (is_open_ && db_) {
             db_.reset();
             is_open_ = false;
-            if (!db_path_.empty()) {
+            if (!db_path_.empty() && !repart_kv_keep_storage()) {
                 std::error_code ec;
                 std::filesystem::remove_all(db_path_, ec);
             }
@@ -315,7 +316,4 @@ template <KeyStorageValueType ValueType>
 inline std::atomic_int LevelDBKeyStorage<ValueType>::db_counter_ = 0;
 
 template <KeyStorageValueType ValueType>
-inline std::string LevelDBKeyStorage<ValueType>::id_ = std::to_string(
-    std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch())
-        .count());
+inline std::string LevelDBKeyStorage<ValueType>::id_ = repart_kv_instance_id();

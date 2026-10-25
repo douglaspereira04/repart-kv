@@ -2,6 +2,7 @@
 
 #include "StorageEngineIterator.h"
 #include "StorageEngine.h"
+#include "InstanceId.h"
 #include <atomic>
 #include <tkrzw_dbm_hash.h>
 #include <string>
@@ -69,7 +70,7 @@ public:
 
         tkrzw::Status status = db_->OpenAdvanced(temp_path,
                                                  true, // writable
-                                                 tkrzw::File::OPEN_TRUNCATE);
+                                                 tkrzw::File::OPEN_DEFAULT);
 
         if (status == tkrzw::Status::SUCCESS) {
             is_open_ = true;
@@ -398,7 +399,4 @@ public:
 template <bool SYNC> std::atomic_int TkrzwHashStorageEngine<SYNC>::db_counter_ =
     0;
 template <bool SYNC> std::string TkrzwHashStorageEngine<SYNC>::id_ =
-    std::to_string(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::high_resolution_clock::now().time_since_epoch())
-            .count());
+    repart_kv_instance_id();

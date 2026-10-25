@@ -1,16 +1,25 @@
 #!/bin/bash
 
-# Same experiment grid as experiment_set.sh, but with 32 GiB payloads
-# (ycsb_{a,d,e}_large.toml: 8,388,608 records × 4096 B). CSV names use the
+# Same experiment grid as experiment_set.sh, but with 16 GiB payloads
+# (ycsb_{a,d,e}_large.toml: 4,194,304 records × 4096 B). CSV names use the
 # _large workload stem, so they do not collide with results from experiment_set.sh.
+#
+# Preload is saved once per engine/type under EXPERIMENT_PRELOAD_SNAPSHOT_DIR
+# and copied into SINGLE_DIR for every later run. Sync off and sync on share
+# a snapshot: async_write during preload does not honor the sync flag.
 
 _EXPERIMENT_SET_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=experiment_set_lib.sh
 source "${_EXPERIMENT_SET_DIR}/experiment_set_lib.sh"
 experiment_enable_dry_run_from_args "$@"
 
+EXPERIMENT_PRELOAD_SNAPSHOT_DIR="/run/media/douglas/20B86D91B86D666E/snapshots"
+if ! experiment_is_dry_run; then
+    mkdir -p "$EXPERIMENT_PRELOAD_SNAPSHOT_DIR" || exit 1
+fi
+
 MULTIPLE_DIRS=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d" "/media/douglas/ee8c0c0d-fdf9-4ae8-a9f0-4015c99554cb" "/media/douglas/fdedd994-5a78-4a52-9109-4a8fe3d2bad7")
-SINGLE_DIR=("/media/douglas/055a7abb-4de7-4973-96ca-2c96fc9cf83d")
+SINGLE_DIR=("/run/media/douglas/fdedd994-5a78-4a52-9109-4a8fe3d2bad7/experiment")
 
 TMP=("${MULTIPLE_DIRS[@]}")
 
@@ -39,11 +48,11 @@ WORKLOADS=(ycsb_a_large.toml)
 TEST_WORKERS="4,8,12,16"
 THINKING_TIMES=(100000)
 SYNC_ON=(false)
-run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
+#run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
 
 THINKING_TIMES=(10000000)
 SYNC_ON=(true)
-run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
+#run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
 ALL_HARD_EXPERIMENT_TYPES=(partitioned repartitioning lock_stripping range_lock_stripping)
 
 TMP=("${SINGLE_DIR[@]}")
@@ -87,11 +96,11 @@ WORKLOADS=(ycsb_d_large.toml ycsb_e_large.toml)
 TEST_WORKERS="4,8,12,16"
 THINKING_TIMES=(20000)
 SYNC_ON=(false)
-run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
+#run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
 
 THINKING_TIMES=(200000)
 SYNC_ON=(true)
-run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
+#run_experiment_set SYNC_ON "$REPETITIONS" STORAGE_ENGINES WORKLOADS THINKING_TIMES "$MAX_DURATION_SEC" "$HARD_REPART_INTERVAL_MS" ALL_HARD_EXPERIMENT_TYPES "$TRACKING_DURATION_MS"
 ALL_HARD_EXPERIMENT_TYPES=(partitioned repartitioning lock_stripping range_lock_stripping)
 
 TMP=("${SINGLE_DIR[@]}")

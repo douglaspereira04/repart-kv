@@ -11,7 +11,7 @@ Repart-KV is a C++20 codebase that executes a LoadGen workload against a partiti
 - `main.cpp`: optional `repart-kv-runner` CLI that forwards arguments to the core entry point
 - LoadGen (FetchContent): TOML-driven `RequestGenerator` (LOADING then OPERATIONS)
 - `ycsb_a.toml` … `ycsb_e.toml`: bundled YCSB-style LoadGen configs (~1 GiB payload)
-- `ycsb_a_large.toml`, `ycsb_d_large.toml`, `ycsb_e_large.toml`: same mixes with 32 GiB of values (`experiment_set_large.sh`)
+- `ycsb_a_large.toml`, `ycsb_d_large.toml`, `ycsb_e_large.toml`: same mixes with 16 GiB of values (`experiment_set_large.sh`)
 - `workload/Workload.h`: default 1KB write payload (CSV parser is unused by the runner)
 
 ### Storage engines (`storage/`)

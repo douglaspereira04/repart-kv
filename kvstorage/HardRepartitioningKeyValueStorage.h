@@ -272,10 +272,15 @@ public:
     }
 
     Status force_sync_impl() {
-        for (StorageEngineType *s : storages_) {
+        // Hold each partition lock. lmdb_nolock (MDB_NOLOCK) has no internal
+        // lock, and the repartition thread uses these engines concurrently.
+        for (size_t i = 0; i < storages_.size(); ++i) {
+            StorageEngineType *s = storages_[i];
             if (s == nullptr) {
                 return Status::ERROR;
             }
+            std::unique_lock<std::shared_mutex> partition_lock(
+                *partition_locks_[i]);
             Status st = s->force_sync();
             if (st != Status::SUCCESS) {
                 return st;
@@ -326,13 +331,19 @@ public:
                 const auto &keys = keys_by_partition[partition_idx];
 
                 std::string value;
-                IteratorType iterator = storages_[partition_idx]->iterator();
-                for (const auto &key : keys) {
-                    status = iterator.find(key, value);
-                    if (status != Status::SUCCESS) {
-                        break;
+                {
+                    // End the read transaction before releasing the lock.
+                    // MDB_NOLOCK engines SIGBUS if a writer runs while it
+                    // is still open.
+                    IteratorType iterator =
+                        storages_[partition_idx]->iterator();
+                    for (const auto &key : keys) {
+                        status = iterator.find(key, value);
+                        if (status != Status::SUCCESS) {
+                            break;
+                        }
+                        results.push_back({key, value});
                     }
-                    results.push_back({key, value});
                 }
                 partition_locks_[partition_idx]->unlock_shared();
             }

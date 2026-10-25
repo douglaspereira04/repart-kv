@@ -3,6 +3,7 @@
 #include "StorageEngineIterator.h"
 #include "StorageEngine.h"
 #include "AsyncWriteBatch.h"
+#include "InstanceId.h"
 #include <lmdb.h>
 #include <string>
 #include <vector>
@@ -185,7 +186,7 @@ public:
 
             // Clean up temporary directory if it was created
             std::string temp_prefix = this->path_ + "/repart_kv_storage/";
-            if (db_path_.find(temp_prefix) == 0) {
+            if (!repart_kv_keep_storage() && db_path_.find(temp_prefix) == 0) {
                 std::filesystem::remove_all(db_path_);
             }
         }
@@ -805,7 +806,4 @@ private:
 template <bool SYNC, bool NOLOCK>
 std::atomic_int LmdbStorageEngine<SYNC, NOLOCK>::db_counter_ = 0;
 template <bool SYNC, bool NOLOCK>
-std::string LmdbStorageEngine<SYNC, NOLOCK>::id_ = std::to_string(
-    std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch())
-        .count());
+std::string LmdbStorageEngine<SYNC, NOLOCK>::id_ = repart_kv_instance_id();

@@ -1,8 +1,7 @@
 # YCSB-A mix (50% read / 50% update, Zipfian).
-# Payload: 8,388,608 records * 4096 B = 32 GiB of values, so a 32 GiB RAM
-# machine cannot hold the whole working set in the OS page cache.
+# Payload: 4,194,304 records * 4096 B = 16 GiB of values.
 # The original ycsb_a.toml is 1M records with gen_values=false (1 KiB default).
-workload.n_records = 8388608
+workload.n_records = 4194304
 workload.n_operations = 10000000
 
 workload.key_seed = 1908944376

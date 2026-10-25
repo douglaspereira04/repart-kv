@@ -3,6 +3,7 @@
 #include "StorageEngineIterator.h"
 #include "StorageEngine.h"
 #include "AsyncWriteBatch.h"
+#include "InstanceId.h"
 #include <iostream>
 #include <leveldb/db.h>
 #include <leveldb/options.h>
@@ -468,7 +469,4 @@ public:
 template <bool SYNC> std::atomic_int LevelDBStorageEngine<SYNC>::db_counter_ =
     0;
 template <bool SYNC> std::string LevelDBStorageEngine<SYNC>::id_ =
-    std::to_string(
-        std::chrono::duration_cast<std::chrono::nanoseconds>(
-            std::chrono::high_resolution_clock::now().time_since_epoch())
-            .count());
+    repart_kv_instance_id();

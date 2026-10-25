@@ -9,6 +9,7 @@
 #include <iomanip>
 #include <sstream>
 #include <memory>
+#include <cstdlib>
 #include "workload/Workload.h"
 #if __has_include("request/request_generator.h")
 #include "request/request_generator.h"
@@ -50,6 +51,11 @@
 #include <random>
 #include <set>
 #include <algorithm>
+
+static bool repart_kv_env_flag(const char *name) {
+    const char *value = std::getenv(name);
+    return value != nullptr && value[0] != '\0' && value[0] != '0';
+}
 
 // Global parameters
 size_t PARTITION_COUNT = 4;
@@ -730,75 +736,98 @@ void run_workload_with_storage(workload::RequestGenerator &generator,
         preload_value = &preload_payload;
     }
 
-    const size_t preload_workers = std::max<size_t>(1, test_workers);
-    std::cout << "Preload: inserting "
-              << format_with_separators(n_records < 0 ? 0 : n_records)
-              << " records with " << preload_workers << " workers... "
-              << std::flush;
-    const auto preload_t0 = std::chrono::steady_clock::now();
+    const bool skip_preload = repart_kv_env_flag("REPART_KV_SKIP_PRELOAD");
+    const bool preload_only = repart_kv_env_flag("REPART_KV_PRELOAD_ONLY");
+    if (skip_preload && preload_only) {
+        std::cerr << "Error: REPART_KV_SKIP_PRELOAD and REPART_KV_PRELOAD_ONLY "
+                     "cannot both be set"
+                  << std::endl;
+        exit(1);
+    }
 
-    std::atomic<int> preload_key{0};
     std::atomic<size_t> preload{0};
-    auto preload_worker = [&]() {
-        while (true) {
-            const int key = preload_key.fetch_add(1, std::memory_order_relaxed);
-            if (n_records <= 0 || key >= n_records) {
-                break;
-            }
-            const std::string string_key = std::to_string(key);
-            if constexpr (requires(StorageType &s) {
-                              s.lock();
-                              s.unlock();
-                          }) {
-                storage.lock();
-                execute_preload_operation(loadgen::types::Type::WRITE,
-                                          string_key, *preload_value, 0,
-                                          storage);
-                storage.unlock();
-            } else {
-                execute_preload_operation(loadgen::types::Type::WRITE,
-                                          string_key, *preload_value, 0,
-                                          storage);
-            }
-            const size_t done =
-                preload.fetch_add(1, std::memory_order_relaxed) + 1;
-            if (done % 1000000 == 0) {
-                std::cout << done << "... " << std::flush;
-            }
-        }
-    };
+    if (!skip_preload) {
+        const size_t preload_workers = std::max<size_t>(1, test_workers);
+        std::cout << "Preload: inserting "
+                  << format_with_separators(n_records < 0 ? 0 : n_records)
+                  << " records with " << preload_workers << " workers... "
+                  << std::flush;
+        const auto preload_t0 = std::chrono::steady_clock::now();
 
-    if (n_records > 0) {
-        std::vector<std::thread> preload_threads;
-        preload_threads.reserve(preload_workers);
-        for (size_t i = 0; i < preload_workers; ++i) {
-            preload_threads.emplace_back(preload_worker);
-        }
-        for (auto &thread : preload_threads) {
-            thread.join();
-        }
-    }
+        std::atomic<int> preload_key{0};
+        auto preload_worker = [&]() {
+            while (true) {
+                const int key =
+                    preload_key.fetch_add(1, std::memory_order_relaxed);
+                if (n_records <= 0 || key >= n_records) {
+                    break;
+                }
+                const std::string string_key = std::to_string(key);
+                if constexpr (requires(StorageType &s) {
+                                  s.lock();
+                                  s.unlock();
+                              }) {
+                    storage.lock();
+                    execute_preload_operation(loadgen::types::Type::WRITE,
+                                              string_key, *preload_value, 0,
+                                              storage);
+                    storage.unlock();
+                } else {
+                    execute_preload_operation(loadgen::types::Type::WRITE,
+                                              string_key, *preload_value, 0,
+                                              storage);
+                }
+                const size_t done =
+                    preload.fetch_add(1, std::memory_order_relaxed) + 1;
+                if (done % 1000000 == 0) {
+                    std::cout << done << "... " << std::flush;
+                }
+            }
+        };
 
-    if (generator.current_phase() ==
-        workload::RequestGenerator::Phase::LOADING) {
-        generator.skip_current_phase();
-    }
-
-    if (preload.load() > 0) {
-        Status flush_status = storage.force_sync();
-        if (flush_status != Status::SUCCESS) {
-            std::cerr << "Error: preload force_sync failed" << std::endl;
-            exit(1);
+        if (n_records > 0) {
+            std::vector<std::thread> preload_threads;
+            preload_threads.reserve(preload_workers);
+            for (size_t i = 0; i < preload_workers; ++i) {
+                preload_threads.emplace_back(preload_worker);
+            }
+            for (auto &thread : preload_threads) {
+                thread.join();
+            }
         }
+
+        if (generator.current_phase() ==
+            workload::RequestGenerator::Phase::LOADING) {
+            generator.skip_current_phase();
+        }
+
+        if (preload.load() > 0) {
+            Status flush_status = storage.force_sync();
+            if (flush_status != Status::SUCCESS) {
+                std::cerr << "Error: preload force_sync failed" << std::endl;
+                exit(1);
+            }
+        }
+
+        const auto preload_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                std::chrono::steady_clock::now() - preload_t0)
+                .count();
+        std::cout << " [DONE] preload_ms=" << preload_ms << std::endl;
+    } else {
+        if (generator.current_phase() ==
+            workload::RequestGenerator::Phase::LOADING) {
+            generator.skip_current_phase();
+        }
+        std::cout << "Preload: skipped, using existing storage" << std::endl;
     }
 
     assert(generator.current_phase() ==
            workload::RequestGenerator::Phase::OPERATIONS);
-    const auto preload_ms =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - preload_t0)
-            .count();
-    std::cout << " [DONE] preload_ms=" << preload_ms << std::endl;
+    if (preload_only) {
+        std::cout << "PRELOAD_ONLY done" << std::endl;
+        return;
+    }
     std::barrier start_barrier(test_workers + 2);
 
     // Execute workload

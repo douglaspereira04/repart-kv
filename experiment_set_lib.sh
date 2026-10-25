@@ -33,6 +33,134 @@ experiment_clear_storage_paths() {
     done
 }
 
+# When EXPERIMENT_PRELOAD_SNAPSHOT_DIR is set, each engine/type/partition/interval
+# is preloaded once into that directory and later runs copy the tree and skip
+# the insert loop. Sync does not change the preloaded bytes, so one snapshot
+# covers sync off and sync on. The directory id inside the tree is fixed
+# (REPART_KV_STORAGE_ID=snap) so the next process reopens the same files.
+EXPERIMENT_SNAPSHOT_STORAGE_ID=snap
+EXPERIMENT_SNAPSHOT_PRELOAD_WORKERS="${EXPERIMENT_SNAPSHOT_PRELOAD_WORKERS:-16}"
+
+experiment_workload_number() {
+    local file="$1"
+    local key="$2"
+    awk -F= -v key="$key" '
+        {
+            name = $1
+            gsub(/[[:space:]]/, "", name)
+            if (name == key) {
+                value = $2
+                sub(/#.*/, "", value)
+                gsub(/[[:space:]]/, "", value)
+                print value
+                exit
+            }
+        }
+    ' "$file"
+}
+
+experiment_snapshot_key() {
+    local workload_file="$1"
+    local partitions="$2"
+    local kv_type="$3"
+    local engine="$4"
+    local interval="$5"
+    local n_records value_size
+    n_records=$(experiment_workload_number "$workload_file" "workload.n_records")
+    value_size=$(experiment_workload_number "$workload_file" "workload.value_max_size")
+    if [[ -z "$n_records" || -z "$value_size" ]]; then
+        echo "Error: could not read n_records/value_max_size from $workload_file" >&2
+        return 1
+    fi
+    printf '%s__%s__p%s__i%s__n%s__v%s\n' \
+        "$engine" "$kv_type" "$partitions" "$interval" "$n_records" "$value_size"
+}
+
+# Build $dest (with READY) if needed. Paths inside the snapshot are p0, p1, ...
+# matching the runner path list for this combo.
+experiment_ensure_preload_snapshot() {
+    local dest="$1"
+    local workload_file="$2"
+    local partitions="$3"
+    local kv_type="$4"
+    local engine="$5"
+    local interval="$6"
+    local tracking_ms="$7"
+    shift 7
+    local paths=("$@")
+
+    if [[ -f "$dest/READY" ]]; then
+        return 0
+    fi
+    if [[ -f "$dest/FAILED" ]]; then
+        echo "Preload snapshot previously failed: $dest" >&2
+        return 1
+    fi
+
+    local root stage log_file joined i
+    root=$(dirname "$dest")
+    stage="${dest}.staging"
+    log_file="${dest}.build.log"
+    rm -rf "$stage"
+    mkdir -p "$root"
+    local -a stage_paths=()
+    for i in "${!paths[@]}"; do
+        mkdir -p "$stage/p${i}"
+        stage_paths+=("$stage/p${i}")
+    done
+    joined=$(IFS=,; echo "${stage_paths[*]}")
+
+    echo "Building preload snapshot $dest"
+    echo "  workers=$EXPERIMENT_SNAPSHOT_PRELOAD_WORKERS paths=$joined"
+    if ! REPART_KV_STORAGE_ID="$EXPERIMENT_SNAPSHOT_STORAGE_ID" \
+        REPART_KV_KEEP_STORAGE=1 \
+        REPART_KV_PRELOAD_ONLY=1 \
+        ./build/repart-kv-runner \
+            "$workload_file" "$partitions" "$EXPERIMENT_SNAPSHOT_PRELOAD_WORKERS" \
+            "$kv_type" "$engine" 0 "$joined" "$interval" 1 false "$tracking_ms" \
+            > "$log_file" 2>&1; then
+        echo "Preload snapshot build failed. Log: $log_file" >&2
+        tail -20 "$log_file" >&2 || true
+        rm -rf "$stage"
+        mkdir -p "$dest"
+        echo "see ${log_file}" > "$dest/FAILED"
+        return 1
+    fi
+    if ! grep -q "PRELOAD_ONLY done" "$log_file"; then
+        echo "Preload snapshot build exited 0 without PRELOAD_ONLY done. Log: $log_file" >&2
+        rm -rf "$stage"
+        mkdir -p "$dest"
+        echo "see ${log_file}" > "$dest/FAILED"
+        return 1
+    fi
+    printf '%s\n' "$log_file" > "$stage/BUILD_LOG"
+    : > "$stage/READY"
+    rm -rf "$dest"
+    mv "$stage" "$dest"
+    echo "Preload snapshot ready: $dest"
+}
+
+experiment_restore_preload_snapshot() {
+    local snap="$1"
+    shift
+    local paths=("$@")
+    local i p src
+    for i in "${!paths[@]}"; do
+        p="${paths[$i]}"
+        src="$snap/p${i}"
+        if [[ ! -d "$src/repart_kv_storage" ]]; then
+            echo "Error: snapshot is missing $src/repart_kv_storage" >&2
+            return 1
+        fi
+        rm -rf "$p/repart_kv_storage" "$p/repart_kv_keystorage"
+        mkdir -p "$p"
+        cp -a --sparse=always "$src/repart_kv_storage" "$p/"
+        if [[ -d "$src/repart_kv_keystorage" ]]; then
+            cp -a --sparse=always "$src/repart_kv_keystorage" "$p/"
+        fi
+    done
+}
+
 # Function to run and move metrics
 # Arguments:
 # 1. Test number
@@ -86,6 +214,18 @@ function run_and_move_metrics {
     local EXECUTE="./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL $MAX_DURATION $SYNC $TRACKING_DURATION_MS"
     echo $EXECUTE
 
+    local SNAPSHOT_DEST=""
+    if [[ -n "${EXPERIMENT_PRELOAD_SNAPSHOT_DIR:-}" ]]; then
+        local SNAPSHOT_KEY
+        if ! SNAPSHOT_KEY=$(experiment_snapshot_key "$WORKLOAD_FILE" "$PARTITIONS" \
+            "$KV_STORAGE_TYPE" "$STORAGE_ENGINE" "$REPARTITIONING_INTERVAL"); then
+            echo "$EXECUTE" >> fail.log
+            return 0
+        fi
+        SNAPSHOT_DEST="${EXPERIMENT_PRELOAD_SNAPSHOT_DIR}/${SNAPSHOT_KEY}"
+        echo "Preload snapshot: $SNAPSHOT_DEST"
+    fi
+
     if experiment_is_dry_run; then
         return 0
     fi
@@ -96,15 +236,28 @@ function run_and_move_metrics {
         return 0
     fi
 
-    # create repart_kv_storage directory in each path
-    # stop if directory already exists
-    for p in "${PATHS[@]}"; do
-        if [ -d "${p}/repart_kv_storage" ]; then
-            echo "Error: directory ${p}/repart_kv_storage already exists"
-            exit 1
+    if [[ -n "$SNAPSHOT_DEST" ]]; then
+        if ! experiment_ensure_preload_snapshot "$SNAPSHOT_DEST" "$WORKLOAD_FILE" \
+            "$PARTITIONS" "$KV_STORAGE_TYPE" "$STORAGE_ENGINE" \
+            "$REPARTITIONING_INTERVAL" "$TRACKING_DURATION_MS" "${PATHS[@]}"; then
+            echo "$EXECUTE" >> fail.log
+            return 0
         fi
-        mkdir -p "${p}/repart_kv_storage" || true
-    done
+        if ! experiment_restore_preload_snapshot "$SNAPSHOT_DEST" "${PATHS[@]}"; then
+            echo "$EXECUTE" >> fail.log
+            return 0
+        fi
+    else
+        # create repart_kv_storage directory in each path
+        # stop if directory already exists
+        for p in "${PATHS[@]}"; do
+            if [ -d "${p}/repart_kv_storage" ]; then
+                echo "Error: directory ${p}/repart_kv_storage already exists"
+                exit 1
+            fi
+            mkdir -p "${p}/repart_kv_storage" || true
+        done
+    fi
 
     local BASENAME=${WORKLOAD}__${W}__${KV_STORAGE_TYPE}__${PARTITIONS}__${STORAGE_ENGINE}__${NUMBER_OF_PATHS}__${REPARTITIONING_INTERVAL}__${THINKING_TIME}__${SYNC_TAG}
     
@@ -116,7 +269,15 @@ function run_and_move_metrics {
     local max_attempts=1
     local experiment_succeeded=0
     while [ "$attempt" -le "$max_attempts" ]; do
-        if ./build/repart-kv-runner $WORKLOAD_FILE $PARTITIONS $W $KV_STORAGE_TYPE $STORAGE_ENGINE $THINKING_TIME $COMMA_SEPARATED_PATHS $REPARTITIONING_INTERVAL $MAX_DURATION $SYNC $TRACKING_DURATION_MS > "results/${BASENAME}(${TEST_NUMBER}).log"; then
+        local -a _runner_cmd=(./build/repart-kv-runner "$WORKLOAD_FILE" "$PARTITIONS" "$W" "$KV_STORAGE_TYPE" "$STORAGE_ENGINE" "$THINKING_TIME" "$COMMA_SEPARATED_PATHS" "$REPARTITIONING_INTERVAL" "$MAX_DURATION" "$SYNC" "$TRACKING_DURATION_MS")
+        if [[ -n "$SNAPSHOT_DEST" ]]; then
+            REPART_KV_STORAGE_ID="$EXPERIMENT_SNAPSHOT_STORAGE_ID" \
+                REPART_KV_SKIP_PRELOAD=1 \
+                "${_runner_cmd[@]}" > "results/${BASENAME}(${TEST_NUMBER}).log"
+        else
+            "${_runner_cmd[@]}" > "results/${BASENAME}(${TEST_NUMBER}).log"
+        fi
+        if [[ $? -eq 0 ]]; then
             experiment_succeeded=1
             break
         fi
@@ -192,7 +353,7 @@ function run_hard_experiments {
     local MAX_DURATION=$7
     local HARD_REPART_INTERVAL_MS=$8
     local SYNC=$9
-    local TRACKING_DURATION_MS=$10
+    local TRACKING_DURATION_MS=${10}
     declare -n _EXPERIMENT_TYPES_REF="${11}"
     shift 11
 

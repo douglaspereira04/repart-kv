@@ -54,7 +54,7 @@ cd build
 - **sync**: engine durability sync: `true`/`false` or `1`/`0` (default: `false`)
 - **tracking_duration_ms**: how long to track accesses before a repartition (default: `100`)
 
-The bundled `ycsb_a.toml` … `ycsb_e.toml` configs load **1M records with the 1 KiB default value** (`gen_values = false`), about **1 GiB** of payload — small enough to sit in the page cache on a 32 GiB machine. `ycsb_a_large.toml` / `ycsb_d_large.toml` / `ycsb_e_large.toml` use the same mixes with **8,388,608 records × 4096 B = 32 GiB** of values (`gen_values = true`); run them with `experiment_set_large.sh`. The operation phase still stops at `max_duration_s`.
+The bundled `ycsb_a.toml` … `ycsb_e.toml` configs load **1M records with the 1 KiB default value** (`gen_values = false`), about **1 GiB** of payload — small enough to sit in the page cache on a 32 GiB machine. `ycsb_a_large.toml` / `ycsb_d_large.toml` / `ycsb_e_large.toml` use the same mixes with **4,194,304 records × 4096 B = 16 GiB** of values (`gen_values = true`); run them with `experiment_set_large.sh`. The operation phase still stops at `max_duration_s`.
 
 ### Examples
 
@@ -179,7 +179,7 @@ repart-kv/
   storage/      StorageEngine backends
   workload/     Shared workload helpers (default write value)
   utils/        Shared test utilities
-  ycsb_*.toml           LoadGen workload configs (use *_large.toml for 32 GiB)
+  ycsb_*.toml           LoadGen workload configs (use *_large.toml for 16 GiB)
   experiment_set_lib.sh Shared runners for experiment_set*.sh (--dry-run)
   experiment_set.sh     Experiment grid (1 GiB YCSB configs)
   experiment_set_large.sh  Same grid with *_large.toml
